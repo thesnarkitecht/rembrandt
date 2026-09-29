@@ -5,8 +5,8 @@
 #   Server       rembrandt-server for Linux x86_64/arm64 (static), macOS arm64/x64, Windows x64/arm64,
 #                each bundled with the web app
 #
-# Runs on version tags (v*) and publishes the release; a manual run builds everything and keeps
-# the files as workflow artifacts only.
+# Runs on version tags (v*) and publishes the release. A manual run builds everything; with
+# "publish" ticked it also tags the version in package.json (v<version>) and publishes it.
 #
 # Signing (optional; unsigned builds work but macOS and Windows warn on first open):
 #   macOS    APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID
@@ -18,6 +18,11 @@ on:
   push:
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Tag v<package.json version> and publish the release
+        type: boolean
+        default: false
 
 jobs:
   desktop:
@@ -56,7 +61,7 @@ jobs:
 
   publish:
     needs: [desktop, desktop-linux-arm64]
-    if: ${{ !cancelled() && startsWith(github.ref, 'refs/tags/v') && needs.desktop.result == 'success' && needs.desktop-linux-arm64.result != 'failure' }}
+    if: ${{ !cancelled() && (startsWith(github.ref, 'refs/tags/v') || inputs.publish) && needs.desktop.result == 'success' && needs.desktop-linux-arm64.result != 'failure' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -67,7 +72,8 @@ jobs:
       - name: Checksums and Arch package recipe
         run: |
           set -euo pipefail
-          VERSION="${GITHUB_REF_NAME#v}"
+          VERSION=$(node -p "require('./package.json').version")
+          echo "TAG=v$VERSION" >> "$GITHUB_ENV"
           cd dl
           DEB_SHA=$(sha256sum Rembrandt-linux-amd64.deb | cut -d' ' -f1)
           sed -e "s/@VERSION@/$VERSION/" -e "s/@SHA256@/$DEB_SHA/" ../packaging/arch/PKGBUILD.in > PKGBUILD
@@ -76,4 +82,5 @@ jobs:
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" dl/* --title "Rembrandt ${GITHUB_REF_NAME#v}" --generate-notes
+        # Creates the tag on this commit if it doesn't exist yet (manual runs).
+        run: gh release create "$TAG" dl/* --target "$GITHUB_SHA" --title "Rembrandt ${TAG#v}" --generate-notes
