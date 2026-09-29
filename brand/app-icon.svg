@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1c1c1f"/>
+      <stop offset="1" stop-color="#0a0a0b"/>
+    </linearGradient>
+    <linearGradient id="gold" gradientUnits="userSpaceOnUse" x1="100" y1="0" x2="0" y2="100"><stop offset="0" stop-color="#F6D799"/><stop offset=".5" stop-color="#C98F4F"/><stop offset="1" stop-color="#7E4F22"/></linearGradient>
+    <radialGradient id="glow" cx="0.62" cy="0.32" r="0.6">
+      <stop offset="0" stop-color="#F4D292" stop-opacity="0.12"/>
+      <stop offset="1" stop-color="#F4D292" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#bg)"/>
+  <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#glow)"/>
+  <rect x="100.5" y="100.5" width="823" height="823" rx="185.5" fill="none" stroke="#ffffff" stroke-opacity="0.08"/>
+  <g transform="translate(322 322) scale(3.8)" fill="url(#gold)">
+    <path d="M0 0H64A31.5 31.5 0 0 1 69.07 62.59L99 100H78L34.8 46H64A14.5 14.5 0 0 0 64 17H17Z"/>
+    <path d="M0 35.1V100H59Z"/>
+  </g>
+</svg>

@@ -1,0 +1,8 @@
+node_modules/
+.DS_Store
+*.log
+native/build/
+dist/
+src-tauri/target/
+src-tauri/gen/schemas/
+server/target/

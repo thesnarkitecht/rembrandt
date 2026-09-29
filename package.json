@@ -1,0 +1,19 @@
+{
+  "name": "rembrandt",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Rembrandt: a free, source-available photo editor for RAW and JPEG, with on-device AI.",
+  "license": "SEE LICENSE IN LICENSE (PolyForm-Shield-1.0.0)",
+  "type": "module",
+  "scripts": {
+    "start": "npx --yes http-server -p 8080 -c-1 .",
+    "check": "node scripts/check.mjs",
+    "build:web": "node scripts/build-web.mjs",
+    "tauri": "tauri",
+    "desktop:dev": "tauri dev",
+    "desktop:build": "tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.12.0"
+  }
+}

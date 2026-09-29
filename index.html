@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Rembrandt</title>
+  <meta name="description" content="A fast, private photo editor that runs entirely in your browser. Scene-referred processing, masking, presets. No ads, no uploads." />
+  <meta name="theme-color" content="#1c1c1f" />
+  <link rel="preload" href="src/fonts/geist.woff2" as="font" type="font/woff2" crossorigin />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' gradientUnits='userSpaceOnUse' x1='100' y1='0' x2='0' y2='100'%3E%3Cstop offset='0' stop-color='%23F4D292'/%3E%3Cstop offset='.5' stop-color='%23C98F4F'/%3E%3Cstop offset='1' stop-color='%238A5829'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%230d0d0f'/%3E%3Cg transform='translate%286.5 6.5%29 scale%28.19%29' fill='url%28%23g%29'%3E%3Cpath d='M0 0H64A31.5 31.5 0 0 1 69.07 62.59L99 100H78L34.8 46H64A14.5 14.5 0 0 0 64 17H17Z'/%3E%3Cpath d='M0 35.1V100H59Z'/%3E%3C/g%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="splash" id="splash" hidden>
+    <div class="splash-stage" role="img" aria-label="Rembrandt"></div>
+  </div>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <svg viewBox="-4 -4 108 108" aria-hidden="true"><defs><linearGradient id="rmark-head" gradientUnits="userSpaceOnUse" x1="100" y1="0" x2="0" y2="100"><stop offset="0" style="stop-color:var(--mark-1)"/><stop offset=".5" style="stop-color:var(--mark-2)"/><stop offset="1" style="stop-color:var(--mark-3)"/></linearGradient></defs><path fill="url(#rmark-head)" d="M0 0H64A31.5 31.5 0 0 1 69.07 62.59L99 100H78L34.8 46H64A14.5 14.5 0 0 0 64 17H17Z"/><path fill="url(#rmark-head)" d="M0 35.1V100H59Z"/></svg>
+        <span id="brandName">Rembrandt</span>
+      </div>
+      <nav class="modes" aria-label="View">
+        <button class="mode-btn" data-mode-btn="library" title="Library (G)">Library</button>
+        <button class="mode-btn on" data-mode-btn="edit" title="Edit (E)">Edit</button>
+      </nav>
+      <div class="file-title" id="fileTitle"></div>
+      <div class="top-actions">
+        <button class="icon-btn" id="btnUndo" data-icon="undo" title="Undo (Ctrl/⌘ Z)" aria-label="Undo"></button>
+        <button class="icon-btn" id="btnRedo" data-icon="redo" title="Redo (Ctrl/⌘ ⇧ Z)" aria-label="Redo"></button>
+        <button class="icon-btn" id="btnBefore" data-icon="compare" title="Before / after (\)" aria-label="Before and after"></button>
+        <button class="btn sm ghost support-btn" id="btnSupport" type="button" data-icon="heart" title="Rembrandt is free. Help keep it going."><span>Support</span></button>
+        <button class="icon-btn" id="btnAccount" data-icon="gear" title="Settings" aria-label="Settings"></button>
+        <button class="btn primary sm" id="btnExport" data-icon="export" title="Export (Ctrl/⌘ E)"><span>Export</span></button>
+      </div>
+    </header>
+
+    <section class="library" id="library"></section>
+    <section class="acct-page" id="accountPage"></section>
+
+    <main class="workspace">
+      <section class="viewer" id="viewer" data-tool="edit">
+        <canvas id="gl"></canvas>
+        <svg id="overlay" class="overlay" xmlns="http://www.w3.org/2000/svg"></svg>
+
+        <div class="empty" id="empty">
+          <div class="empty-card">
+            <div class="empty-mark">
+              <svg viewBox="0 0 48 48" aria-hidden="true"><rect x="5" y="9" width="38" height="30" rx="6" fill="none" stroke="currentColor" stroke-width="2"/><path d="m5 33 11-11 9 9 6-6 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="33" cy="18" r="3.2" fill="currentColor"/></svg>
+            </div>
+            <h1 id="emptyTitle">Drop photos to start editing</h1>
+            <p id="emptyText">Everything happens on your device — nothing is uploaded.<br />JPEG · PNG · WebP · AVIF · TIFF · HEIC (where supported) · camera RAW</p>
+            <button class="btn primary" id="btnOpenEmpty" data-icon="open"><span>Open photos</span></button>
+          </div>
+        </div>
+
+        <div class="hud">
+          <span class="badge" id="beforeBadge" hidden>Before</span>
+          <span class="badge busy" id="rawBadge" hidden>Developing RAW…</span>
+          <div class="zoom">
+            <button class="chip" id="btnFit" title="Fit (F)">Fit</button>
+            <button class="chip" id="btn100" title="1:1 (Z)">1:1</button>
+            <span class="zoom-label" id="zoomLabel"></span>
+          </div>
+        </div>
+        <div class="drop-veil"><div>Drop to add photos</div></div>
+      </section>
+
+      <aside class="panel">
+        <nav class="rail tool-tabs" aria-label="Tools">
+          <button class="rail-btn on" data-tool="edit" data-icon="edit" title="Edit (E)"><span>Edit</span></button>
+          <button class="rail-btn" data-tool="crop" data-icon="crop" title="Crop & rotate (R)"><span>Crop</span></button>
+          <button class="rail-btn" data-tool="masks" data-icon="mask" title="Masking (M)"><span>Masks</span></button>
+          <button class="rail-btn" data-tool="ai" data-icon="sparkle" title="AI: lens blur &amp; background (A)"><span>AI</span></button>
+          <button class="rail-btn" data-tool="presets" data-icon="presets" title="Presets (P)"><span>Presets</span></button>
+        </nav>
+        <div class="panel-head">
+          <div class="histo-wrap">
+            <canvas id="histo" class="histo"></canvas>
+            <button class="clip-btn lo" id="clipLo" title="Show clipping (J)" aria-label="Shadow clipping"></button>
+            <button class="clip-btn hi" id="clipHi" title="Show clipping (J)" aria-label="Highlight clipping"></button>
+          </div>
+          <div class="info" id="info"></div>
+        </div>
+        <div class="panel-body" id="panelBody"></div>
+      </aside>
+
+    </main>
+
+    <footer class="filmstrip">
+      <div class="strip" id="strip"></div>
+      <div class="film-actions">
+        <button class="icon-btn sm" id="btnAdd" data-icon="plus" title="Add photos (Ctrl/⌘ O)" aria-label="Add photos"></button>
+        <button class="icon-btn sm" id="btnToggleFilm" data-icon="chevron" title="Show or hide the filmstrip" aria-label="Show or hide the filmstrip"></button>
+      </div>
+    </footer>
+  </div>
+
+  <input type="file" id="fileInput" multiple hidden />
+  <input type="file" id="folderInput" webkitdirectory multiple hidden />
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <dialog id="exportDialog" class="dlg"></dialog>
+  <dialog id="shareDialog" class="dlg share"></dialog>
+  <dialog id="importDialog" class="dlg import"></dialog>
+
+  <dialog id="helpDialog" class="dlg help">
+    <div class="dlg-head"><h2>Keyboard shortcuts</h2></div>
+    <div class="dlg-body keys">
+      <div><kbd>G</kbd><span>Library</span></div>
+      <div><kbd>E</kbd><span>Edit</span></div>
+      <div><kbd>1</kbd>–<kbd>5</kbd><span>Rate · <kbd>0</kbd> clears</span></div>
+      <div><kbd>P</kbd> <kbd>X</kbd><span>Pick / reject (Library)</span></div>
+      <div><kbd>R</kbd><span>Crop &amp; rotate</span></div>
+      <div><kbd>M</kbd><span>Masking</span></div>
+      <div><kbd>A</kbd><span>AI lens blur &amp; background</span></div>
+      <div><kbd>P</kbd><span>Presets</span></div>
+      <div><kbd>\</kbd><span>Before / after</span></div>
+      <div><kbd>Z</kbd><span>Toggle 1:1 zoom</span></div>
+      <div><kbd>F</kbd><span>Fit to screen</span></div>
+      <div><kbd>Space</kbd><span>Hold to pan</span></div>
+      <div><kbd>J</kbd><span>Clipping warnings</span></div>
+      <div><kbd>W</kbd><span>White balance picker</span></div>
+      <div><kbd>O</kbd><span>Mask overlay</span></div>
+      <div><kbd>[</kbd> <kbd>]</kbd><span>Brush size / rotate crop</span></div>
+      <div><kbd>X</kbd><span>Swap crop orientation</span></div>
+      <div><kbd>← →</kbd><span>Previous / next photo</span></div>
+      <div><kbd><span id="modKey">Ctrl</span> Z</kbd><span>Undo (add ⇧ to redo)</span></div>
+      <div><kbd>⇧ C / V</kbd><span>Copy / paste edits (with Ctrl/⌘); in Library, pastes to every selected photo</span></div>
+      <div><kbd>Right-click</kbd><span>Photo menu: copy, paste, presets, reset</span></div>
+      <div><kbd>Double-click</kbd><span>Reset a slider</span></div>
+      <div><kbd>Ctrl/⌘ E</kbd><span>Export</span></div>
+    </div>
+    <div class="dlg-foot"><button class="btn primary" id="helpClose" type="button">Done</button></div>
+  </dialog>
+
+  <script type="module" src="src/splash.js"></script>
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>

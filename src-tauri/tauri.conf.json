@@ -1,0 +1,129 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Rembrandt",
+  "version": "0.1.0",
+  "identifier": "work.light.rembrandt",
+  "build": {
+    "frontendDist": "../dist",
+    "beforeBuildCommand": "node scripts/build-web.mjs",
+    "beforeDevCommand": "node scripts/build-web.mjs"
+  },
+  "app": {
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Rembrandt",
+        "width": 1440,
+        "height": 900,
+        "minWidth": 900,
+        "minHeight": 600,
+        "backgroundColor": "#0b0c0e",
+        "dragDropEnabled": false
+      }
+    ],
+    "security": {
+      "csp": {
+        "default-src": "'self'",
+        "script-src": "'self' 'wasm-unsafe-eval'",
+        "worker-src": "'self' blob:",
+        "connect-src": "'self' ipc: http://ipc.localhost https://ims-na1.adobelogin.com https://lr.adobe.io https://api.github.com",
+        "img-src": "'self' data: blob: https:",
+        "style-src": "'self' 'unsafe-inline'",
+        "font-src": "'self' data:",
+        "frame-src": "'none'",
+        "object-src": "'none'"
+      }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "category": "Photography",
+    "publisher": "light.work",
+    "shortDescription": "Free photo editor with on-device AI",
+    "longDescription": "Rembrandt is a free, source-available photo editor for RAW and JPEG photos with masks, presets, a library and on-device AI. No accounts, no ads, no tracking.",
+    "copyright": "\u00a9 light.work",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "fileAssociations": [
+      {
+        "ext": [
+          "jpg",
+          "jpeg",
+          "png",
+          "tif",
+          "tiff",
+          "webp",
+          "heic",
+          "avif",
+          "dng",
+          "cr2",
+          "cr3",
+          "nef",
+          "arw",
+          "raf",
+          "orf",
+          "rw2",
+          "pef"
+        ],
+        "name": "Photo",
+        "role": "Editor"
+      }
+    ],
+    "linux": {
+      "deb": {
+        "section": "graphics"
+      },
+      "rpm": {
+        "release": "1"
+      },
+      "appimage": {
+        "bundleMediaFramework": false
+      }
+    },
+    "macOS": {
+      "minimumSystemVersion": "12.0",
+      "dmg": {
+        "windowSize": {
+          "width": 620,
+          "height": 400
+        },
+        "appPosition": {
+          "x": 170,
+          "y": 190
+        },
+        "applicationFolderPosition": {
+          "x": 450,
+          "y": 190
+        }
+      }
+    },
+    "windows": {
+      "webviewInstallMode": {
+        "type": "embedBootstrapper"
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "displayLanguageSelector": false,
+        "installerIcon": "icons/icon.ico"
+      }
+    }
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": [
+          "rembrandt"
+        ]
+      },
+      "mobile": []
+    }
+  },
+  "mainBinaryName": "rembrandt"
+}

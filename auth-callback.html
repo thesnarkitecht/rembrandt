@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Signing in</title>
+  <meta name="robots" content="noindex" />
+  <style>
+    :root { color-scheme: light dark; --bg: #f4f4f6; --text: #1c1c21; --muted: #6c6c75; --accent: #3d3d45; --on-accent: #fff; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #151517; --text: #ececef; --muted: #9a9aa3; --accent: #55555e; --on-accent: #fff; } }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--bg); color: var(--text); font: 15px/1.5 -apple-system, "Segoe UI", Roboto, sans-serif; padding-inline: 20px; }
+    main { text-align: center; max-width: 380px; }
+    h1 { font-size: 20px; margin: 0 0 6px; }
+    p { color: var(--muted); margin: 0 0 18px; }
+    a { display: inline-block; padding: 10px 18px; border-radius: 8px; background: var(--accent); color: var(--on-accent); text-decoration: none; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1 id="h">Returning to the app…</h1>
+    <p id="p">If nothing happens, use the button below.</p>
+    <a id="open" href="#">Open the app</a>
+  </main>
+  <script>
+    // OAuth for the desktop app: the provider sends the browser here with ?code=…, and this page
+    // hands the code to the app through its URL scheme. The code is useless without the secret
+    // verifier the app kept, so passing it through the browser is safe.
+    const SCHEME = 'rembrandt'; // keep in sync with src-tauri/tauri.conf.json (deep-link scheme)
+    const q = new URLSearchParams(location.search);
+    const code = q.get('code');
+    const state = q.get('state') || '';
+    const err = q.get('error_description') || q.get('error');
+    // Sign-ins the web app runs in a pop-up (Adobe, Dropbox, Microsoft): hand the result to the window that opened it.
+    if ((state.startsWith('adobe') || state.startsWith('oauth.')) && window.opener) {
+      try { window.opener.postMessage({ type: state.startsWith('adobe') ? 'adobe-auth' : 'oauth', code, state, error: err }, location.origin); } catch (e) { /* opener gone */ }
+      window.close();
+    }
+    if (err || !code) {
+      document.getElementById('h').textContent = 'Sign-in didn’t finish';
+      document.getElementById('p').textContent = err || 'Close this tab and try again from the app.';
+      document.getElementById('open').hidden = true;
+    } else {
+      const url = `${SCHEME}://auth?code=${encodeURIComponent(code)}${state ? `&state=${encodeURIComponent(state)}` : ''}`;
+      document.getElementById('open').href = url;
+      location.href = url;
+      setTimeout(() => { document.getElementById('h').textContent = 'You’re signed in'; document.getElementById('p').textContent = 'You can close this tab and return to the app.'; }, 1500);
+    }
+  </script>
+</body>
+</html>

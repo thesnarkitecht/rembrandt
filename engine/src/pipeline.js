@@ -1,0 +1,175 @@
+// Rembrandt Engine — develop settings -> shader uniforms.
+// Copyright © 2026 light.work. Licensed under the PolyForm Shield License 1.0.0 (see LICENSE).
+// You may not sell this software or a modified version of it; see LICENSE and TRADEMARKS.md.
+//
+// `p` is a plain settings object (see README): exposure (EV), contrast, highlights, shadows, whites,
+// blacks, temp, tint, vibrance, saturation, texture, clarity, dehaze (all −100…100), bw,
+// hsl {hue,sat,lum}[8], grading {shadows,midtones,highlights,global: {h,s,l}, blending, balance},
+// sharpen {amount,radius,masking}, nr {luma,chroma}, vignette {amount,midpoint,roundness,feather},
+// grain {amount,size,roughness}, curve {master,r,g,b: [[x,y],…]}.
+
+import { whiteBalance, toGL, hueToOkDir, toneK, REF_CONTRAST } from './color.js';
+
+export const INPUT_UNIFORMS = { uInC: REF_CONTRAST, uInK: toneK(REF_CONTRAST) };
+
+// ------------------------------------------------------------------ PRE / dehaze
+
+export function preUniforms(p, stats) {
+  const s = (p.dehaze || 0) / 100;
+  const A = stats?.airlight || [1, 1, 1];
+  return {
+    uExposure: 2 ** (p.exposure || 0),
+    uHaze: s > 0 ? 1 : s < 0 ? 2 : 0,
+    uA: A,
+    uHazeAdd: Math.max(0, -s) * 0.55,
+    // Strength controls how much of the haze the dark channel prior may remove (ω in He et al.).
+    omega: s > 0 ? 0.25 + 0.7 * s : 0.9,
+  };
+}
+
+// ------------------------------------------------------------------ MAIN
+
+export const toneActive = (p) => !!(p.blacks || p.shadows || p.highlights || p.whites || p.clarity);
+
+export function mainUniforms(p) {
+  const hsl = p.hsl || { hue: [], sat: [], lum: [] };
+  const mixOn = [hsl.hue, hsl.sat, hsl.lum].some((a) => a.some(Boolean));
+  const g = p.grading;
+  const zone = (z) => {
+    const [a, b] = hueToOkDir(z.h);
+    const c = (z.s / 100) * 0.1;
+    return [a * c, b * c, z.l / 100];
+  };
+  const gradeOn = ['shadows', 'midtones', 'highlights', 'global'].some((k) => g[k].s || g[k].l);
+  return {
+    uGuideOn: toneActive(p) ? 1 : 0,
+    uTone: [p.blacks / 100, p.shadows / 100, p.highlights / 100, p.whites / 100],
+    uClarity: p.clarity / 100,
+    uTexture: p.texture / 100,
+    uWBOn: p.temp || p.tint ? 1 : 0,
+    uWB: toGL(whiteBalance(p.temp, p.tint)),
+    uVib: p.vibrance / 100,
+    uSat: p.saturation / 100,
+    uMixOn: mixOn ? 1 : 0,
+    uMixHue: new Float32Array(hsl.hue.map((v) => v / 100)),
+    uMixSat: new Float32Array(hsl.sat.map((v) => v / 100)),
+    uMixLum: new Float32Array(hsl.lum.map((v) => v / 100)),
+    uGradeOn: gradeOn ? 1 : 0,
+    uGS: zone(g.shadows), uGM: zone(g.midtones), uGH: zone(g.highlights), uGG: zone(g.global),
+    uGBalance: g.balance / 100,
+    uGBlend: g.blending / 100,
+    uBW: p.bw ? 1 : 0,
+  };
+}
+
+// ------------------------------------------------------------------ FINAL
+
+export function finalUniforms(p, fullW, fullH, workH, sceneSource) {
+  const c = REF_CONTRAST * 2 ** ((p.contrast / 100) * 0.6);
+  const ws = workH / fullH;
+  return {
+    uTC: c,
+    uTK: toneK(c),
+    // Scene-referred sources get the hue-preserving highlight path; display-referred sources use the
+    // exact per-channel inverse, so an untouched JPEG round-trips unchanged.
+    uPathToWhite: sceneSource ? 1 : 0,
+    uSharp: [p.sharpen.amount / 100, Math.max(0.6, p.sharpen.radius * ws)],
+    uSharpMask: p.sharpen.masking / 100,
+    uNR: [p.nr.luma / 100, p.nr.chroma / 100],
+    uVig: [p.vignette.amount / 100, p.vignette.midpoint / 100, p.vignette.roundness / 100, p.vignette.feather / 100],
+    uGrain: [p.grain.amount / 100, (0.5 + (p.grain.size / 100) * 3.5) * Math.max(1, fullH / 4000), p.grain.roughness / 100],
+    uFullSize: [fullW, fullH],
+    uCropAspect: p.geometry ? p.geometry.crop.w / p.geometry.crop.h : fullW / fullH,
+  };
+}
+
+// ------------------------------------------------------------------ tone curve
+
+export function curveIsIdentity(curve) {
+  return ['master', 'r', 'g', 'b'].every((k) => {
+    const c = curve[k];
+    return c.length === 2 && c[0][0] === 0 && c[0][1] === 0 && c[1][0] === 1 && c[1][1] === 1;
+  });
+}
+
+// Fritsch–Carlson monotone cubic interpolation.
+export function curveFn(pts) {
+  const n = pts.length;
+  const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
+  if (n === 2) {
+    return (x) => {
+      if (x <= xs[0]) return ys[0];
+      if (x >= xs[1]) return ys[1];
+      return ys[0] + ((ys[1] - ys[0]) * (x - xs[0])) / Math.max(xs[1] - xs[0], 1e-6);
+    };
+  }
+  const dx = [], m = [];
+  for (let i = 0; i < n - 1; i++) {
+    dx[i] = Math.max(xs[i + 1] - xs[i], 1e-6);
+    m[i] = (ys[i + 1] - ys[i]) / dx[i];
+  }
+  const t = new Array(n);
+  t[0] = m[0];
+  t[n - 1] = m[n - 2];
+  for (let i = 1; i < n - 1; i++) t[i] = m[i - 1] * m[i] <= 0 ? 0 : (m[i - 1] + m[i]) / 2;
+  for (let i = 0; i < n - 1; i++) {
+    if (m[i] === 0) { t[i] = 0; t[i + 1] = 0; continue; }
+    const a = t[i] / m[i], b = t[i + 1] / m[i], s = a * a + b * b;
+    if (s > 9) { const tau = 3 / Math.sqrt(s); t[i] = tau * a * m[i]; t[i + 1] = tau * b * m[i]; }
+  }
+  return (x) => {
+    if (x <= xs[0]) return ys[0];
+    if (x >= xs[n - 1]) return ys[n - 1];
+    let i = 0;
+    while (i < n - 2 && x > xs[i + 1]) i++;
+    const h = dx[i], u = (x - xs[i]) / h, u2 = u * u, u3 = u2 * u;
+    return (2 * u3 - 3 * u2 + 1) * ys[i] + (u3 - 2 * u2 + u) * h * t[i] + (-2 * u3 + 3 * u2) * ys[i + 1] + (u3 - u2) * h * t[i + 1];
+  };
+}
+
+// 256 x 1 RGBA: r, g, b channel curves and the master curve in alpha.
+export function curveLUT(curve) {
+  const out = new Float32Array(256 * 4);
+  const fs = ['r', 'g', 'b', 'master'].map((k) => curveFn(curve[k]));
+  for (let i = 0; i < 256; i++) {
+    const x = i / 255;
+    for (let c = 0; c < 4; c++) out[i * 4 + c] = Math.min(1, Math.max(0, fs[c](x)));
+  }
+  return out;
+}
+
+// ------------------------------------------------------------------ image statistics
+
+// Airlight for dehazing (He et al. 2009): among the 0.1 % pixels with the brightest dark channel
+// (after a small min filter), take the brightest. `rgb` is scene-linear Rec.2020, interleaved.
+export function estimateAirlight(rgb, w, h, radius = 2) {
+  const n = w * h;
+  const dark = new Float32Array(n), tmp = new Float32Array(n);
+  for (let i = 0; i < n; i++) dark[i] = Math.min(rgb[i * 3], rgb[i * 3 + 1], rgb[i * 3 + 2]);
+  const cl = (v, hi) => (v < 0 ? 0 : v > hi ? hi : v);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let m = Infinity;
+    for (let k = -radius; k <= radius; k++) m = Math.min(m, dark[y * w + cl(x + k, w - 1)]);
+    tmp[y * w + x] = m;
+  }
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    let m = Infinity;
+    for (let k = -radius; k <= radius; k++) m = Math.min(m, tmp[cl(y + k, h - 1) * w + x]);
+    dark[y * w + x] = m;
+  }
+  const idx = Array.from({ length: n }, (_, i) => i).sort((a, b) => dark[b] - dark[a]);
+  const top = idx.slice(0, Math.max(1, Math.floor(n * 0.001)));
+  let best = top[0], bestSum = -1;
+  for (const i of top) {
+    const s = rgb[i * 3] + rgb[i * 3 + 1] + rgb[i * 3 + 2];
+    if (s > bestSum) { bestSum = s; best = i; }
+  }
+  // Average a little around the choice to avoid a single noisy pixel.
+  const A = [0, 0, 0];
+  let cnt = 0;
+  for (const i of top) {
+    const s = rgb[i * 3] + rgb[i * 3 + 1] + rgb[i * 3 + 2];
+    if (s >= bestSum * 0.9) { A[0] += rgb[i * 3]; A[1] += rgb[i * 3 + 1]; A[2] += rgb[i * 3 + 2]; cnt++; }
+  }
+  return A.map((v) => Math.max(cnt ? v / cnt : rgb[best * 3], 1e-3));
+}

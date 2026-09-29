@@ -1,0 +1,22 @@
+# Checks every push and pull request: JavaScript syntax and imports, the installer script, and the
+# server (build and tests). The desktop apps are built by release.yml.
+name: CI
+permissions:
+  contents: read
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm run check
+      - run: bash -n install.sh && shellcheck -S warning install.sh
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --manifest-path server/Cargo.toml
+      - run: cargo build --release --manifest-path server/Cargo.toml
