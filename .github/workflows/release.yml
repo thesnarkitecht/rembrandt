@@ -31,11 +31,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: macOS Apple silicon, os: macos-latest, target: aarch64-apple-darwin, args: --target aarch64-apple-darwin --bundles dmg, server: macos-aarch64 }
-          - { name: macOS Intel, os: macos-latest, target: x86_64-apple-darwin, args: --target x86_64-apple-darwin --bundles dmg, server: macos-x86_64 }
-          - { name: Windows x64, os: windows-latest, target: x86_64-pc-windows-msvc, args: --target x86_64-pc-windows-msvc --bundles nsis,msi, server: windows-x86_64 }
-          - { name: Windows ARM64, os: windows-latest, target: aarch64-pc-windows-msvc, args: --target aarch64-pc-windows-msvc --bundles nsis, server: windows-aarch64 }
-          - { name: Linux x86_64, os: ubuntu-22.04, target: x86_64-unknown-linux-gnu, args: --target x86_64-unknown-linux-gnu --bundles deb,rpm,appimage, server: linux-x86_64, musl: x86_64-unknown-linux-musl }
+          - { name: macOS Apple silicon, os: macos-latest, target: aarch64-apple-darwin, args: '--target aarch64-apple-darwin --bundles dmg', server: macos-aarch64 }
+          - { name: macOS Intel, os: macos-latest, target: x86_64-apple-darwin, args: '--target x86_64-apple-darwin --bundles dmg', server: macos-x86_64 }
+          - { name: Windows x64, os: windows-latest, target: x86_64-pc-windows-msvc, args: '--target x86_64-pc-windows-msvc --bundles nsis,msi', server: windows-x86_64 }
+          - { name: Windows ARM64, os: windows-latest, target: aarch64-pc-windows-msvc, args: '--target aarch64-pc-windows-msvc --bundles nsis', server: windows-aarch64 }
+          - { name: Linux x86_64, os: ubuntu-22.04, target: x86_64-unknown-linux-gnu, args: '--target x86_64-unknown-linux-gnu --bundles deb,rpm,appimage', server: linux-x86_64, musl: x86_64-unknown-linux-musl }
     uses: ./.github/workflows/build.yml
     with:
       os: ${{ matrix.os }}
@@ -83,4 +83,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         # Creates the tag on this commit if it doesn't exist yet (manual runs).
-        run: gh release create "$TAG" dl/* --target "$GITHUB_SHA" --title "Rembrandt ${TAG#v}" --generate-notes
+        # Adds the files to the release if it already exists (re-runs), otherwise creates it.
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then gh release upload "$TAG" dl/* --clobber
+          else gh release create "$TAG" dl/* --target "$GITHUB_SHA" --title "Rembrandt ${TAG#v}" --generate-notes; fi
