@@ -1,8 +1,7 @@
 // Local adjustments (masks): brush, linear/radial gradients, color and luminance ranges, combined
 // with add/subtract/intersect, each carrying its own exposure, tone, color and detail settings.
 // Runs as host passes inside the engine, on scene-linear data between MAIN and FINAL.
-// Copyright © 2026 light.work. Licensed under the PolyForm Shield License 1.0.0 (see LICENSE).
-// You may not sell this software or a modified version of it; see LICENSE and TRADEMARKS.md.
+// Copyright © 2026 the Rembrandt contributors. Licensed under the GNU GPL v3 or later (see LICENSE).
 import { LIB } from '../engine/src/shaders.js';
 import { whiteBalance, toGL, hueToOkDir, toneK, REF_CONTRAST } from '../engine/src/color.js';
 import { maskHasEffect } from './params.js';

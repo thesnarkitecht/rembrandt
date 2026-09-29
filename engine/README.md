@@ -1,7 +1,7 @@
 # Rembrandt Engine
 
 The open-source develop pipeline behind [Rembrandt](../README.md): a scene-referred, GPU (WebGL2) photo
-processing engine. Part of Rembrandt and under the same licence: PolyForm Shield 1.0.0 (see `../LICENSE`).
+processing engine. Part of Rembrandt and under the same licence: GNU GPL v3 or later (see `../LICENSE`).
 
 ```
 engine/src/color.js     colour science: Rec.2020/sRGB, Oklab, CAT16 white balance, display curve

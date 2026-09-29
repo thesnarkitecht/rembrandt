@@ -2,9 +2,8 @@
 
 | Part | License |
 |---|---|
-| Rembrandt, including `engine/` (everything not listed below) | PolyForm Shield License 1.0.0 — `LICENSE` |
-| The name “Rembrandt” and the R logo | Trademarks of light.work, not licensed — `TRADEMARKS.md` |
-| `native/LibRaw/`, `src/vendor/libraw/` | LibRaw, used under CDDL-1.0 (see below) |
+| Rembrandt, including `engine/` and `brand/` (everything not listed below) | GNU GPL v3 or later — `LICENSE` |
+| `native/LibRaw/`, `src/vendor/libraw/` | LibRaw, used under LGPL-2.1 (see below) |
 | `src/vendor/mediapipe/` | MediaPipe Tasks Vision 1.0.1, Apache-2.0 |
 | `models/` | MediaPipe / Google models, Apache-2.0 (see `models/README.md`) |
 | `src/fonts/` | Geist and Geist Mono, SIL Open Font License 1.1 (`src/fonts/OFL.txt`) |
@@ -12,8 +11,8 @@
 ## LibRaw 0.21.4 (CDDL-1.0 or LGPL-2.1)
 © LibRaw LLC. `native/LibRaw/` contains the unmodified LibRaw 0.21.4 sources; `native/build-libraw.sh`
 compiles them with `native/lumen_raw.cpp` into `src/vendor/libraw/lumen-raw.{js,wasm}`.
-Rembrandt uses LibRaw under the terms of the Common Development and Distribution License 1.0
-(`native/LibRaw/LICENSE.CDDL`). The LibRaw source code is available at https://www.libraw.org and in
+Rembrandt uses LibRaw under the terms of the GNU Lesser General Public License 2.1
+(`native/LibRaw/LICENSE.LGPL`), which is compatible with Rembrandt's GPL-3.0-or-later. The LibRaw source code is available at https://www.libraw.org and in
 this distribution under `native/LibRaw/`.
 
 ## MediaPipe Tasks Vision 1.0.1 and models (Apache-2.0)

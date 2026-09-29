@@ -1,4 +1,4 @@
-# Maintainer: light.work <hello@light.work>
+# Maintainer: Rembrandt contributors <https://github.com/thesnarkitecht/rembrandt>
 # Generated for each release by .github/workflows/release.yml and attached to the GitHub release;
 # used by the one-line installer on Arch and Omarchy.
 pkgname=rembrandt
@@ -7,7 +7,7 @@ pkgrel=1
 pkgdesc="Free photo editor for RAW and JPEG with on-device AI"
 arch=('x86_64')
 url="https://github.com/thesnarkitecht/rembrandt"
-license=('LicenseRef-PolyForm-Shield-1.0.0')
+license=('GPL-3.0-or-later')
 depends=('webkit2gtk-4.1' 'gtk3' 'libsoup3' 'openssl' 'hicolor-icon-theme')
 optdepends=('xdg-utils: open links in your browser')
 options=('!strip' '!debug')

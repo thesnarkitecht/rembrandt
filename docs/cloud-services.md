@@ -14,7 +14,7 @@ Where to put the keys:
   dropboxAppKey = abcd1234
   onedriveClientId = 00000000-0000-0000-0000-000000000000
   adobeClientId = …
-  supportUrl = https://github.com/sponsors/you
+  supportUrl = https://example.com/donate   (optional: shows a Support button)
   ```
 - **Your own static hosting**: a script before the app, `<script>window.LUMEN_CONFIG = { googleClientId: '…' }</script>`.
 - **Desktop builds**: set the repository variable `LUMEN_CONFIG_JS` to that same `window.LUMEN_CONFIG = {…}`

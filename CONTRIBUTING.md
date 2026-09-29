@@ -11,17 +11,9 @@ welcome.
 - Keep the style of the surrounding code: plain ES modules, no build step, no new dependencies
   without a good reason.
 
-## Rights in your contribution
+## Licence
 
-Rembrandt is source-available under the PolyForm Shield License, and light.work also makes other
-editions of it. So that your contribution can be used in all of them, by submitting a contribution
-you agree that:
-
-1. you wrote it, or otherwise have the right to submit it under these terms;
-2. you grant light.work a perpetual, worldwide, non-exclusive, royalty-free, irrevocable licence to
-   use, copy, modify, sublicense and distribute your contribution under any terms, including in
-   commercial editions of Rembrandt; and
-3. your contribution is also available to everyone else under this repository's licence.
-
-You keep the copyright in your contribution. Please add a line `Signed-off-by: Your Name
-<you@example.com>` to your commits (`git commit -s`) to confirm the above.
+Rembrandt is free software under the GNU General Public License v3 or later. By contributing you
+agree that your contribution is released under the same licence. Please sign off your commits
+(`git commit -s`) to confirm you wrote the change or have the right to submit it
+([Developer Certificate of Origin](https://developercertificate.org/)).

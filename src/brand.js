@@ -2,7 +2,6 @@
 // The wordmark is REMBRANDT in capitals with wide tracking, as in the logo.
 export const BRAND = {
   name: 'Rembrandt',
-  company: 'light.work',   // parent company: copyright, publisher, legal pages
   engine: 'Rembrandt Engine',
   // XMP namespace for our settings in sidecars. Keep it stable once sidecars exist in the wild.
   xmpNs: 'https://photography.work/ns/xmp/1.0/',

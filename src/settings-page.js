@@ -111,13 +111,13 @@ export function buildSettingsPage(app, hooks) {
     return [
       card(null, el('div', { class: 'about' },
         el('p', {}, el('b', {}, BRAND.name), v ? ` ${v}` : ''),
-        el('p', {}, 'A free, source-available photo editor. No accounts, no ads, no tracking. Your photos stay on your computer, and AI runs on your device.'),
+        el('p', {}, 'A free, open-source photo editor. No accounts, no ads, no tracking. Your photos stay on your computer, and AI runs on your device.'),
         el('p', {}, link(repo, 'Source code'), ' · ', link(`${repo}/releases`, 'Downloads'), ' · ', link(`${repo}/issues`, 'Report a problem')),
-        el('p', { class: 'hint' }, 'Source-available under the PolyForm Shield License 1.0.0: use it, study it, change it, but don’t sell it. Image processing: ', el('b', {}, BRAND.engine), '. On-device AI: MediaPipe models (Apache-2.0). RAW decoding: LibRaw (LGPL-2.1 / CDDL-1.0).'))),
+        el('p', { class: 'hint' }, 'Free software under the GNU General Public License v3 or later: use it, study it, change it and share it. Image processing: ', el('b', {}, BRAND.engine), '. On-device AI: MediaPipe models (Apache-2.0). RAW decoding: LibRaw (LGPL-2.1).'))),
       card('Support Rembrandt',
-        el('p', { class: 'lead' }, 'Rembrandt is free and stays free. If it’s useful to you, you can help keep it going: star it on GitHub, tell a friend, report bugs, or chip in.'),
+        el('p', { class: 'lead' }, 'Rembrandt is free and stays free. If it’s useful to you, you can help keep it going: star it on GitHub, tell a friend, or report bugs.'),
         el('div', { class: 'row-btns' },
-          button('Support Rembrandt', () => hooks.openSupport(), 'sm', 'heart'),
+          CONFIG.supportUrl ? button('Support Rembrandt', () => hooks.openSupport(), 'sm', 'heart') : null,
           el('a', { class: 'btn sm ghost', href: repo, target: '_blank', rel: 'noopener' }, icon('star'), el('span', {}, 'Star on GitHub')))),
     ];
   }

@@ -40,10 +40,10 @@
     "active": true,
     "targets": "all",
     "category": "Photography",
-    "publisher": "light.work",
+    "publisher": "Rembrandt contributors",
     "shortDescription": "Free photo editor with on-device AI",
     "longDescription": "Rembrandt is a free, source-available photo editor for RAW and JPEG photos with masks, presets, a library and on-device AI. No accounts, no ads, no tracking.",
-    "copyright": "\u00a9 light.work",
+    "copyright": "\u00a9 Rembrandt contributors",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

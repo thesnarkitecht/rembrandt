@@ -3,7 +3,7 @@ name = "rembrandt-server"
 version = "0.1.0"
 edition = "2021"
 description = "Serves Rembrandt and a folder of photos to your browser"
-license-file = "../LICENSE"
+license = "GPL-3.0-or-later"
 publish = false
 
 # No dependencies on purpose: easy to audit, easy to build for every platform.

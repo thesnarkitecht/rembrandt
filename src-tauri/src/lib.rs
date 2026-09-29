@@ -1,7 +1,7 @@
 // Native shell (Tauri 2): hosts the web app in the system WebView on macOS, Windows, Linux, iOS and
 // Android, and adds what a browser can't do: synced folders on disk, and OAuth sign-in through the
 // system browser with a deep link back.
-// Copyright © 2026 light.work. Licensed under the PolyForm Shield License 1.0.0 (see LICENSE).
+// Copyright © 2026 the Rembrandt contributors. Licensed under the GNU GPL v3 or later (see LICENSE).
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;

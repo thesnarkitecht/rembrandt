@@ -2,8 +2,8 @@
 name = "lumen"
 version = "0.1.0"
 description = "Rembrandt photo editor"
-authors = ["light.work"]
-license-file = "../LICENSE"
+authors = ["Rembrandt contributors"]
+license = "GPL-3.0-or-later"
 edition = "2021"
 publish = false
 

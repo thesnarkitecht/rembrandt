@@ -68,7 +68,7 @@ jobs:
           cargo build --release --manifest-path server/Cargo.toml --target "$target"
           mkdir -p pkg/web
           cp -r dist/. pkg/web/
-          cp LICENSE NOTICE.md TRADEMARKS.md pkg/
+          cp LICENSE NOTICE.md pkg/
           if [ "$RUNNER_OS" = Windows ]; then
             cp "server/target/$target/release/rembrandt-server.exe" pkg/
           else

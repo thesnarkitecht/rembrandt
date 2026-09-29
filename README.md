@@ -1,7 +1,29 @@
 <p align="center"><img src="brand/r-mark.svg" width="80" alt="Rembrandt"></p>
 <h1 align="center">Rembrandt</h1>
-<p align="center"><b>A free photo editor. No account, no subscription, no tracking.</b><br>
-RAW and JPEG · masks · on-device AI · a real library · your photos stay on your computer.</p>
+<p align="center"><b>Stop paying for Adobe. Flush the incrapification.</b></p>
+<p align="center">A free photo editor for macOS, Windows and Linux.<br>
+No account, no subscription, no “we’ve updated our terms” emails.</p>
+<p align="center">
+  <a href="#download"><b>Download</b></a> ·
+  <a href="#self-host-it">Self-host</a> ·
+  <a href="#features">Features</a> ·
+  <a href="#build">Build</a>
+</p>
+
+<p align="center"><img src="docs/screenshots/editor.jpg" alt="Editing a photo in Rembrandt" width="900"></p>
+
+<table>
+  <tr>
+    <td width="33%"><img src="docs/screenshots/library.jpg" alt="The library"></td>
+    <td width="33%"><img src="docs/screenshots/masks.jpg" alt="Masks, including AI subject, background, object and depth"></td>
+    <td width="33%"><img src="docs/screenshots/compare.jpg" alt="Before and after, split view"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub><b>Library</b>: albums, search, sorting, one-click delete</sub></td>
+    <td align="center"><sub><b>Masks</b>: brush, gradients, AI subject and depth</sub></td>
+    <td align="center"><sub><b>Before / after</b>: split or side by side</sub></td>
+  </tr>
+</table>
 
 ## Download
 
@@ -40,10 +62,10 @@ devices on your network. Linux and macOS; one small dependency-free binary (`ser
   Dropbox, OneDrive ([setup](docs/cloud-services.md)). Export back to them too.
 - **Open formats**: edits are standard XMP, readable by Lightroom and others.
 
-## Support
+## Help out
 
-Rembrandt is free. Star the repo, tell a photographer, [report a bug](https://github.com/thesnarkitecht/rembrandt/issues),
-or [sponsor it](https://github.com/sponsors/thesnarkitecht).
+Rembrandt is free and stays free. Star the repo, tell a photographer,
+[report a bug](https://github.com/thesnarkitecht/rembrandt/issues) or send a fix.
 
 ## Build
 
@@ -56,6 +78,10 @@ Details in [docs/building.md](docs/building.md). Contributions welcome: [CONTRIB
 
 ## Licence
 
-Source-available under the [PolyForm Shield License 1.0.0](LICENSE): use it for anything, including
-paid work, and change it, but **don't sell it or a modified version**. The name and logo are
-trademarks ([TRADEMARKS.md](TRADEMARKS.md)). Third-party parts: [NOTICE.md](NOTICE.md).
+Free software under the [GNU General Public License v3.0 or later](LICENSE), the same licence as
+darktable. Use it, study it, change it and share it; if you distribute a modified version, share its
+source under the same terms. Third-party parts: [NOTICE.md](NOTICE.md).
+
+<sub>Screenshot photos from the scikit-image sample data: espresso by Rachel Michetti and cat by
+Stefan van der Walt (CC0), rocket launch by SpaceX and Hubble eXtreme Deep Field by NASA (public
+domain).</sub>

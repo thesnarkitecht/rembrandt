@@ -1,7 +1,6 @@
 // AI analysis client: runs the models in a worker, caches results per photo, and keeps GPU
 // textures of the maps the engine passes need (depth, subject, clicked objects).
-// Copyright © 2026 light.work. Licensed under the PolyForm Shield License 1.0.0 (see LICENSE).
-// You may not sell this software or a modified version of it; see LICENSE and TRADEMARKS.md.
+// Copyright © 2026 the Rembrandt contributors. Licensed under the GNU GPL v3 or later (see LICENSE).
 
 import { estimateBlur } from './refocus.js';
 

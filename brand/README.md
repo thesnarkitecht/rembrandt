@@ -1,6 +1,6 @@
 # Rembrandt brand
 
-The name and logo are trademarks of light.work; see `../TRADEMARKS.md`.
+The R logo and app icon, under the same licence as the rest of Rembrandt (GPL-3.0-or-later).
 
 | Mark | File | Idea |
 |---|---|---|

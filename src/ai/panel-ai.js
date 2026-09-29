@@ -1,6 +1,5 @@
 // AI panel: Refocus (deblur), Lens Blur and Background. Everything runs on this device.
-// Copyright © 2026 light.work. Licensed under the PolyForm Shield License 1.0.0 (see LICENSE).
-// You may not sell this software or a modified version of it; see LICENSE and TRADEMARKS.md.
+// Copyright © 2026 the Rembrandt contributors. Licensed under the GNU GPL v3 or later (see LICENSE).
 import { el } from '../util.js';
 import { slider, section, segmented, toggle, button, disclosure } from '../ui.js';
 import { icon } from '../icons.js';

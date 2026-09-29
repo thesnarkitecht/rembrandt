@@ -1580,13 +1580,14 @@ const settingsHooks = {
   freeDeviceSpace,
   openSupport: () => openSupport(),
 };
-// Rembrandt is free. The heart in the top bar says how to help.
+// Rembrandt is free. With a donation page configured, a heart in the top bar links to it.
 function openSupport() {
   const url = CONFIG.supportUrl;
   if (!url) { setMode('account', 'about'); return; }
   const ext = openExternal();
   if (ext) ext(url); else window.open(url, '_blank', 'noopener');
 }
+$('btnSupport').hidden = !CONFIG.supportUrl;
 $('btnSupport').addEventListener('click', openSupport);
 $('btnAccount').addEventListener('click', (e) => popMenu(e.currentTarget, [
   { label: 'Preferences', icon: 'gear', onClick: () => setMode('account', 'prefs') },

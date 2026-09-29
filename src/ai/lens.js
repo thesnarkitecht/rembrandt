@@ -4,8 +4,7 @@
 //   • Focus sharpening on the in-focus plane
 // Blur is a disc gather at half resolution with depth-aware occlusion (a farther pixel never spreads
 // over a nearer one by more than the nearer pixel's own blur), then composited at full resolution.
-// Copyright © 2026 light.work. Licensed under the PolyForm Shield License 1.0.0 (see LICENSE).
-// You may not sell this software or a modified version of it; see LICENSE and TRADEMARKS.md.
+// Copyright © 2026 the Rembrandt contributors. Licensed under the GNU GPL v3 or later (see LICENSE).
 import { LIB } from '../../engine/src/shaders.js';
 import { toneK, toneInv, mul3, SRGB_TO_REC2020, REF_CONTRAST } from '../../engine/src/color.js';
 import { ai } from './ai.js';

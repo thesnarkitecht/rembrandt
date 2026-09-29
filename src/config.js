@@ -3,7 +3,7 @@
 // `window.LUMEN_CONFIG` in a script loaded before the app (the server writes one for you).
 const DEFAULTS = {
   repo: 'thesnarkitecht/rembrandt',   // GitHub repository: releases, update check, issues
-  supportUrl: 'https://github.com/sponsors/thesnarkitecht', // the Support button
+  supportUrl: '',                     // a donation page; the Support button only shows when this is set
   siteUrl: '',                        // public address, if you host it (used for OAuth redirects)
   serverUrl: undefined,               // set by rembrandt-server ('' = same origin): its photos folder
   // Import from and export to cloud services. Each needs your own (free) developer app key; see
@@ -17,4 +17,4 @@ const DEFAULTS = {
 };
 
 export const CONFIG = { ...DEFAULTS, ...(globalThis.LUMEN_CONFIG || {}) };
-export const supportUrl = () => CONFIG.supportUrl || `https://github.com/${CONFIG.repo}#support-rembrandt`;
+export const supportUrl = () => CONFIG.supportUrl || `https://github.com/${CONFIG.repo}#help-out`;

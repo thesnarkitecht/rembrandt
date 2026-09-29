@@ -2,7 +2,7 @@
 // can edit the photos on this computer (or, if you allow it, from another device on your network).
 // Edits are written next to the photos as XMP sidecars; the photos themselves are never changed.
 //
-// Copyright © 2026 light.work. Licensed under the PolyForm Shield License 1.0.0 (see LICENSE).
+// Copyright © 2026 the Rembrandt contributors. Licensed under the GNU GPL v3 or later (see LICENSE).
 //
 // Security model
 // - Every request needs the access key: it's in the link the server prints, and the browser keeps
