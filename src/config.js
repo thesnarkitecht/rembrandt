@@ -3,7 +3,7 @@
 // `window.LUMEN_CONFIG` in a script loaded before the app (the server writes one for you).
 const DEFAULTS = {
   repo: 'thesnarkitecht/rembrandt',   // GitHub repository: releases, update check, issues
-  supportUrl: '',                     // "Support Rembrandt" link (GitHub Sponsors, Open Collective, …)
+  supportUrl: 'https://github.com/sponsors/thesnarkitecht', // the Support button
   siteUrl: '',                        // public address, if you host it (used for OAuth redirects)
   serverUrl: undefined,               // set by rembrandt-server ('' = same origin): its photos folder
   // Import from and export to cloud services. Each needs your own (free) developer app key; see

@@ -189,7 +189,10 @@ fn parse_args() -> Config {
 }
 
 fn link(c: &Config) -> String {
-    let h = if c.host == "0.0.0.0" || c.host == "::" { "localhost".to_string() } else { c.host.clone() };
+    // "localhost", so every install opens Rembrandt at the same address (http://localhost:8420):
+    // Google, Dropbox and Microsoft only accept addresses registered with them in advance.
+    let local = matches!(c.host.as_str(), "0.0.0.0" | "::" | "127.0.0.1" | "::1");
+    let h = if local { "localhost".to_string() } else { c.host.clone() };
     format!("http://{}:{}/?key={}", h, c.port, c.key)
 }
 

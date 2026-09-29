@@ -22,6 +22,8 @@ Where to put the keys:
 
 Each service only accepts the addresses you register with it, so register the exact address you
 open Rembrandt at (for example `http://localhost:8420` for rembrandt-server, or your HTTPS domain).
+rembrandt-server always links to `http://localhost:<port>`, so keys registered for
+`http://localhost:8420` work on every install that keeps the default port.
 Browser sign-in pop-ups need a secure address: `localhost` counts as one; anything else needs HTTPS.
 
 ## Google Photos and Google Drive
