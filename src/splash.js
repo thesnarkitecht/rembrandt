@@ -1,21 +1,18 @@
 // Opening sequence: Rembrandt's 1659 self-portrait develops in as bronze halftone, left to right
 // like a print coming up in the tray, while REMBRANDT rises letter by letter over it and a bronze
-// line fills underneath; then the whole screen lifts away. About two and a half seconds. It plays once
-// per launch (once per browser session on the web), any key or click skips it, and it stays off for
-// people who prefer reduced motion or turned it off in Preferences.
+// line fills underneath; then the whole screen lifts away. About two and a half seconds. It plays every
+// time the app opens or the page reloads; any key or click skips it, and it stays off for people who
+// prefer reduced motion or turned it off in Preferences.
 import { prefs } from './account.js';
 import { BRAND } from './brand.js';
 
-const SEEN = 'lumen:splash';
 const HOLD = 2400;      // ms until it lifts
 const PAINTING = 'src/art/selfportrait-1659.jpg';   // Rembrandt van Rijn, 1659, public domain
 const DOTS = ['#8a5829', '#c98f4f', '#f4d292'];
 
 function shouldPlay() {
   if (prefs.splash === false) return false;
-  if (matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
-  try { if (sessionStorage.getItem(SEEN)) return false; sessionStorage.setItem(SEEN, '1'); } catch { /* play anyway */ }
-  return true;
+  return !matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
 const clamp = (v) => Math.min(1, Math.max(0, v));
