@@ -50,6 +50,8 @@ curl -fsSL https://raw.githubusercontent.com/thesnarkitecht/rembrandt/main/insta
 It asks which photo folder to use, starts at login, and prints a private link. Edits are saved next
 to each photo as XMP; the photos themselves are never changed. Add `--lan` to reach it from other
 devices on your network. Linux and macOS; one small dependency-free binary (`server/`).
+To update, press **Update** in the browser (Settings › About); it installs the latest release,
+checks it against the published SHA-256 sums, and restarts the server.
 
 ## Features
 

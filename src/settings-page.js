@@ -10,6 +10,7 @@ import { prefs, savePrefs } from './account.js';
 import { getAppearance, setAppearance } from './theme.js';
 import { ring, fmtBytes } from './ring.js';
 import { BRAND } from './brand.js';
+import { updateRow, updatesSupported } from './update-check.js';
 
 const SECTIONS = [
   ['prefs', 'Preferences', 'gear'],
@@ -109,6 +110,7 @@ export function buildSettingsPage(app, hooks) {
     const repo = `https://github.com/${CONFIG.repo}`;
     const link = (href, text) => el('a', { href, target: '_blank', rel: 'noopener' }, text);
     return [
+      updatesSupported() ? card('Updates', updateRow()) : null,
       card(null, el('div', { class: 'about' },
         el('p', {}, el('b', {}, BRAND.name), v ? ` ${v}` : ''),
         el('p', {}, 'A free, open-source photo editor. No accounts, no ads, no tracking. Your photos stay on your computer, and AI runs on your device.'),

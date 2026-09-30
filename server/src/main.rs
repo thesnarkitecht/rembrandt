@@ -17,10 +17,13 @@ use std::hash::{BuildHasher, Hasher};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Component, Path, PathBuf};
+use std::process::{Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, UNIX_EPOCH};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
+const REPO: &str = "thesnarkitecht/rembrandt"; // where releases and the installer come from (REMBRANDT_REPO overrides)
 const MAX_SIDECAR: usize = 4 * 1024 * 1024;
 const MAX_HEADER: usize = 16 * 1024;
 const PHOTO_EXT: &[&str] = &[
@@ -474,12 +477,8 @@ fn handle(mut s: TcpStream, c: &Config) {
             if !rel.to_ascii_lowercase().ends_with(".xmp") {
                 return text(&mut s, "403 Forbidden", "Only .xmp sidecars can be written");
             }
-            // Same-origin requests only (the cookie is SameSite=Strict too).
-            if let Some(o) = req.header("origin") {
-                let host = req.header("host").unwrap_or("");
-                if !(o.ends_with(&format!("//{host}"))) {
-                    return text(&mut s, "403 Forbidden", "Cross-site request");
-                }
+            if !same_origin(&req) {
+                return text(&mut s, "403 Forbidden", "Cross-site request");
             }
             let Some(p) = inside(&c.photos, rel, false) else { return text(&mut s, "403 Forbidden", "Outside the photos folder") };
             if fs::symlink_metadata(&p).map(|m| m.file_type().is_symlink()).unwrap_or(false) {
@@ -490,8 +489,99 @@ fn handle(mut s: TcpStream, c: &Config) {
                 Err(e) => text(&mut s, "500 Internal Server Error", &e.to_string()),
             }
         }
+        ("GET", "/api/server") => {
+            let j = format!("{{\"version\":{},\"canUpdate\":{}}}", json_str(VERSION), installed_by_installer().is_some());
+            send(&mut s, "200 OK", "application/json", &[("Cache-Control", "no-store".into())], j.as_bytes())
+        }
+        ("POST", "/api/update") => {
+            if !same_origin(&req) {
+                return text(&mut s, "403 Forbidden", "Cross-site request");
+            }
+            let Some(dir) = installed_by_installer() else {
+                return text(&mut s, "409 Conflict", "This copy of rembrandt-server wasn't set up by the installer. Update it the way you installed it.");
+            };
+            match start_update(&dir) {
+                Ok(()) => text(&mut s, "202 Accepted", "Updating"),
+                Err(e) => text(&mut s, "500 Internal Server Error", &format!("Couldn't start the update: {e}")),
+            }
+        }
         ("GET", _) => serve_static(&mut s, c, path),
         _ => text(&mut s, "405 Method Not Allowed", "Method not allowed"),
+    }
+}
+
+// Same-origin requests only (the cookie is SameSite=Strict too).
+fn same_origin(req: &Req) -> bool {
+    match req.header("origin") {
+        Some(o) => o.ends_with(&format!("//{}", req.header("host").unwrap_or(""))),
+        None => true,
+    }
+}
+
+// ---------------------------------------------------------------- updates
+
+fn on_path(tool: &str) -> bool {
+    std::env::var_os("PATH").map(|p| std::env::split_paths(&p).any(|d| d.join(tool).is_file())).unwrap_or(false)
+}
+
+// The install.sh layout (…/rembrandt/server/rembrandt-server, Linux or macOS, with curl and bash):
+// only then can the server update itself. Returns the install's folder (…/rembrandt).
+fn installed_by_installer() -> Option<PathBuf> {
+    if !cfg!(unix) {
+        return None;
+    }
+    let exe = std::env::current_exe().ok()?.canonicalize().ok()?;
+    let server = exe.parent()?;
+    let home = server.parent()?;
+    if server.file_name()? != "server" || home.file_name()? != "rembrandt" || !on_path("curl") || !on_path("bash") {
+        return None;
+    }
+    Some(home.to_path_buf())
+}
+
+static UPDATING: AtomicBool = AtomicBool::new(false);
+
+// Runs the installer in update mode in the background: it downloads the latest release, checks it
+// against the release's SHA-256 sums, swaps it in and restarts the service (which ends this process).
+// Its output goes to update.log in the install folder.
+fn start_update(home: &Path) -> std::io::Result<()> {
+    if UPDATING.swap(true, Ordering::SeqCst) {
+        return Ok(());
+    }
+    let repo = std::env::var("REMBRANDT_REPO").ok().filter(|r| !r.is_empty()).unwrap_or_else(|| REPO.into());
+    let valid = repo.split('/').count() == 2 && repo.chars().all(|ch| ch.is_ascii_alphanumeric() || "-_./".contains(ch)) && !repo.contains("..");
+    if !valid {
+        UPDATING.store(false, Ordering::SeqCst);
+        return Err(std::io::Error::other("REMBRANDT_REPO isn't owner/name"));
+    }
+    // REMBRANDT_INSTALLER: a mirror of install.sh (with REMBRANDT_DOWNLOADS for the release files).
+    let url = std::env::var("REMBRANDT_INSTALLER").ok().filter(|u| !u.is_empty()).unwrap_or_else(|| format!("https://raw.githubusercontent.com/{repo}/main/install.sh"));
+    let spawn = || -> std::io::Result<std::process::Child> {
+        let log = fs::File::create(home.join("update.log"))?;
+        Command::new("bash")
+            .arg("-c")
+            .arg("set -o pipefail; curl -fsSL \"$1\" | bash -s -- --update")
+            .arg("rembrandt-update")
+            .arg(&url)
+            .env("REMBRANDT_REPO", &repo)
+            .stdin(Stdio::null())
+            .stdout(log.try_clone()?)
+            .stderr(log)
+            .spawn()
+    };
+    match spawn() {
+        Ok(mut child) => {
+            // Reap it; if it fails (offline, bad download) the server keeps running and can try again.
+            std::thread::spawn(move || {
+                let _ = child.wait();
+                UPDATING.store(false, Ordering::SeqCst);
+            });
+            Ok(())
+        }
+        Err(e) => {
+            UPDATING.store(false, Ordering::SeqCst);
+            Err(e)
+        }
     }
 }
 

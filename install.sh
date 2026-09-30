@@ -11,7 +11,11 @@
 #       this computer. Asks which folder (or pass --photos <folder>), starts at login, and prints the
 #       link to open. Add --lan to reach it from other devices on your network.
 #
-# Options: --server, --photos <folder>, --port <n>, --lan, --appimage, --uninstall, --version vX.Y.Z
+#   ... | bash -s -- --server --update
+#       Updates an installed rembrandt-server to the latest release and restarts it, keeping its
+#       settings. (The Update button in Rembrandt's Settings runs this for you.)
+#
+# Options: --server, --update, --photos <folder>, --port <n>, --lan, --appimage, --uninstall, --version vX.Y.Z
 # Every download is checked against the release's SHA-256 sums.
 set -euo pipefail
 
@@ -31,10 +35,11 @@ step() { printf '%s•%s %s\n' "$gold" "$off" "$*"; }
 die() { printf '%serror:%s %s\n' "$red" "$off" "$*" >&2; exit 1; }
 need() { command -v "$1" >/dev/null 2>&1; }
 
-mode=desktop; photos=""; port=8420; lan=0; appimage=0; uninstall=0; version="latest"
+mode=desktop; photos=""; port=8420; lan=0; appimage=0; uninstall=0; update=0; version="latest"
 while [ $# -gt 0 ]; do
   case "$1" in
     --server) mode=server ;;
+    --update) mode=server; update=1 ;;
     --photos) photos="${2:-}"; shift ;;
     --port) port="${2:-}"; shift ;;
     --lan) lan=1 ;;
@@ -102,9 +107,29 @@ install_server() {
   local f="rembrandt-server-$os-$ARCH.tar.gz"
   step "Downloading $f"
   fetch "$f"; verify "$f"
-  rm -rf "$HOME_DIR/server"; mkdir -p "$HOME_DIR/server" "$BIN_DIR" "$CONF_DIR"
-  tar -xzf "$tmp/$f" -C "$HOME_DIR/server"
+  # Unpack next to the old copy and swap, so a failed download or unpack leaves it working.
+  rm -rf "$HOME_DIR/server.new"; mkdir -p "$HOME_DIR/server.new" "$BIN_DIR" "$CONF_DIR"
+  tar -xzf "$tmp/$f" -C "$HOME_DIR/server.new"
+  [ -x "$HOME_DIR/server.new/rembrandt-server" ] || die "the download didn't contain rembrandt-server"
+  [ -f "$HOME_DIR/server/server.log" ] && mv "$HOME_DIR/server/server.log" "$HOME_DIR/server.new/" 2>/dev/null
+  rm -rf "$HOME_DIR/server"; mv "$HOME_DIR/server.new" "$HOME_DIR/server"
   ln -sf "$HOME_DIR/server/rembrandt-server" "$BIN_DIR/rembrandt-server"
+
+  if [ "$update" = 1 ]; then
+    [ -f "$CONF_DIR/server.conf" ] || die "rembrandt-server isn't set up yet; run the installer with --server first"
+    step "Installed $("$HOME_DIR/server/rembrandt-server" --version)"
+    if [ "$OS" = Darwin ] && [ -f "$HOME/Library/LaunchAgents/work.light.rembrandt-server.plist" ]; then
+      launchctl kickstart -k "gui/$(id -u)/work.light.rembrandt-server" 2>/dev/null \
+        || { launchctl unload "$HOME/Library/LaunchAgents/work.light.rembrandt-server.plist" 2>/dev/null; launchctl load "$HOME/Library/LaunchAgents/work.light.rembrandt-server.plist"; }
+      step "Restarted"
+    elif need systemctl && systemctl --user is-enabled rembrandt-server >/dev/null 2>&1; then
+      systemctl --user restart rembrandt-server
+      step "Restarted"
+    else
+      say "${dim}Restart rembrandt-server to use the new version.${off}"
+    fi
+    return 0
+  fi
 
   # Which photos? Remember an earlier choice; otherwise ask (the terminal, even under curl | bash).
   if [ -z "$photos" ] && [ -f "$CONF_DIR/server.conf" ]; then photos="$(sed -n 's/^photos *= *//p' "$CONF_DIR/server.conf" | head -n1)"; fi

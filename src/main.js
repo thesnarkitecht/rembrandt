@@ -17,7 +17,7 @@ import { CLOUD_SOURCES, pickLinked, sourceName } from './import-cloud.js';
 import * as batch from './batch.js';
 import * as adobe from './adobe.js';
 import { openExternal } from './native.js';
-import { checkForUpdate } from './update-check.js';
+import { startUpdateChecks, updatesSupported, updateState } from './update-check.js';
 import { defaultParams, withSettings, developSettings, effectiveParams } from './params.js';
 import * as catalog from './catalog.js';
 import { buildLibrary } from './library.js';
@@ -1594,6 +1594,7 @@ $('btnAccount').addEventListener('click', (e) => popMenu(e.currentTarget, [
   { label: 'Storage', icon: 'cloud', onClick: () => setMode('account', 'storage') },
   { label: 'Backup & data', icon: 'save', onClick: () => setMode('account', 'data') },
   { label: 'About Rembrandt', icon: 'info', onClick: () => setMode('account', 'about') },
+  updatesSupported() ? { label: updateState().available ? 'Update Rembrandt…' : 'Check for updates…', icon: 'sync', onClick: () => setMode('account', 'about') } : null,
   { sep: true },
   { label: 'Import photos…', icon: 'open', onClick: () => openImporter() },
   { label: 'Keyboard shortcuts', icon: 'keyboard', onClick: () => $('helpDialog').showModal() },
@@ -1737,7 +1738,7 @@ function watchDesktopSignIn() {
 function boot() {
   initTheme();
   watchDesktopSignIn();
-  setTimeout(() => checkForUpdate(openExternal()), 8000);
+  startUpdateChecks();
   canvasBg = cssRGB('--canvas');
   onThemeChange(() => {
     canvasBg = cssRGB('--canvas');

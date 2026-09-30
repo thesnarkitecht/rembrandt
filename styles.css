@@ -884,6 +884,7 @@ body[data-mode="account"] .top-actions > :not(.avatar-btn), body[data-mode="libr
 .splash.go .splash-name span { opacity: 1; transform: none; }
 @keyframes splash-shine { 0% { opacity: 1; transform: rotate(35deg) translateX(-30px); } 100% { opacity: 1; transform: rotate(35deg) translateX(190px); } }
 @media (prefers-reduced-motion: reduce) { .splash { display: none; } }
+.update-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .update-btn { color: var(--brand-dot); border-color: color-mix(in srgb, var(--brand-dot) 50%, var(--line)); }
 
 /* ---------------------------------------------------------------- batch editing */
