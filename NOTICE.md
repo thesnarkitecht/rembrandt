@@ -25,3 +25,27 @@ The engine is an independent implementation of published methods: sRGB (IEC 6196
 BT.2020, CIE CAT16 (Li et al. 2017), Krystek's Planckian locus approximation (1985), Oklab
 (B. Ottosson 2020, public domain), the dark channel prior (He, Sun & Tang 2009), the guided filter
 (He, Sun & Tang 2010; He & Sun 2015) and Fritsch–Carlson monotone cubic interpolation (1980).
+
+## RAWmakase (MIT)
+Lens corrections (the built-in Fujifilm and Sony tables in `src/lens.js`, the radial model in
+`engine/src/pipeline.js`) and spot removal (the Heal membrane, Clone and automatic source search in
+`src/retouch.js`) are ported from RAWmakase, https://github.com/pch/rawmakase.
+
+> MIT License
+>
+> Copyright (c) 2026 RAWmakase contributors
+>
+> Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
+> associated documentation files (the "Software"), to deal in the Software without restriction,
+> including without limitation the rights to use, copy, modify, merge, publish, distribute,
+> sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is
+> furnished to do so, subject to the following conditions:
+>
+> The above copyright notice and this permission notice shall be included in all copies or
+> substantial portions of the Software.
+>
+> THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT
+> NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+> NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES
+> OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+> CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

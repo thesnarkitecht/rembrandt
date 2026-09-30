@@ -8,9 +8,13 @@
 // Host applications can insert their own scene-linear passes between MAIN and FINAL (for example
 // local adjustments) by assigning `engine.hostPasses = { key(p, ctx), run(engine, p, ctx, input) }`;
 // `run` returns the render target to feed into FINAL.
+//
+// Before PRE, the source can be corrected: lens corrections (setLensProfile + p.optics) and then
+// `engine.sourcePasses = { key(p), run(engine, p, input) }` (e.g. spot removal), which returns the
+// target to use as the source. Both run once per change and are cached.
 
-import { VERT, DOWN, GAUSS, BOX, RESAMPLE, BLIT, GF_STATS, GF_COEF, HAZE_DARK, HAZE_T, PRE, MAIN, FINAL } from './shaders.js';
-import { INPUT_UNIFORMS, preUniforms, mainUniforms, finalUniforms, curveIsIdentity, curveLUT } from './pipeline.js';
+import { VERT, DOWN, GAUSS, BOX, RESAMPLE, BLIT, LENS, GF_STATS, GF_COEF, HAZE_DARK, HAZE_T, PRE, MAIN, FINAL } from './shaders.js';
+import { INPUT_UNIFORMS, preUniforms, mainUniforms, finalUniforms, curveIsIdentity, curveLUT, opticsLut } from './pipeline.js';
 
 export const PREVIEW_LONG = 2560;
 const FULL_CAP = 8192;
@@ -52,7 +56,7 @@ export class Engine {
     this.maxTex = Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE), gl.getParameter(gl.MAX_RENDERBUFFER_SIZE));
     this.vao = gl.createVertexArray();
     this.P = {
-      down: this.program(DOWN), gauss: this.program(GAUSS), box: this.program(BOX), resample: this.program(RESAMPLE), blit: this.program(BLIT),
+      down: this.program(DOWN), gauss: this.program(GAUSS), box: this.program(BOX), resample: this.program(RESAMPLE), blit: this.program(BLIT), lens: this.program(LENS),
       gfStats: this.program(GF_STATS), gfCoef: this.program(GF_COEF), hazeDark: this.program(HAZE_DARK), hazeT: this.program(HAZE_T),
       pre: this.program(PRE), main: this.program(MAIN), final: this.program(FINAL),
     };
@@ -314,7 +318,64 @@ export class Engine {
   // ------------------------------------------------------------ passes
 
   inputUniforms() {
-    return { ...INPUT_UNIFORMS, uSrc: this.L.src, uSrcLinear: this.linear ? 1 : 0, uSrcGain: this.srcGain };
+    return { ...INPUT_UNIFORMS, uSrc: this.baseSource(), uSrcLinear: this.linear ? 1 : 0, uSrcGain: this.srcGain };
+  }
+
+  // The source after lens corrections and source passes (or the plain source).
+  baseSource() { return this.L.base || this.L.src; }
+
+  // The camera's built-in lens correction for the current photo (see opticsLut), or null.
+  setLensProfile(profile) {
+    this.lensProfile = profile || null;
+    if (this.L) this.L.baseKey = null;
+  }
+
+  // Lens corrections, then source passes, into L.base. Returns a key that changes with the result.
+  baseStage(p) {
+    const L = this.L, gl = this.gl;
+    const lens = opticsLut(p.optics, this.lensProfile);
+    const sk = this.sourcePasses ? this.sourcePasses.key(p) : '';
+    const key = `${lens ? lens.key : '-'}|${sk}|${L.w}x${L.h}|${this.token}`;
+    if (L.baseKey === key) return key;
+    let cur = null;
+    if (lens) {
+      if (!this.lutTex) {
+        this.lutTex = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, this.lutTex);
+        gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA32F, 33, 1);
+        for (const [k, v] of [[gl.TEXTURE_MIN_FILTER, gl.NEAREST], [gl.TEXTURE_MAG_FILTER, gl.NEAREST]]) gl.texParameteri(gl.TEXTURE_2D, k, v);
+      }
+      gl.bindTexture(gl.TEXTURE_2D, this.lutTex);
+      gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+      gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 33, 1, gl.RGBA, gl.FLOAT, lens.data);
+      cur = this.tgt('lens', gl.RGBA16F, true);
+      this.draw(this.P.lens, { uIn: L.src, uLut: this.lutTex, uSize: [L.w, L.h], uFill: lens.fill }, cur);
+    }
+    if (this.sourcePasses && sk) {
+      // Source passes work on a float copy they may change in place.
+      if (!cur) { cur = this.tgt('lens', gl.RGBA16F, true); this.draw(this.P.blit, { uIn: L.src, uSize: [L.w, L.h] }, cur); }
+      cur = this.sourcePasses.run(this, p, cur) || cur;
+    }
+    L.base = cur ? cur.tex : null;
+    L.baseKey = key;
+    return key;
+  }
+
+  // Pixels of a float target, rows from y (texture rows = photo rows, top first), as RGBA floats.
+  readRect(t, x, y, w, h) {
+    const gl = this.gl;
+    const out = new Float32Array(w * h * 4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, t.fbo);
+    gl.readPixels(x, y, w, h, gl.RGBA, gl.FLOAT, out);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    return out;
+  }
+
+  writeRect(t, x, y, w, h, data) {
+    const gl = this.gl;
+    gl.bindTexture(gl.TEXTURE_2D, t.tex);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, x, y, w, h, gl.RGBA, gl.FLOAT, data);
   }
 
   // Guided filter on quarter-res statistics. `stats` holds (I, p, Ip, I²) and is consumed.
@@ -360,8 +421,9 @@ export class Engine {
     const L = this.L, P = this.P, K = L.keys;
 
     // PRE: input -> scene-linear Rec.2020, dehaze, exposure
+    const bk = this.baseStage(p);
     const pu = preUniforms(p, this.stats);
-    const pk = JSON.stringify(pu);
+    const pk = JSON.stringify(pu) + bk;
     if (K.pre !== pk) {
       const hazeAB = pu.uHaze ? this.hazeMap(pu) : this.dummy;
       this.draw(P.pre, { ...this.inputUniforms(), ...pu, uHazeAB: hazeAB }, L.T.pre);

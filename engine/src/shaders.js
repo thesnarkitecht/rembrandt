@@ -151,6 +151,36 @@ uniform vec2 uSize;
 out vec4 o;
 void main() { o = texture(uIn, gl_FragCoord.xy / uSize); }`;
 
+// Lens corrections on the source photo, before anything else: distortion (the radius to sample
+// from), lateral chromatic aberration (red and blue sampled at their own radii) and vignetting (a
+// gain on the result). uLut is 33x1 RGBA32F over the output radius 0..1 (1 = half the diagonal):
+// (vignette gain, green radius scale, red scale relative to green, blue scale relative to green).
+// uFill scales the output so corrected corners stay inside the photo.
+export const LENS = HEAD + `
+uniform sampler2D uIn;
+uniform sampler2D uLut;
+uniform vec2 uSize;
+uniform float uFill;
+in vec2 vUv; out vec4 o;
+vec4 lut(float r) {
+  float x = clamp(r, 0.0, 1.0) * 32.0;
+  int i = int(floor(x));
+  int j = min(i + 1, 32);
+  return mix(texelFetch(uLut, ivec2(i, 0), 0), texelFetch(uLut, ivec2(j, 0), 0), x - float(i));
+}
+void main() {
+  float hd = 0.5 * length(uSize);
+  vec2 d = (vUv - 0.5) * uSize * uFill;
+  vec4 k = lut(length(d) / hd);
+  vec2 dg = d * k.g;
+  vec2 uvG = 0.5 + dg / uSize;
+  vec2 uvR = 0.5 + dg * k.b / uSize;
+  vec2 uvB = 0.5 + dg * k.a / uSize;
+  float vig = lut(length(dg) / hd).r;
+  vec3 c = vec3(textureLod(uIn, uvR, 0.0).r, textureLod(uIn, uvG, 0.0).g, textureLod(uIn, uvB, 0.0).b);
+  o = vec4(c * vig, 1.0);
+}`;
+
 // Guided filter, step 1: per-pixel (I, p, I·p, I²) of a guide I and input p, from channels of uIn.
 // mode 0: I = p = log2 luminance of scene RGB (self-guided).  mode 1: I = .x, p = .y
 export const GF_STATS = HEAD + LIB + `

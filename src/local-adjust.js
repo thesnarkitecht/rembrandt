@@ -236,7 +236,7 @@ export const localAdjustments = {
       engine.draw(prog, {
         ...mu,
         uSubj: ai.tex.subject || engine.dummy, uDepth: ai.tex.depth || engine.dummy, uObj: mu.uObjTex || engine.dummy,
-        uIn: cur.tex, uBlurM: m1.tex, uSrc: L.src, uBrush: brushFor(engine, m, aspect),
+        uIn: cur.tex, uBlurM: m1.tex, uSrc: engine.baseSource(), uBrush: brushFor(engine, m, aspect),
         uShowOverlay: m.id === overlayId ? 1 : 0,
         uSrcLinear: engine.linear ? 1 : 0, uSrcGain: engine.srcGain,
         uInC: REF_CONTRAST, uInK: toneK(REF_CONTRAST),

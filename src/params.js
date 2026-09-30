@@ -34,6 +34,10 @@ export function defaultParams(aspect = 1.5) {
     },
     sharpen: { amount: 0, radius: 1.0, masking: 0 },
     nr: { luma: 0, chroma: 0 },
+    // Lens corrections. profile: 'auto' (the camera's built-in table where Lightroom uses it), true, false.
+    optics: { profile: 'auto', distortion: 100, vignetting: 100, ca: true, manualDistortion: 0, manualVignette: 0, manualMidpoint: 50 },
+    // Spot removal (Heal / Clone), applied to the source in order; see src/retouch.js.
+    retouch: [],
     ai: {
       refocus: { amount: 0, radius: -1, scope: 'subject', protect: 30 },
       blur: { amount: 0, focus: -1, range: 12, bokeh: 0, protect: true, sharpen: 0 },
@@ -54,6 +58,8 @@ export const GROUPS = {
   mixer: ['hsl'],
   grading: ['grading'],
   detail: ['sharpen', 'nr'],
+  optics: ['optics'],
+  retouch: ['retouch'],
   refocus: ['ai.refocus'],
   lens: ['ai.blur'],
   background: ['ai.bg'],

@@ -172,3 +172,48 @@ export function estimateAirlight(rgb, w, h, radius = 2) {
   }
   return A.map((v) => Math.max(cnt ? v / cnt : rgb[best * 3], 1e-3));
 }
+
+// ---------------------------------------------------------------- lens corrections
+// A radial function sampled at increasing radii (0 = centre, 1 = half the diagonal); linear in
+// between, constant beyond the ends. (Model after RAWmakase, MIT; see NOTICE.md.)
+export function radialEval(f, r) {
+  const k = f.knots, v = f.values;
+  if (r <= k[0]) return v[0];
+  for (let i = 1; i < k.length; i++) if (r < k[i]) return v[i - 1] + (v[i] - v[i - 1]) * ((r - k[i - 1]) / (k[i] - k[i - 1]));
+  return v[v.length - 1];
+}
+
+// The lens-correction lookup for the LENS pass, or null when nothing changes the photo.
+// o: p.optics = { profile: 'auto' | true | false, distortion, vignetting, ca, manualDistortion, manualVignette, manualMidpoint }
+// profile: the camera's built-in correction { vignetting, distortion, chromatic: [red, blue] } or null.
+// Returns { data: Float32Array(33 * 4), fill, key }.
+export function opticsLut(o, profile) {
+  if (!o) return null;
+  const use = !!(profile && (o.profile === true || (o.profile === 'auto' && profile.defaultOn)));
+  const dAmt = (o.distortion ?? 100) / 100, vAmt = (o.vignetting ?? 100) / 100;
+  const md = (o.manualDistortion || 0) / 100, mv = (o.manualVignette || 0) / 100;
+  const mid = Math.min(0.9, Math.max(0, (o.manualMidpoint ?? 50) / 100 * 0.8));
+  const prof = use ? profile : {};
+  const ca = use && o.ca !== false && prof.chromatic;
+  if (!(use && (prof.distortion || prof.vignetting || ca)) && !md && !mv) return null;
+  const data = new Float32Array(33 * 4);
+  let widest = 1;
+  for (let i = 0; i <= 32; i++) {
+    const r = i / 32;
+    // Vignetting: the camera's gain (scaled in stops by its amount) times the manual gain.
+    const pg = use && prof.vignetting ? radialEval(prof.vignetting, r) : 1;
+    const ramp = Math.min(1, Math.max(0, (r - mid) / (1 - mid))) ** 2;
+    const vig = pg ** vAmt * 2 ** (mv * 1.2 * ramp);
+    // Distortion: sample farther out (> 1) to correct barrel, closer in (< 1) for pincushion.
+    const pd = use && prof.distortion ? 1 + (radialEval(prof.distortion, r) - 1) * dAmt : 1;
+    const g = pd * (1 + md * 0.15 * r * r);
+    const red = ca ? radialEval(prof.chromatic[0], r) : 1;
+    const blue = ca ? radialEval(prof.chromatic[1], r) : 1;
+    data.set([vig, g, red, blue], i * 4);
+    widest = Math.max(widest, g * red, g, g * blue);
+  }
+  // Fill: scale the output so every corrected corner samples inside the photo (Lightroom crops the
+  // empty border the same way).
+  const fill = 1 / widest;
+  return { data, fill, key: `${use ? 1 : 0}|${dAmt}|${vAmt}|${ca ? 1 : 0}|${md}|${mv}|${mid}` };
+}

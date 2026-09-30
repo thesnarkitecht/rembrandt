@@ -1,6 +1,6 @@
 // The main "Edit" panel: light, color, effects, curve, mixer, grading, detail.
 import { el, getPath, setPath } from './util.js';
-import { slider, section, segmented, iconButton, button, popMenu } from './ui.js';
+import { slider, section, segmented, iconButton, button, popMenu, toggle } from './ui.js';
 import { curveEditor, hslMixer, gradingControl } from './widgets.js';
 import { defaultParams } from './params.js';
 
@@ -30,6 +30,7 @@ export function buildEditPanel(app) {
     mixer: { icon: 'mixer', color: 'conic-gradient(from 200deg,#ff5f5f,#ffd34d,#4de38a,#4dc3ff,#8a6bff,#ff5fc8,#ff5f5f)' },
     grading: { icon: 'wheel', color: 'linear-gradient(135deg,#ff8a65,#7c5cff)' },
     detail: { icon: 'detail', color: 'linear-gradient(135deg,#a3acbd,#5a6376)' },
+    optics: { icon: 'aperture', color: 'linear-gradient(135deg,#8fd3ff,#4a7bd6)' },
   };
   // Section header switch: turns the whole group off without losing its settings.
   const on = (g) => ({ get: () => !app.params.off?.[g], set: (v) => app.setGroupOn(g, v) });
@@ -135,6 +136,29 @@ export function buildEditPanel(app) {
     el('div', { class: 'hint' }, 'Zoom to 100% to judge detail accurately.'),
   );
 
-  const root = el('div', { class: 'panel-view' }, tools, light.el, color.el, fx.el, curve.el, mixer.el, grading.el, detail.el);
+  // --- lens corrections
+  const optics = sec('Lens Corrections', 'optics', { id: 'optics', open: false, onReset: resetPaths(['optics']) });
+  const profileNote = el('div', { class: 'hint' });
+  const useProfile = toggle('Use the camera’s lens profile', () => {
+    const o = app.params.optics || {}, prof = app.lensProfile?.();
+    return o.profile === true || (o.profile === 'auto' && !!prof?.defaultOn);
+  }, (v) => { app.set('optics.profile', v); app.commit(); app.refreshPanel(); });
+  const useCa = toggle('Remove chromatic aberration', () => app.params.optics?.ca !== false, (v) => { app.set('optics.ca', v); app.commit(); });
+  const profileBox = el('div', {}, useProfile.el, S('optics.distortion', 'Distortion', 0, 200), S('optics.vignetting', 'Vignetting', 0, 200), useCa.el);
+  reg.push({ refresh: () => {
+    const prof = app.lensProfile?.();
+    profileNote.textContent = prof ? `${prof.source} correction found in this photo.` : 'This photo has no built-in lens data (Fujifilm and Sony RAW files do). Use the manual corrections below.';
+    profileBox.hidden = !prof;
+    useProfile.refresh(); useCa.refresh();
+  } });
+  optics.body.append(
+    profileNote, profileBox,
+    el('div', { class: 'subhead' }, 'Manual'),
+    S('optics.manualDistortion', 'Distortion', -100, 100),
+    S('optics.manualVignette', 'Vignetting', -100, 100),
+    S('optics.manualMidpoint', 'Midpoint', 0, 100),
+  );
+
+  const root = el('div', { class: 'panel-view' }, tools, light.el, color.el, fx.el, curve.el, mixer.el, grading.el, detail.el, optics.el);
   return { el: root, refresh: () => reg.forEach((c) => c.refresh()) };
 }

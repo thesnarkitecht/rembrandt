@@ -1,6 +1,7 @@
 // App controller: image library, view (zoom/pan), tools, history, keyboard, persistence.
 import { Engine } from '../engine/src/engine.js';
 import { BRAND } from './brand.js';
+import { readLensProfile } from './lens.js';
 import { initTheme, onThemeChange, cssRGB } from './theme.js';
 import { localAdjustments } from './local-adjust.js';
 import { ai } from './ai/ai.js';
@@ -31,6 +32,8 @@ import { A, qToP, pToUV, rotatedBounds, cropUVToQ, fitCrop } from './geometry.js
 import { buildEditPanel } from './panel-edit.js';
 import { buildCropPanel, CropOverlay, refitCrop } from './tool-crop.js';
 import { buildMaskPanel, MaskOverlay, activeMask, removeMask, applyPick, addMask } from './tool-masks.js';
+import { retouchPasses } from './retouch.js';
+import { RetouchOverlay, buildRetouchPanel, retouchState, deleteSelected, newSourceForSelected } from './tool-retouch.js';
 import { buildPresetsPanel, allPresets } from './panel-presets.js';
 import { computeHistogram, drawHistogram } from './histogram.js';
 import { openExport, renderExport } from './export.js';
@@ -87,6 +90,8 @@ const app = {
 
   // ------------------------------------------------------------ edits
   set(path, v) { setPath(this.params, path, v); this.requestRender(); },
+  // The camera's built-in lens correction for the open photo (src/lens.js), or null.
+  lensProfile() { return this.images[this.cur]?.lensProfile || null; },
 
   commit() {
     if (!this.params) return;
@@ -172,7 +177,7 @@ const app = {
     body.textContent = '';
     if (!this.params) { this.panel = null; return; }
     const t = this.state.tool;
-    this.panel = t === 'crop' ? buildCropPanel(this) : t === 'masks' ? buildMaskPanel(this) : t === 'presets' ? buildPresetsPanel(this) : t === 'ai' ? buildAIPanel(this) : buildEditPanel(this);
+    this.panel = t === 'crop' ? buildCropPanel(this) : t === 'masks' ? buildMaskPanel(this) : t === 'retouch' ? buildRetouchPanel(this) : t === 'presets' ? buildPresetsPanel(this) : t === 'ai' ? buildAIPanel(this) : buildEditPanel(this);
     body.append(this.panel.el);
   },
   refreshPanel() { this.panel?.refresh(); },
@@ -436,6 +441,7 @@ const app = {
     }
     if (this.state.tool === 'crop') cropOverlay.draw(overlay, W, H);
     if (this.state.tool === 'masks') maskOverlay.draw(overlay);
+    if (this.state.tool === 'retouch') retouchOverlay.draw(overlay);
   },
 
   updateHud() {
@@ -508,6 +514,7 @@ async function paintStorage(node) {
 }
 const cropOverlay = new CropOverlay(app);
 const maskOverlay = new MaskOverlay(app);
+const retouchOverlay = new RetouchOverlay(app);
 sliderHooks.start = () => { app.state.sliding = true; lensQuality.draft = !!(app.params && (refocusActive(app.params) || lensActive(app.params))); };
 sliderHooks.end = () => { app.state.sliding = false; lensQuality.draft = false; app.requestRender(); };
 
@@ -948,6 +955,15 @@ async function applySource(e) {
   }
   if (app.img) app.img.aspect = aspect;
   await app.engine.setImage(lin ? { kind: 'linear', data: lin.data, w, h, gain: lin.gain } : { kind: 'display', bitmap: e.bitmap }, e.stats);
+  app.engine.setLensProfile(e.lensProfile);
+  // Built-in lens corrections are read once per photo, straight from the RAW file.
+  if (e.raw && e.lensProfile === undefined) {
+    e.lensProfile = null;
+    originalFile(e).then(readLensProfile).then((prof) => {
+      e.lensProfile = prof;
+      if (prof && app.images[app.cur] === e) { app.engine.setLensProfile(prof); app.requestRender(); app.refreshPanel(); }
+    }).catch(() => {});
+  }
   ai.bind(app.engine, e);
   if (app.params) await loadBackground(app.params);
   $('info').textContent = describe(e, w, h);
@@ -1379,6 +1395,8 @@ async function renderPhotoForExport(id, opts) {
   const params = e.params && e.params.v === 1 ? deepMerge(defaultParams(aspect), e.params) : defaultParams(aspect);
   engineDirty = true;
   await app.engine.setImage(lin ? { kind: 'linear', data: lin.data, w, h, gain: lin.gain } : { kind: 'display', bitmap: d.bitmap }, computeStats(sample));
+  if (d.raw && e.lensProfile === undefined) e.lensProfile = await readLensProfile(file);
+  app.engine.setLensProfile(e.lensProfile);
   const tmp = { bitmap: d.bitmap, linear: lin, sample, ai: e.ai };
   ai.bind(app.engine, tmp);
   await ai.ensure(tmp, params);
@@ -1419,7 +1437,7 @@ const local = (e) => {
   const r = viewer.getBoundingClientRect();
   return [e.clientX - r.left, e.clientY - r.top];
 };
-const toolOverlay = () => (app.state.tool === 'crop' ? cropOverlay : app.state.tool === 'masks' ? maskOverlay : null);
+const toolOverlay = () => ({ crop: cropOverlay, masks: maskOverlay, retouch: retouchOverlay })[app.state.tool] || null;
 
 viewer.addEventListener('pointerdown', (e) => {
   if (!app.img) return;
@@ -1454,6 +1472,7 @@ viewer.addEventListener('pointermove', (e) => {
   }
   const tool = toolOverlay();
   if (tool === maskOverlay) { maskOverlay.move(e, x, y); app.drawOverlay(); }
+  if (tool === retouchOverlay) retouchOverlay.move(e, x, y);
   const onSplit = app.state.compare === 'split' && app.state.tool === 'edit' && Math.abs(x - app.state.splitX * viewer.clientWidth) < 20;
   viewer.style.cursor = app.state.pick ? 'crosshair' : onSplit ? 'ew-resize' : spaceDown ? 'grab' : tool ? tool.cursor(x, y) : '';
 });
@@ -1465,7 +1484,7 @@ const endPointer = () => {
 };
 viewer.addEventListener('pointerup', endPointer);
 viewer.addEventListener('pointercancel', endPointer);
-viewer.addEventListener('pointerleave', () => { if (!pointer) { maskOverlay.leave(); app.drawOverlay(); } });
+viewer.addEventListener('pointerleave', () => { if (!pointer) { maskOverlay.leave(); retouchOverlay.hover = null; app.drawOverlay(); } });
 
 viewer.addEventListener('wheel', (e) => {
   if (!app.img) return;
@@ -1478,7 +1497,7 @@ viewer.addEventListener('wheel', (e) => {
 }, { passive: false });
 
 viewer.addEventListener('dblclick', (e) => {
-  if (!app.img || app.state.tool === 'crop' || (app.state.tool === 'masks' && activeMask(app))) return;
+  if (!app.img || app.state.tool === 'crop' || app.state.tool === 'retouch' || (app.state.tool === 'masks' && activeMask(app))) return;
   const [x, y] = local(e);
   app.toggleZoom(x * DPR(), y * DPR());
 });
@@ -1672,6 +1691,9 @@ window.addEventListener('keydown', (e) => {
     case 'e': case 'd': app.setTool('edit'); break;
     case 'r': case 'c': app.setTool(t === 'crop' ? 'edit' : 'crop'); break;
     case 'm': app.setTool(t === 'masks' ? 'edit' : 'masks'); break;
+    case 'q': app.setTool(t === 'retouch' ? 'edit' : 'retouch'); break;
+    case '/': if (t === 'retouch') newSourceForSelected(app); break;
+    case 'h': if (t === 'retouch') { retouchState.hide = !retouchState.hide; app.refreshPanel(); app.drawOverlay(); } break;
     case 'p': app.setTool(t === 'presets' ? 'edit' : 'presets'); break;
     case 'a': app.setTool(t === 'ai' ? 'edit' : 'ai'); break;
     case 'o': app.state.showOverlay = !app.state.showOverlay; app.refreshPanel(); app.requestRender(); break;
@@ -1684,7 +1706,7 @@ window.addEventListener('keydown', (e) => {
     case 'Enter': if (t === 'crop') app.setTool('edit'); break;
     case 'Escape':
       if (app.state.pick) { app.state.pick = null; viewer.classList.remove('picking'); }
-      else if (t === 'crop') app.setTool('edit');
+      else if (t === 'crop' || t === 'retouch') app.setTool('edit');
       break;
     case '[': case ']': {
       const up = k === ']';
@@ -1706,7 +1728,8 @@ window.addEventListener('keydown', (e) => {
     }
     case 'Delete': case 'Backspace': {
       const m = activeMask(app);
-      if (t === 'masks' && m) removeMask(app, m);
+      if (t === 'retouch') deleteSelected(app);
+      else if (t === 'masks' && m) removeMask(app, m);
       else if (app.view.mode === 'edit' && app.images[app.cur]) deletePhotos([app.images[app.cur].id]);
       break;
     }
@@ -1758,6 +1781,7 @@ function boot() {
   try {
     app.engine = new AppEngine(canvas);
     app.engine.hostPasses = chain(refocusPass, localAdjustments, lensPass);
+    app.engine.sourcePasses = retouchPasses;
     ai.onChange(() => { if (app.state.tool === 'ai' || app.state.tool === 'masks') app.refreshPanel(); app.requestRender(); });
   } catch (err) {
     console.error(err);

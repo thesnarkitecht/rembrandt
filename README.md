@@ -57,6 +57,9 @@ checks it against the published SHA-256 sums, and restarts the server.
 
 - **RAW** from 1,000+ cameras, developed on the GPU: tone, colour, curves, grading, dehaze, detail.
 - **Masks**: brush, gradients, colour and tone ranges, AI subject, background, object and depth.
+- **Remove**: heal and clone spots and strokes; Rembrandt picks a matching source for you.
+- **Lens corrections**: the camera's built-in profile from Fujifilm and Sony RAWs (distortion,
+  vignetting, chromatic aberration), plus manual distortion and vignetting for any photo.
 - **On-device AI**: Refocus, Lens Blur, background replacement. Nothing is uploaded.
 - **Library**: albums, ratings, flags, search, sorting, keyboard shortcuts, one-click delete with Undo.
 - **Batch**: copy and paste edits to hundreds of photos, presets, batch export.
