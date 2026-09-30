@@ -1,6 +1,6 @@
 [package]
 name = "lumen"
-version = "0.1.0"
+version = "0.2.0"
 description = "Rembrandt photo editor"
 authors = ["Rembrandt contributors"]
 license = "GPL-3.0-or-later"
