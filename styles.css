@@ -945,7 +945,6 @@ body[data-mode="account"] .top-actions > :not(.avatar-btn), body[data-mode="libr
 .copy-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 14px; }
 .copy-part { display: flex; align-items: center; gap: 9px; padding: 6px 2px; font-size: 13.5px; cursor: pointer; }
 .copy-part input { width: 16px; height: 16px; accent-color: var(--accent); }
-.edit-tools .clip-btns { display: inline-flex; gap: 2px; }
 .dest-btn { justify-content: flex-start; gap: 8px; width: 100%; }
 .dest-btn .chev { margin-left: auto; width: 14px; height: 14px; color: var(--muted); }
 .support-btn .i { color: #d9566c; }

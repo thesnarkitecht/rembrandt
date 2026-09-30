@@ -4,7 +4,6 @@ import { slider, section, segmented, iconButton, button, popMenu, toggle } from 
 import { curveEditor, hslMixer, gradingControl } from './widgets.js';
 import { defaultParams } from './params.js';
 
-const MOD = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl+';
 const TEMP_TRACK = 'linear-gradient(90deg,#4f7dff,#9fb4d9 45%,#d9c49f 55%,#ffb53d)';
 const TINT_TRACK = 'linear-gradient(90deg,#3fcf5f,#9fcfa9 45%,#d3a5cf 55%,#e04fd8)';
 
@@ -56,9 +55,6 @@ export function buildEditPanel(app) {
     button('Auto', () => app.autoTone(), 'sm', 'wand'),
     treatment.el,
     el('span', { class: 'grow' }),
-    el('span', { class: 'clip-btns' },
-      iconButton('copy', `Copy edits (${MOD}⇧C)`, () => app.copySettings(), 'sm'),
-      iconButton('paste', `Paste edits (${MOD}⇧V)`, () => app.pasteSettings(), 'sm')),
     iconButton('more', 'More', (e) => popMenu(e.currentTarget, [
       { label: 'Copy edits', icon: 'copy', onClick: () => app.copySettings() },
       { label: 'Choose what to copy…', icon: 'copy', onClick: () => app.copySettings(true) },
