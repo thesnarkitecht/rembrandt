@@ -14,6 +14,7 @@ welcome.
 ## Licence
 
 Rembrandt is free software under the GNU General Public License v3 or later. By contributing you
-agree that your contribution is released under the same licence. Please sign off your commits
+agree that your contribution is released under the same licence, including its additional
+permission for app stores (see NOTICE.md). Please sign off your commits
 (`git commit -s`) to confirm you wrote the change or have the right to submit it
 ([Developer Certificate of Origin](https://developercertificate.org/)).

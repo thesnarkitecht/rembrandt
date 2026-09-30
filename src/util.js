@@ -1,4 +1,5 @@
 // Small DOM, math and color helpers shared across the app.
+import { isMobileApp } from './platform.js';
 
 export const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 export const lerp = (a, b, t) => a + (b - a) * t;
@@ -116,6 +117,13 @@ export function warmDownloads() {
   if (window.claude?.use && !downloadsCap) downloadsCap = window.claude.use('downloads').catch(() => null);
 }
 export async function saveBlob(blob, name) {
+  // Phone app: there's no downloads folder; hand the file to the share sheet (Save to Files, etc.).
+  if (isMobileApp) {
+    const t = window.__TAURI_INTERNALS__;
+    const path = await t.invoke('stage_export', new Uint8Array(await blob.arrayBuffer()), { headers: { 'x-name': encodeURIComponent(name) } });
+    await t.invoke('plugin:mobile|share', { paths: [path] });
+    return;
+  }
   warmDownloads();
   const dl = downloadsCap ? await downloadsCap : null;
   if (dl) {

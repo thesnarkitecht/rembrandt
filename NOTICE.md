@@ -8,6 +8,13 @@
 | `models/` | MediaPipe / Google models, Apache-2.0 (see `models/README.md`) |
 | `src/fonts/` | Geist and Geist Mono, SIL Open Font License 1.1 (`src/fonts/OFL.txt`) |
 
+## Additional permission: app stores (GPL-3.0 section 7)
+As an additional permission under section 7 of the GNU GPL version 3, you may convey Rembrandt, or a
+work based on it, through an application store (such as Apple's App Store or Google Play) whose terms
+of service or distribution add restrictions that would otherwise conflict with the GPL, provided that
+the complete corresponding source code stays available under the GPL as the licence requires.
+Contributions are accepted under the same terms, including this permission.
+
 ## LibRaw 0.21.4 (CDDL-1.0 or LGPL-2.1)
 © LibRaw LLC. `native/LibRaw/` contains the unmodified LibRaw 0.21.4 sources; `native/build-libraw.sh`
 compiles them with `native/lumen_raw.cpp` into `src/vendor/libraw/lumen-raw.{js,wasm}`.

@@ -2,6 +2,7 @@
 // shape in justified rows, grouped by day; hover shows a checkbox for multi-select; a selection
 // toolbar (with Share) replaces the header while photos are selected. The sidebar holds smart
 // collections and albums, and an Albums overview shows album covers.
+import { isNarrow } from './platform.js';
 import { el, clamp } from './util.js';
 import { icon } from './icons.js';
 import { iconButton, button, popMenu } from './ui.js';
@@ -60,7 +61,7 @@ export function buildLibrary(app, api) {
     if (prefs.view === 'albums') return 'Albums';
     return (SMART.find((s) => s.id === prefs.view) || SMART[0]).name;
   }
-  const setView = (v) => { prefs.view = v; savePrefs(); selected.clear(); refresh(); api.stripChanged(); content.scrollTop = 0; };
+  const setView = (v) => { prefs.view = v; savePrefs(); selected.clear(); side.parentElement?.classList.remove('side-open'); refresh(); api.stripChanged(); content.scrollTop = 0; };
   const ids = () => [...selected];
   const keysOf = (list) => app.images.filter((x) => list.includes(x.id)).map((x) => x.key);
 
@@ -162,7 +163,11 @@ export function buildLibrary(app, api) {
   const search = el('input', { class: 'text-input lib-search', type: 'search', placeholder: 'Search photos', 'aria-label': 'Search photos', id: 'libSearch' });
   search.addEventListener('input', () => { query = search.value.trim().toLowerCase(); refresh(); });
   search.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Escape') { search.value = ''; query = ''; refresh(); search.blur(); } });
-  const sideBtn = iconButton('sidebar', 'Show or hide the sidebar', () => { prefs.sidebar = !prefs.sidebar; savePrefs(); root.classList.toggle('no-side', !prefs.sidebar); }, 'sm');
+  // On a phone the sidebar is a drawer over the photos; on bigger screens it's a column you can hide.
+  const sideBtn = iconButton('sidebar', 'Albums and collections', () => {
+    if (isNarrow()) { root.classList.toggle('side-open'); return; }
+    prefs.sidebar = !prefs.sidebar; savePrefs(); root.classList.toggle('no-side', !prefs.sidebar);
+  }, 'sm');
   const sortLabel = () => (SORTS.find(([v]) => v === prefs.sort) || SORTS[0])[1];
   const sortMenu = (e) => popMenu(e.currentTarget, SORTS.map(([v, l]) => ({ label: l, checked: prefs.sort === v, onClick: () => { prefs.sort = v; savePrefs(); refresh(); api.stripChanged(); } })));
   // Zoom: a slider for thumbnail size (also ⌘+ / ⌘−).
@@ -238,6 +243,12 @@ export function buildLibrary(app, api) {
   // ---------------------------------------------------------------- content
   const content = el('div', { class: 'lib-content', tabindex: 0, 'aria-label': 'Photos' });
   const main = el('div', { class: 'lib-main' }, header, content);
+  // Phone drawer: a tap beside it closes it (and doesn't also open a photo).
+  main.addEventListener('click', (e) => {
+    if (!main.parentElement?.classList.contains('side-open')) return;
+    e.preventDefault(); e.stopPropagation();
+    main.parentElement.classList.remove('side-open');
+  }, true);
   const root = el('section', { class: 'library' + (prefs.sidebar ? '' : ' no-side'), id: 'library' }, side, main);
 
   function visible() {

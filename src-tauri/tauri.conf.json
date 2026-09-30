@@ -27,7 +27,7 @@
         "default-src": "'self'",
         "script-src": "'self' 'wasm-unsafe-eval'",
         "worker-src": "'self' blob:",
-        "connect-src": "'self' ipc: http://ipc.localhost https://ims-na1.adobelogin.com https://lr.adobe.io https://api.github.com",
+        "connect-src": "'self' ipc: http://ipc.localhost https://*.supabase.co https://*.r2.cloudflarestorage.com https://ims-na1.adobelogin.com https://lr.adobe.io https://api.github.com",
         "img-src": "'self' data: blob: https:",
         "style-src": "'self' 'unsafe-inline'",
         "font-src": "'self' data:",
@@ -42,7 +42,7 @@
     "category": "Photography",
     "publisher": "Rembrandt contributors",
     "shortDescription": "Free photo editor with on-device AI",
-    "longDescription": "Rembrandt is a free, source-available photo editor for RAW and JPEG photos with masks, presets, a library and on-device AI. No accounts, no ads, no tracking.",
+    "longDescription": "Rembrandt is a free, open-source photo editor for RAW and JPEG photos with masks, presets, a library and on-device AI. No ads, no tracking; optional Cloud sync.",
     "copyright": "\u00a9 Rembrandt contributors",
     "icon": [
       "icons/32x32.png",

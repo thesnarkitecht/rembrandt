@@ -2,7 +2,7 @@
 <h1 align="center">Rembrandt</h1>
 <p align="center"><b>Stop paying for Adobe. Flush the incrapification.</b></p>
 <p align="center">A free photo editor for macOS, Windows and Linux.<br>
-No account, no subscription, no “we’ve updated our terms” emails.</p>
+No account needed, no subscription, no “we’ve updated our terms” emails.</p>
 <p align="center">
   <a href="#download"><b>Download</b></a> ·
   <a href="#self-host-it">Self-host</a> ·
@@ -66,6 +66,9 @@ checks it against the published SHA-256 sums, and restarts the server.
 - **Bring your photos**: folders, Lightroom Classic and Lightroom, Google Photos, Google Drive,
   Dropbox, OneDrive ([setup](docs/cloud-services.md)). Export back to them too.
 - **Open formats**: edits are standard XMP, readable by Lightroom and others.
+- **Cloud sync (optional, paid)**: turn it on in Settings to sync edits, albums and photos between
+  your computers, the web and your phone. It's the only thing that needs an account, and the only
+  thing that costs money; everything else stays free.
 
 ## Help out
 
@@ -85,7 +88,8 @@ Details in [docs/building.md](docs/building.md). Contributions welcome: [CONTRIB
 
 Free software under the [GNU General Public License v3.0 or later](LICENSE), the same licence as
 darktable. Use it, study it, change it and share it; if you distribute a modified version, share its
-source under the same terms. Third-party parts: [NOTICE.md](NOTICE.md).
+source under the same terms. It may also be distributed through app stores (an additional permission
+under the GPL; see [NOTICE.md](NOTICE.md), which also lists the third-party parts).
 
 <sub>Screenshot photos from the scikit-image sample data: espresso by Rachel Michetti and cat by
 Stefan van der Walt (CC0), rocket launch by SpaceX and Hubble eXtreme Deep Field by NASA (public

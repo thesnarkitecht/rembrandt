@@ -8,7 +8,7 @@
 // full-size rendition with Lightroom's edits applied, plus its develop settings, rating, flag and
 // albums. So there are two ways in: download the edited photos, or keep a copy of the originals on
 // disk with Lightroom (Preferences › Local Storage) and sync that folder here, with edits applied.
-import { CONFIG } from './config.js';
+import { CONFIG, backendConfigured } from './config.js';
 import { parseXmp } from './xmp.js';
 
 const IMS = 'https://ims-na1.adobelogin.com/ims';
@@ -92,13 +92,23 @@ export async function adobeSignIn(openExternal) {
 }
 
 // ------------------------------------------------------------ API
+let useRelay = false; // switches on if the browser can't reach lr.adobe.io directly (CORS)
+
 async function raw(path, { method = 'GET', headers = {} } = {}) {
   const t = loadToken();
   if (!t) throw new Error('Connect your Adobe account first');
+  const direct = () => fetch(API + path, { method, headers: { Authorization: `Bearer ${t.access}`, 'X-API-Key': CONFIG.adobeClientId, ...headers } });
+  const relay = () => fetch(`${CONFIG.supabaseUrl}/functions/v1/lightroom?path=${encodeURIComponent(path)}`, {
+    method, headers: { apikey: CONFIG.supabaseAnonKey, 'X-Adobe-Token': t.access, ...Object.fromEntries(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v])) },
+  });
   let r;
-  try { r = await fetch(API + path, { method, headers: { Authorization: `Bearer ${t.access}`, 'X-API-Key': CONFIG.adobeClientId, ...headers } }); } catch {
-    throw new Error('Couldn’t reach Adobe Lightroom. If this keeps happening, export from Lightroom Classic instead (its catalog imports directly).');
+  if (!useRelay) {
+    try { r = await direct(); } catch (e) {
+      if (!backendConfigured()) throw new Error('Couldn’t reach Adobe Lightroom');
+      useRelay = true;
+    }
   }
+  if (useRelay) r = await relay();
   if (r.status === 401) { saveToken(null); throw new Error('Your Adobe sign-in expired. Connect again.'); }
   return r;
 }

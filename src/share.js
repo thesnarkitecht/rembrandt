@@ -1,9 +1,20 @@
-// Share dialog: the system share sheet, copy to clipboard, and export.
+// Share dialog: public links (rendered JPEGs uploaded to the account's storage), the system share
+// sheet, copy to clipboard and export.
+// Copyright © 2026 the Rembrandt contributors. Licensed under the GNU GPL v3 or later (see LICENSE).
 import { el } from './util.js';
 import { button, segmented, toggle } from './ui.js';
 import { icon } from './icons.js';
+import { CONFIG, backendConfigured } from './config.js';
+import * as sb from './backend/supabase.js';
 
 const SHARE_LONG = 2048;
+
+export async function createShareLink({ title, blobs, expiresDays, allowDownload, names }) {
+  const r = await sb.fn('share', { op: 'create', title, count: blobs.length, sizes: blobs.map((b) => b.size), expiresDays, allowDownload, names });
+  await Promise.all(r.uploads.map((u, i) => fetch(u, { method: 'PUT', body: blobs[i], headers: { 'Content-Type': 'image/jpeg' } }).then((x) => { if (!x.ok) throw new Error(`Upload failed (${x.status})`); })));
+  await sb.fn('share', { op: 'finalize', token: r.token });
+  return { token: r.token, url: `${(CONFIG.siteUrl || location.origin).replace(/\/$/, '')}/share.html#${r.token}` };
+}
 
 export function openShare(app, ids, { title, render, exportPhotos, signIn }) {
   const dlg = document.getElementById('shareDialog');
@@ -23,6 +34,46 @@ export function openShare(app, ids, { title, render, exportPhotos, signIn }) {
     }
     return blobs;
   };
+
+  // ---- link
+  const signedIn = !!sb.currentUser();
+  let expires = 30, allowDownload = true;
+  const linkBox = el('div', { class: 'share-opt' });
+  const paintLink = (url) => {
+    linkBox.textContent = '';
+    linkBox.append(el('div', { class: 'share-opt-head' }, icon('link'), el('div', {}, el('b', {}, 'Share link'), el('span', {}, 'Anyone with the link can view.'))));
+    if (!backendConfigured()) {
+      linkBox.append(el('p', { class: 'hint' }, 'Links need an online account, available in the full app.'));
+      return;
+    }
+    if (!signedIn) {
+      linkBox.append(el('div', { class: 'row-btns' }, button('Turn on Cloud sync to create a link', () => { dlg.close(); signIn(); }, 'sm')));
+      return;
+    }
+    if (url) {
+      const field = el('input', { class: 'text-input mono', value: url, readonly: true, id: 'shareUrl' });
+      field.addEventListener('focus', () => field.select());
+      const copy = button('Copy', async () => {
+        try { await navigator.clipboard.writeText(url); copy.lastChild.textContent = 'Copied'; } catch { field.focus(); field.select(); }
+      }, 'sm primary', 'copy');
+      linkBox.append(el('div', { class: 'row' }, field, copy), el('p', { class: 'hint' }, expires ? `Expires in ${expires} days. Manage links in Account → Sharing.` : 'Never expires. Manage links in Account → Sharing.'));
+      return;
+    }
+    const exp = segmented([{ value: 7, label: '7 days' }, { value: 30, label: '30 days' }, { value: 0, label: 'No expiry' }], expires, (v) => { expires = v; });
+    const dl = toggle('Allow downloads', () => allowDownload, (v) => { allowDownload = v; });
+    const make = button('Create link', async () => {
+      make.disabled = true;
+      try {
+        const blobs = await renderAll();
+        setStatus('Uploading…', 'busy');
+        const r = await createShareLink({ title: name, blobs, expiresDays: expires, allowDownload, names: photos.map((p) => p.name) });
+        setStatus('');
+        paintLink(r.url);
+      } catch (e) { setStatus(e.message, 'error'); make.disabled = false; }
+    }, 'sm primary', 'link');
+    linkBox.append(exp.el, dl.el, el('div', { class: 'row-btns' }, make));
+  };
+  paintLink(null);
 
   // ---- system share / copy / export
   const others = el('div', { class: 'share-list' });
@@ -53,7 +104,7 @@ export function openShare(app, ids, { title, render, exportPhotos, signIn }) {
     n > 6 ? el('span', { class: 'share-more' }, `+${n - 6}`) : null);
   dlg.append(
     el('div', { class: 'dlg-head row between' }, el('h2', {}, `Share ${name}`), el('button', { class: 'icon-btn dlg-x', 'aria-label': 'Close', onclick: () => dlg.close() }, icon('x'))),
-    el('div', { class: 'dlg-body' }, thumbs, others, status),
+    el('div', { class: 'dlg-body' }, thumbs, linkBox, others, status),
   );
   if (!dlg.open) dlg.showModal();
 }

@@ -1,4 +1,6 @@
 // Export dialog and full-resolution rendering to JPEG / PNG / WebP.
+import { isMobileApp } from './platform.js';
+import { canSave, countSave, askToUnlock, isUnlocked, freeSavesLeft } from './unlock.js';
 import { el, clamp } from './util.js';
 import { segmented, slider, popMenu } from './ui.js';
 import { icon } from './icons.js';
@@ -21,9 +23,9 @@ export const FORMAT_EXT = { jpeg: '.jpg', png: '.png', webp: '.webp' };
 
 const doneMessage = (d, n) => {
   const what = `${n} photo${n === 1 ? '' : 's'}`;
-  if (d.id === 'device') return `Exported ${what}`;
+  if (d.id === 'device') return isMobileApp ? `Saved ${what} to Photos` : `Exported ${what}`;
   if (d.id === 'folder') return `Saved ${what} to the folder`;
-  if (d.id === 'photos') return window.__TAURI_INTERNALS__ ? `Added ${what} to Photos` : `Shared ${what}`;
+  if (d.id === 'photos') return isMobileApp ? `Shared ${what}` : window.__TAURI_INTERNALS__ ? `Added ${what} to Photos` : `Shared ${what}`;
   return `Uploaded ${what} to ${d.name}`;
 };
 
@@ -118,6 +120,8 @@ export function openExport(app, ids = null, renderPhoto = null) {
   let cancelled = false;
   const cancel = el('button', { class: 'btn ghost', type: 'button', onclick: () => { cancelled = true; dlg.close(); } }, 'Cancel');
   go.addEventListener('click', async () => {
+    // Phone app: saving needs the one-time unlock after the free saves are used.
+    if (!canSave(n) && !(await askToUnlock(app))) return;
     go.disabled = true;
     cancelled = false;
     status.className = 'export-status busy';
@@ -131,7 +135,8 @@ export function openExport(app, ids = null, renderPhoto = null) {
         const { blob, w, h } = await renderExport(app, opts);
         status.textContent = 'Saving…';
         const d = await deliver(opts.dest, [{ name: (name.value.trim() || base) + ext, blob }], progress);
-        app.toast(d.id === 'device' ? `Exported ${w} × ${h} · ${(blob.size / 1048576).toFixed(1)} MB` : doneMessage(d, 1));
+        countSave();
+        app.toast(d.id === 'device' && !isMobileApp ? `Exported ${w} × ${h} · ${(blob.size / 1048576).toFixed(1)} MB` : doneMessage(d, 1));
       } else {
         opts.suffix = name.value;
         saveExportDefaults();
@@ -183,5 +188,9 @@ export function openExport(app, ids = null, renderPhoto = null) {
   );
   update();
   paintDest();
+  if (isMobileApp && !isUnlocked()) {
+    const left = freeSavesLeft();
+    status.textContent = left ? `${left} free save${left === 1 ? '' : 's'} left. Unlock Rembrandt once for unlimited saving.` : 'Saving and sharing need the one-time unlock.';
+  }
   dlg.showModal();
 }

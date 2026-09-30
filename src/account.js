@@ -1,7 +1,9 @@
 // Local profile and preferences (stored on this device).
 const KEY = 'lumen:prefs';
+// Phones get lighter previews by default: less graphics memory, and faster on battery.
+const phone = matchMedia('(pointer: coarse) and (max-width: 1100px)').matches;
 export const prefs = (() => {
-  const d = { name: '', rawQuality: 3, previewLong: 2560 };
+  const d = { name: '', rawQuality: 3, previewLong: phone ? 1920 : 2560 };
   try { return { ...d, ...JSON.parse(localStorage.getItem(KEY) || '{}') }; } catch { return d; }
 })();
 export function savePrefs() {

@@ -141,8 +141,8 @@ async function googlePhotos(onProgress) {
 
 // ------------------------------------------------------------ registry
 // Photos picked from these services are *linked*: the original stays in that service and never
-// needs space on this device unless the user wants a copy. Edits, ratings and a preview stay here;
-// to edit a linked photo that isn't here any more, pick it again (it's matched automatically).
+// counts against Rembrandt cloud storage. Edits, ratings and a thumbnail sync as usual; to edit a
+// linked photo on a device that doesn't have it yet, pick it again (it's matched automatically).
 export const CLOUD_SOURCES = [
   { id: 'gphotos', name: 'Google Photos', icon: 'gphotos', ready: () => !!CONFIG.googleClientId, run: googlePhotos },
   { id: 'gdrive', name: 'Google Drive', icon: 'gdrive', ready: () => !!(CONFIG.googleClientId && CONFIG.googleApiKey), run: googleDrive, folder: 'Google Drive' },

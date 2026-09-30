@@ -3,6 +3,7 @@
 // Google Drive, Dropbox and OneDrive. Cloud services are uploaded to directly from the browser
 // with the user's own sign-in; nothing passes through our servers.
 import { saveBlob } from './util.js';
+import { isMobileApp, isAndroid } from './platform.js';
 import { makeZip } from './zip.js';
 import { CONFIG } from './config.js';
 import { googleToken } from './import-cloud.js';
@@ -13,7 +14,12 @@ const isApple = /Mac|iPhone|iPad|iPod/.test(navigator.platform) || (/Macintosh/.
 const canShareFiles = () => { try { return !!navigator.canShare?.({ files: [new File([''], 'x.jpg', { type: 'image/jpeg' })] }); } catch { return false; } };
 const FOLDER = 'Rembrandt';
 
-export const DESTINATIONS = [
+// The phone app saves to the photo library or hands photos to the share sheet (native plugin).
+const PHONE = [
+  { id: 'device', name: 'Save to Photos', icon: 'image', hint: isAndroid ? 'Adds the photos to your gallery, in Pictures › Rembrandt.' : 'Adds the photos to your library in Photos.', ready: () => true },
+  { id: 'photos', name: 'Share…', icon: 'share', hint: 'Send to Messages, Instagram, Files, AirDrop and anything else on your phone.', ready: () => true },
+];
+export const DESTINATIONS = isMobileApp ? PHONE : [
   { id: 'device', name: 'This device', icon: 'download', ready: () => true },
   { id: 'folder', name: 'A folder…', icon: 'folder', hint: 'Saving into your iCloud Drive, Dropbox, OneDrive or Google Drive folder uploads the photos too.', ready: () => !!(tauri() || window.showDirectoryPicker) },
   { id: 'photos', name: tauri() ? 'Apple Photos (iCloud)' : 'Photos / iCloud (share sheet)', icon: 'image', hint: 'Photos added to Apple Photos upload to iCloud Photos when it’s turned on.', ready: () => (tauri() ? /Mac/.test(navigator.platform) : isApple && canShareFiles()) },
@@ -29,6 +35,24 @@ async function ok(r, what) {
   let msg = '';
   try { const j = await r.clone().json(); msg = j.error?.message || j.error_summary || j.error_description || j.error || ''; } catch { /* not JSON */ }
   throw new Error(`${what}: ${typeof msg === 'string' && msg ? msg : `error ${r.status}`}`);
+}
+
+// ---- phone app: stage the files in the app's cache, then hand them to Photos or the share sheet
+async function stagePhone(files, progress) {
+  const paths = [];
+  for (const [i, f] of files.entries()) {
+    progress(`Preparing ${i + 1} of ${files.length}…`);
+    paths.push(await tauri().invoke('stage_export', new Uint8Array(await f.blob.arrayBuffer()), { headers: { 'x-name': encodeURIComponent(f.name) } }));
+  }
+  return paths;
+}
+async function toPhoneLibrary(files, progress) {
+  const paths = await stagePhone(files, progress);
+  await tauri().invoke('plugin:mobile|save_to_photos', { paths });
+}
+async function toPhoneShare(files, progress) {
+  const paths = await stagePhone(files, progress);
+  await tauri().invoke('plugin:mobile|share', { paths });
 }
 
 // ---- this device
@@ -162,7 +186,7 @@ async function toOneDrive(files, progress) {
   }
 }
 
-const SENDERS = { device: toDevice, folder: toFolder, photos: toApplePhotos, gphotos: toGooglePhotos, gdrive: toGoogleDrive, dropbox: toDropbox, onedrive: toOneDrive };
+const SENDERS = isMobileApp ? { device: toPhoneLibrary, photos: toPhoneShare } : { device: toDevice, folder: toFolder, photos: toApplePhotos, gphotos: toGooglePhotos, gdrive: toGoogleDrive, dropbox: toDropbox, onedrive: toOneDrive };
 
 // Sends rendered files ({ name, blob }[]) to a destination. Throws { code: 'declined' } if the user cancels.
 export async function deliver(destId, files, progress = () => {}) {

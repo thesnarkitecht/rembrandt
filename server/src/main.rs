@@ -162,7 +162,7 @@ fn parse_args() -> Config {
             "web" => { web.get_or_insert(v); }
             "host" => { host.get_or_insert(v); }
             "port" => { port.get_or_insert(v); }
-            "googleClientId" | "googleApiKey" | "googleAppId" | "dropboxAppKey" | "onedriveClientId" | "adobeClientId" | "supportUrl" | "siteUrl" => {
+            "googleClientId" | "googleApiKey" | "googleAppId" | "dropboxAppKey" | "onedriveClientId" | "adobeClientId" | "supportUrl" | "siteUrl" | "supabaseUrl" | "supabaseAnonKey" => {
                 client.push(format!("{}:{}", json_str(&k), json_str(&v)))
             }
             _ => eprintln!("server.conf: unknown setting {k}"),

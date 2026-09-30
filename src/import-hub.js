@@ -1,5 +1,6 @@
 // Import dialog: one place to bring photos in from this device, a synced folder, the cloud
 // (Google Photos, Google Drive, Dropbox, OneDrive, iCloud) or Adobe Lightroom.
+import { isMobileApp, isTouch } from './platform.js';
 import { el } from './util.js';
 import { button } from './ui.js';
 import { icon } from './icons.js';
@@ -31,7 +32,7 @@ const fmt = (n) => n.toLocaleString();
 // api: { chooseFiles, chooseFolder(onFiles?), openFiles(files, opts), syncFolder(folder|null, opts), applyCatalog(cat), toast }
 export function openImport(app, api, page = 'home') {
   const dlg = document.getElementById('importDialog');
-  const desktop = !!window.__TAURI_INTERNALS__;
+  const desktop = !!window.__TAURI_INTERNALS__ && !isMobileApp;
   const sync = folders.support();
   const status = el('div', { class: 'export-status' });
   const setStatus = (t, cls = '') => { status.textContent = t; status.className = 'export-status ' + cls; };
@@ -57,11 +58,11 @@ export function openImport(app, api, page = 'home') {
     // 1. From this device: a big target that also takes drops directly.
     const drop = el('div', { class: 'imp-drop', tabindex: 0, role: 'button', 'aria-label': 'Choose photos from this device' },
       el('span', { class: 'imp-drop-icon' }, icon('upload')),
-      el('b', {}, 'Drag photos here'),
-      el('span', { class: 'imp-drop-sub' }, 'or'),
+      isTouch ? null : el('b', {}, 'Drag photos here'),
+      isTouch ? null : el('span', { class: 'imp-drop-sub' }, 'or'),
       el('div', { class: 'row-btns center' },
-        button('Choose photos', (e) => { e.stopPropagation(); close(); api.chooseFiles(); }, 'primary', 'files'),
-        button('Choose a folder', (e) => { e.stopPropagation(); close(); api.chooseFolder(); }, 'ghost', 'folder')),
+        button(isTouch ? 'Choose from your photos' : 'Choose photos', (e) => { e.stopPropagation(); close(); api.chooseFiles(); }, 'primary', 'files'),
+        isTouch ? null : button('Choose a folder', (e) => { e.stopPropagation(); close(); api.chooseFolder(); }, 'ghost', 'folder')),
       el('span', { class: 'imp-drop-hint' }, 'JPEG, HEIC, PNG, TIFF and RAW from 1,000+ cameras · as many as you like'));
     drop.addEventListener('click', () => { close(); api.chooseFiles(); });
     drop.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); close(); api.chooseFiles(); } });
@@ -78,8 +79,13 @@ export function openImport(app, api, page = 'home') {
     const clouds = el('div', { class: 'imp-clouds' },
       ...CLOUD_SOURCES.map((s, i) => {
         const cls = i === 0 ? 'big' : '';
+        // Phone app: Drive, Dropbox and OneDrive show up in the system file picker.
+        if (isMobileApp) {
+          if (!s.folder) return tile(LOGO[s.icon], s.name, 'In the web app', () => setStatus('Link Google Photos in the web app; with Cloud sync on, the photos then appear here too.'), { cls });
+          return tile(LOGO[s.icon], s.name, 'From the file picker', () => { close(); api.chooseFiles(); }, { cls });
+        }
         if (desktop) {
-          if (!s.folder) return tile(LOGO[s.icon], s.name, 'In the web app', () => setStatus('Google Photos has no folder on your computer. Link photos from Rembrandt in your browser (the web version or rembrandt-server) instead.'), { cls });
+          if (!s.folder) return tile(LOGO[s.icon], s.name, 'In the web app', () => setStatus('Google Photos has no folder on your computer. Link photos in the web app; they then appear here with your account.'), { cls });
           return tile(LOGO[s.icon], s.name, `Sync your ${s.folder} folder`, async () => { close(); await api.syncFolder(null); }, { cls });
         }
         const ready = s.ready();
@@ -109,7 +115,7 @@ export function openImport(app, api, page = 'home') {
           el('p', { class: 'src-note' }, 'Linked photos stay in Google Photos, Drive, Dropbox or OneDrive. Rembrandt keeps your edits and a small preview.')),
         el('div', { class: 'imp-section' },
           el('div', { class: 'imp-label' }, el('span', {}, 'More ways')),
-          el('div', { class: 'imp-more' }, syncCard, lr)),
+          el('div', { class: 'imp-more' }, isMobileApp ? null : syncCard, lr)),
         status),
     ];
   }

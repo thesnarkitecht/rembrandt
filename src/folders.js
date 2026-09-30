@@ -10,6 +10,7 @@ import { uid, el } from './util.js';
 import { button } from './ui.js';
 import { icon } from './icons.js';
 import { CONFIG } from './config.js';
+import { isMobileApp } from './platform.js';
 
 const tauri = () => window.__TAURI_INTERNALS__;
 const invoke = (cmd, args) => tauri().invoke(cmd, args);
@@ -27,6 +28,7 @@ const q = (rel) => encodeURIComponent(rel || '');
 const join = (a, b) => (a ? `${a}/${b}` : b);
 
 export function support() {
+  if (isMobileApp) return null;   // phones have no folders to sync; photos come from the library
   if (tauri()) return 'desktop';
   if (onServer()) return 'server';
   if (typeof window.showDirectoryPicker === 'function') return 'web';

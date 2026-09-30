@@ -1,7 +1,11 @@
 // App controller: image library, view (zoom/pan), tools, history, keyboard, persistence.
 import { Engine } from '../engine/src/engine.js';
 import { BRAND } from './brand.js';
+import { planName } from './pricing.js';
 import { readLensProfile } from './lens.js';
+import { isMobileApp, isTouch } from './platform.js';
+import { refreshUnlock, isUnlocked } from './unlock.js';
+import { syncStoreSubscriptions } from './subscriptions.js';
 import { initTheme, onThemeChange, cssRGB } from './theme.js';
 import { localAdjustments } from './local-adjust.js';
 import { ai } from './ai/ai.js';
@@ -17,16 +21,19 @@ import { openImport } from './import-hub.js';
 import { CLOUD_SOURCES, pickLinked, sourceName } from './import-cloud.js';
 import * as batch from './batch.js';
 import * as adobe from './adobe.js';
-import { openExternal } from './native.js';
-import { startUpdateChecks, updatesSupported, updateState } from './update-check.js';
+import { openExternal } from './account-online.js';
+import { startUpdateChecks, updateState } from './update-check.js';
 import { defaultParams, withSettings, developSettings, effectiveParams } from './params.js';
 import * as catalog from './catalog.js';
 import { buildLibrary } from './library.js';
 import { ring, fmtBytes } from './ring.js';
 import { openShare } from './share.js';
-import { prefs } from './account.js';
-import { buildSettingsPage } from './settings-page.js';
-import { CONFIG } from './config.js';
+import { paintAvatar, prefs } from './account.js';
+import { buildAccountPage } from './account-page.js';
+import { listOnlineOriginals } from './backend/account-api.js';
+import * as cloud from './cloud.js';
+import * as sb from './backend/supabase.js';
+import { backendConfigured, CONFIG } from './config.js';
 import * as albums from './albums.js';
 import { A, qToP, pToUV, rotatedBounds, cropUVToQ, fitCrop } from './geometry.js';
 import { buildEditPanel } from './panel-edit.js';
@@ -128,6 +135,7 @@ const app = {
     e.edited = true;
     e.updatedAt = Date.now();
     catalog.updatePhoto(e.id, { params: app.params, edited: true, updatedAt: e.updatedAt }).catch(() => {});
+    cloud.pushPhoto(e);
     queueSidecar(e);
     saveThumb();
   }, 400),
@@ -501,16 +509,23 @@ function outputMatsFor(p, aspect, w, h) {
 }
 
 let library = null;
-let settingsPage = null;
+let accountPage = null;
 
-// Sidebar storage widget: how much of this device's browser storage the library uses.
+// Sidebar storage widget: online storage on the Cloud plan, otherwise this device's storage.
 async function paintStorage(node) {
-  const est = await catalog.storageEstimate();
-  if (!est?.quota) { node.hidden = true; return; }
+  const cl = cloud.cloud, info = cl.info || {};
+  let used, total, label;
+  if (cl.provider === 'lumen' && cl.plan === 'cloud' && info.quota_bytes) { used = info.storage_bytes || 0; total = info.quota_bytes; label = 'Online storage'; }
+  else {
+    const est = await catalog.storageEstimate();
+    if (!est?.quota) { node.hidden = true; return; }
+    used = est.used; total = est.quota; label = 'On this device';
+  }
   node.hidden = false;
   node.textContent = '';
-  node.append(ring([{ value: est.used, color: 'var(--accent)' }], est.quota, { size: 34, stroke: 5 }),
-    el('span', { class: 'side-storage-text' }, el('b', {}, `${fmtBytes(est.used)} of ${fmtBytes(est.quota)}`), el('span', {}, window.__TAURI_INTERNALS__ ? 'Library on this computer' : 'In this browser')));
+  const plan = !cl.signedIn ? 'Cloud sync off' : cl.plan === 'free' ? 'no Cloud plan' : planName(cl.plan);
+  node.append(ring([{ value: used, color: 'var(--accent)' }], total, { size: 34, stroke: 5 }),
+    el('span', { class: 'side-storage-text' }, el('b', {}, `${fmtBytes(used)} of ${fmtBytes(total)}`), el('span', {}, `${label} · ${plan}`)));
 }
 const cropOverlay = new CropOverlay(app);
 const maskOverlay = new MaskOverlay(app);
@@ -539,6 +554,14 @@ const saveThumb = debounce(async () => {
   catalog.putThumb(e.id, blob);
   e.thumbAspect = c.width / c.height;
   catalog.updatePhoto(e.id, { thumbAspect: e.thumbAspect });
+  if (cloud.cloud.available) {
+    const k = 200 / Math.max(c.width, c.height);
+    const t = el('canvas', { width: Math.round(c.width * k), height: Math.round(c.height * k) });
+    t.getContext('2d').drawImage(c, 0, 0, t.width, t.height);
+    e.cloudThumb = t.toDataURL('image/jpeg', 0.72);
+    catalog.updatePhoto(e.id, { cloudThumb: e.cloudThumb });
+    cloud.pushPhoto(e, e.cloudThumb);
+  }
   refreshLibrary();
 }, 900);
 
@@ -561,6 +584,73 @@ async function loadCatalog() {
   }));
   refreshLibrary();
   renderStrip();
+}
+
+// Merge a record from the online library (another device) into the local catalog; newest wins.
+async function mergeRemote(r) {
+  if (!r?.key) return;
+  let e = app.images.find((x) => x.key === r.key);
+  if (!e) {
+    e = newEntry({ id: uid(), key: r.key, name: r.name, addedAt: Date.now(), rating: r.rating, flag: r.flag, params: r.params, edited: r.edited, updatedAt: r.updatedAt, w: r.w, h: r.h, kind: r.kind, raw: r.raw, cloudThumb: r.thumb, linked: r.source || null, offline: true, stored: false });
+    app.images.push(e);
+    await catalog.putPhoto({ id: e.id, key: e.key, name: e.name, addedAt: e.addedAt, rating: e.rating, flag: e.flag, params: e.params, edited: e.edited, updatedAt: e.updatedAt, w: e.w, h: e.h, kind: e.kind, raw: e.raw, cloudThumb: e.cloudThumb, linked: e.linked, offline: true, stored: false });
+    if (r.thumb) { const b = await (await fetch(r.thumb)).blob(); thumbURL(e, b); catalog.putThumb(e.id, b); }
+    return;
+  }
+  if ((r.updatedAt || 0) <= (e.updatedAt || 0)) return;
+  const patch = { rating: r.rating || 0, flag: r.flag || 0, params: r.params || null, edited: !!r.edited, updatedAt: r.updatedAt };
+  Object.assign(e, patch);
+  await catalog.updatePhoto(e.id, patch);
+  if (r.thumb && r.thumb !== e.cloudThumb) { e.cloudThumb = r.thumb; const b = await (await fetch(r.thumb)).blob(); thumbURL(e, b); catalog.putThumb(e.id, b); }
+  if (app.images[app.cur] === e && app.img && r.params && !app.state.sliding) {
+    app.params = deepMerge(defaultParams(app.img.aspect), r.params);
+    app.history.reset(app.params);
+    app.updateUndo();
+    app.rebuildPanel();
+    app.requestRender();
+    app.toast('Updated from your other device');
+  }
+}
+
+let stopSync = null;
+async function startSync() {
+  stopSync?.();
+  stopSync = null;
+  if (backendConfigured() && !window.__TAURI_INTERNALS__) {
+    try { if (await sb.handleAuthRedirect()) app.toast('Signed in'); } catch (e) { app.toast(`Sign-in failed: ${e.message}`); }
+  }
+  // Purchases made on the website with this email join the account as soon as it signs in.
+  if (backendConfigured() && sb.currentUser()) await sb.rpc('claim_purchases').catch(() => {});
+  const st = await cloud.initCloud();
+  paintTopAvatar();
+  if (!st.available) return;
+  const remote = await cloud.pullAll();
+  const seen = new Set();
+  for (const r of remote) { seen.add(r.key); await mergeRemote(r); }
+  // Upload anything this device has that the account doesn't, or has newer.
+  for (const e of app.images) {
+    const r = remote.find((x) => x.key === e.key);
+    if (!r || (e.updatedAt || 0) > (r.updatedAt || 0)) cloud.pushPhoto(e);
+  }
+  refreshLibrary();
+  renderStrip();
+  const stopPhotos = cloud.subscribe((type, r) => { if (type !== 'removed') mergeRemote(r).then(() => { refreshLibrary(); renderStrip(); }); });
+  const remoteAlbums = await cloud.pullAlbums();
+  for (const r of remoteAlbums) await albums.mergeRemoteAlbum(r);
+  albums.pushAllAlbums(remoteAlbums);
+  const stopAlbums = cloud.subscribeAlbums((r) => albums.mergeRemoteAlbum(r));
+  stopSync = () => { stopPhotos(); stopAlbums(); };
+}
+
+function paintTopAvatar() {
+  const a = $('avatar');
+  const me = cloud.cloud.me;
+  if (cloud.cloud.available && me?.avatarUrl) {
+    a.textContent = '';
+    a.classList.remove('noname');
+    a.append(el('img', { src: me.avatarUrl, alt: '' }));
+    $('btnAccount').title = `${me.name || 'Your account'} · synced`;
+  } else paintAvatar(a, cloud.cloud.signedIn ? cloud.cloud.me?.name : prefs.name);
 }
 
 // ================================================================== import
@@ -708,7 +798,10 @@ async function importItems(items, opts = {}) {
       }).catch((err) => console.warn('Could not save to the catalog', err));
       const tb = edited ? await editedThumb(d.bitmap, e.params, e.w / e.h) : await thumbFromBitmap(d.bitmap);
       if (tb) { thumbURL(e, tb); catalog.putThumb(e.id, tb); }
-          // Photos in synced folders already live on disk; only copied-in photos are backed up online.
+      cloud.pushPhoto(e);
+      // Photos in synced folders already live on disk; only copied-in photos are backed up online.
+      // Linked photos stay in the service they came from and never use Rembrandt storage.
+      if (!it.src && !it.linked && cloud.storesOriginals()) cloud.uploadOriginal(e, file).then((ok) => { if (!ok) app.toast(`${e.name} couldn't be stored online — it stays on this device`); });
       it.lr?.collections.forEach((c) => (collections.get(c) || collections.set(c, []).get(c)).push(e.key));
       first ||= e;
       done.push(e);
@@ -1006,6 +1099,11 @@ async function select(i) {
   if (!e.bitmap) {
     try {
       e.file = await originalFile(e);
+      if (!e.file && cloud.cloud.signedIn && cloud.cloud.provider === 'lumen') {
+        app.toast(`Downloading ${e.name}…`);
+        e.file = await cloud.fetchOriginal(e);
+        if (e.file) { e.offline = false; catalog.storeFile(e.id, e.file); }
+      }
       if (!e.file && e.linked) {
         e.offline = true;
         refreshLibrary();
@@ -1119,7 +1217,7 @@ function detachPhotos(ids) {
 }
 
 async function finalizeDelete(entries) {
-  for (const e of entries) { e.bitmap?.close?.(); thumbURL(e, null); }
+  for (const e of entries) { e.bitmap?.close?.(); thumbURL(e, null); cloud.deletePhoto(e.key); }
   albums.forgetKeys(entries.map((e) => e.key));
   await catalog.removePhotos(entries.map((e) => e.id));
 }
@@ -1166,6 +1264,7 @@ async function removePhotos(ids) {
 function touch(e, patch) {
   Object.assign(e, patch, { updatedAt: Date.now() });
   catalog.updatePhoto(e.id, { ...patch, updatedAt: e.updatedAt });
+  cloud.pushPhoto(e);
 }
 function setRating(ids, rating) {
   for (const e of app.images) if (ids.includes(e.id)) { touch(e, { rating }); queueSidecar(e); }
@@ -1327,12 +1426,13 @@ function updateEmpty() {
 
 let modeBeforeAccount = 'library';
 function setMode(mode, section) {
+  if (mode === 'plan') { mode = 'account'; section = 'plan'; }
   if (mode === 'account') {
     if (app.view.mode !== 'account') modeBeforeAccount = app.view.mode || 'library';
     app.view.mode = 'account';
     document.body.dataset.mode = 'account';
     document.querySelectorAll('[data-mode-btn]').forEach((b) => b.classList.remove('on'));
-    settingsPage.show(section);
+    accountPage.show(section);
     return;
   }
   app.view.mode = mode;
@@ -1412,6 +1512,7 @@ function sharePhotos(ids, title) {
     title,
     render: async (id, opts) => (await renderPhotoForExport(id, opts))?.blob,
     exportPhotos,
+    signIn: () => setMode('account', 'cloud'),
   });
   $('shareDialog').addEventListener('close', async () => {
     const cur = app.images[app.cur];
@@ -1433,6 +1534,20 @@ function exportPhotos(ids) {
 
 let pointer = null;
 let spaceDown = false;
+// Touch: two fingers pinch-zoom and pan; one finger swipes to the next photo when the photo fits
+// the screen; a double tap zooms to 100%.
+const touches = new Map();
+let pinch = null;
+let lastTap = { t: 0, x: 0, y: 0 };
+const pinchState = () => {
+  const [a, b] = [...touches.values()];
+  return { d: Math.hypot(a[0] - b[0], a[1] - b[1]) || 1, mid: [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2] };
+};
+function stepPhoto(dir) {
+  const list = visibleImages();
+  const n = list.indexOf(app.images[app.cur]) + dir;
+  if (n >= 0 && n < list.length) select(app.images.indexOf(list[n]));
+}
 const local = (e) => {
   const r = viewer.getBoundingClientRect();
   return [e.clientX - r.left, e.clientY - r.top];
@@ -1444,6 +1559,19 @@ viewer.addEventListener('pointerdown', (e) => {
   closeMenu();
   const [x, y] = local(e);
   viewer.setPointerCapture(e.pointerId);
+  if (e.pointerType === 'touch') {
+    touches.set(e.pointerId, [x, y]);
+    if (touches.size === 2) {
+      // A second finger turns whatever the first one started into a pinch (and undoes a brush stroke start).
+      if (pointer?.kind === 'tool') pointer.tool.up();
+      const st = pinchState();
+      pinch = { ...st, scale: app.view.scale, pan: [...app.view.pan] };
+      if (app.view.fit) { app.view.fit = false; }
+      pointer = null;
+      return;
+    }
+    if (touches.size > 2) return;
+  }
   if (app.state.pick && e.button === 0) { app.finishPick(app.cssToUV(x, y)); return; }
   if (app.state.compare === 'split' && app.state.tool === 'edit' && Math.abs(x - app.state.splitX * viewer.clientWidth) < 20 && e.button === 0) {
     pointer = { kind: 'split' };
@@ -1454,13 +1582,27 @@ viewer.addEventListener('pointerdown', (e) => {
     pointer = { kind: 'tool', tool };
     return;
   }
-  pointer = { kind: 'pan', x, y, pan: [...app.view.pan] };
+  pointer = { kind: 'pan', x, y, pan: [...app.view.pan], fit: app.view.fit, touch: e.pointerType === 'touch', t: performance.now() };
   viewer.classList.add('panning');
 });
 
 viewer.addEventListener('pointermove', (e) => {
   if (!app.img) return;
   const [x, y] = local(e);
+  if (e.pointerType === 'touch' && touches.has(e.pointerId)) {
+    touches.set(e.pointerId, [x, y]);
+    if (pinch && touches.size === 2) {
+      const d = DPR();
+      const st = pinchState();
+      app.view.pan = [pinch.pan[0] + (st.mid[0] - pinch.mid[0]) * d, pinch.pan[1] + (st.mid[1] - pinch.mid[1]) * d];
+      app.view.scale = pinch.scale;
+      app.zoomTo(pinch.scale * (st.d / pinch.d), st.mid[0] * d, st.mid[1] * d);
+      return;
+    }
+    if (pinch) return;
+    // With the whole photo on screen, a sideways drag is a swipe between photos, not a pan.
+    if (pointer?.kind === 'pan' && pointer.touch && pointer.fit) return;
+  }
   if (pointer?.kind === 'tool') { pointer.tool.move(e, x, y); return; }
   if (pointer?.kind === 'split') { app.state.splitX = clamp(x / viewer.clientWidth, 0.02, 0.98); app.requestRender(); return; }
   if (pointer?.kind === 'pan') {
@@ -1477,7 +1619,29 @@ viewer.addEventListener('pointermove', (e) => {
   viewer.style.cursor = app.state.pick ? 'crosshair' : onSplit ? 'ew-resize' : spaceDown ? 'grab' : tool ? tool.cursor(x, y) : '';
 });
 
-const endPointer = () => {
+const endPointer = (e) => {
+  if (e?.pointerType === 'touch') {
+    touches.delete(e.pointerId);
+    if (pinch) {
+      if (touches.size < 2) pinch = null;
+      if (!touches.size && app.view.scale <= app.view.fitScale * 1.02) app.fitView();
+      pointer = null;
+      viewer.classList.remove('panning');
+      return;
+    }
+    if (pointer?.kind === 'pan' && pointer.touch && e.type === 'pointerup') {
+      const [x, y] = local(e);
+      const dx = x - pointer.x, dy = y - pointer.y, dt = performance.now() - pointer.t;
+      if (pointer.fit && Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) stepPhoto(dx < 0 ? 1 : -1);
+      else if (Math.hypot(dx, dy) < 10 && dt < 250) {
+        const now = performance.now();
+        if (now - lastTap.t < 320 && Math.hypot(x - lastTap.x, y - lastTap.y) < 30) {
+          lastTap.t = 0;
+          if (app.state.tool !== 'crop' && app.state.tool !== 'retouch' && !(app.state.tool === 'masks' && activeMask(app))) app.toggleZoom(x * DPR(), y * DPR());
+        } else lastTap = { t: now, x, y };
+      }
+    }
+  }
   if (pointer?.kind === 'tool') pointer.tool.up();
   pointer = null;
   viewer.classList.remove('panning');
@@ -1557,12 +1721,29 @@ $('btnExport').addEventListener('click', () => {
 document.querySelectorAll('[data-mode-btn]').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.modeBtn)));
 $('btnFit').addEventListener('click', () => app.fitView());
 $('btn100').addEventListener('click', () => app.img && app.zoomTo(app.engine.fullH));
-// Linked photos keep their originals in Google Photos, Drive, Dropbox or OneDrive; their local
-// copies can go.
-async function freeDeviceSpace() {
+// Cloud plan: upload originals that aren't online yet; free local space for ones that are.
+async function onlineKeys() {
+  const rows = await listOnlineOriginals();
+  return new Set(rows.map((r) => r.key));
+}
+async function uploadMissingOriginals() {
+  const have = await onlineKeys();
   let n = 0;
   for (const e of app.images) {
-    if (!e.linked || e === app.images[app.cur] || e.offline) continue;
+    if (have.has(e.key)) continue;
+    const f = e.file || (await catalog.getFile(e.id));
+    if (!f) continue;
+    n++;
+    cloud.uploadOriginal(e, f);
+  }
+  return n;
+}
+async function freeDeviceSpace() {
+  const have = await onlineKeys().catch(() => new Set());
+  let n = 0;
+  for (const e of app.images) {
+    // Stored online, or linked from another service: the original is safe elsewhere.
+    if (!(have.has(e.key) || e.linked) || e === app.images[app.cur] || e.offline) continue;
     await catalog.deleteFile(e.id);
     e.file = null;
     e.offline = true;
@@ -1574,7 +1755,10 @@ async function freeDeviceSpace() {
   return n;
 }
 
-const settingsHooks = {
+const accountHooks = {
+  profileChanged: () => paintTopAvatar(),
+  accountChanged: async () => { await startSync(); paintTopAvatar(); },
+  cloud: cloud.cloud,
   clearLibrary: () => removePhotos(app.images.map((e) => e.id)),
   previewChanged: (v) => app.engine.setPreviewLong(v).then(() => app.requestRender()),
   restoreBackup: async (data) => {
@@ -1595,29 +1779,30 @@ const settingsHooks = {
     return n;
   },
   albums: () => albums.allAlbums(),
+  openPlan: () => setMode('account', 'cloud'),
   back: () => setMode(modeBeforeAccount === 'account' ? 'library' : modeBeforeAccount),
+  uploadMissingOriginals,
   freeDeviceSpace,
-  openSupport: () => openSupport(),
 };
+$('btnAccount').addEventListener('click', (e) => popMenu(e.currentTarget, [
+  isMobileApp && !isUnlocked() ? { label: 'Unlock Rembrandt', icon: 'sparkle', onClick: () => setMode('account', 'unlock') } : null,
+  { label: `Cloud sync · ${cloud.cloud.signedIn ? 'On' : 'Off'}`, icon: 'cloud', onClick: () => setMode('account', 'cloud') },
+  { label: 'Preferences', icon: 'gear', onClick: () => setMode('account', 'prefs') },
+  { label: 'Storage', icon: 'laptop', onClick: () => setMode('account', 'storage') },
+  { label: updateState().available ? 'Update Rembrandt…' : 'Check for updates…', icon: 'sync', onClick: () => setMode('account', 'prefs') },
+  { sep: true },
+  { label: 'Import photos…', icon: 'open', onClick: () => openImporter() },
+  isTouch ? null : { label: 'Keyboard shortcuts', icon: 'keyboard', onClick: () => $('helpDialog').showModal() },
+]));
 // Rembrandt is free. With a donation page configured, a heart in the top bar links to it.
 function openSupport() {
   const url = CONFIG.supportUrl;
-  if (!url) { setMode('account', 'about'); return; }
+  if (!url) return;
   const ext = openExternal();
   if (ext) ext(url); else window.open(url, '_blank', 'noopener');
 }
 $('btnSupport').hidden = !CONFIG.supportUrl;
 $('btnSupport').addEventListener('click', openSupport);
-$('btnAccount').addEventListener('click', (e) => popMenu(e.currentTarget, [
-  { label: 'Preferences', icon: 'gear', onClick: () => setMode('account', 'prefs') },
-  { label: 'Storage', icon: 'cloud', onClick: () => setMode('account', 'storage') },
-  { label: 'Backup & data', icon: 'save', onClick: () => setMode('account', 'data') },
-  { label: 'About Rembrandt', icon: 'info', onClick: () => setMode('account', 'about') },
-  updatesSupported() ? { label: updateState().available ? 'Update Rembrandt…' : 'Check for updates…', icon: 'sync', onClick: () => setMode('account', 'about') } : null,
-  { sep: true },
-  { label: 'Import photos…', icon: 'open', onClick: () => openImporter() },
-  { label: 'Keyboard shortcuts', icon: 'keyboard', onClick: () => $('helpDialog').showModal() },
-]));
 $('helpClose').addEventListener('click', () => $('helpDialog').close());
 $('clipHi').addEventListener('click', () => { app.state.clip = !app.state.clip; syncClip(); });
 $('clipLo').addEventListener('click', () => { app.state.clip = !app.state.clip; syncClip(); });
@@ -1751,7 +1936,8 @@ function watchDesktopSignIn() {
     try {
       const r = await t.invoke('take_auth_code');
       if (!r) return;
-      if (r.state?.startsWith('adobe')) await adobe.completeAdobeSignIn(r.code, r.state);
+      if (r.state?.startsWith('adobe')) { await adobe.completeAdobeSignIn(r.code, r.state); return; }
+      await sb.completeSignIn(r.code); app.toast('Signed in'); await startSync(); paintTopAvatar();
     } catch (e) { app.toast(`Sign-in failed: ${e.message}`); }
   };
   setInterval(check, 1500);
@@ -1762,6 +1948,7 @@ function boot() {
   initTheme();
   watchDesktopSignIn();
   startUpdateChecks();
+  if (isMobileApp) refreshUnlock();
   canvasBg = cssRGB('--canvas');
   onThemeChange(() => {
     canvasBg = cssRGB('--canvas');
@@ -1792,6 +1979,11 @@ function boot() {
     return;
   }
   app.engine.previewLong = prefs.previewLong;
+  paintAvatar($('avatar'));
+  if (isTouch) {
+    $('emptyTitle').textContent = 'Open photos to start editing';
+    $('emptyText').textContent = 'Pick photos from your library. Everything happens on this device, and nothing is uploaded.';
+  }
   canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); app.toast('Graphics context lost — reload the page to continue'); });
   warmDownloads();
   app.updateUndo();
@@ -1804,13 +1996,16 @@ function boot() {
     unsyncFolder,
     reconnectFolder: async (f) => { if (await folders.reconnect(f)) syncFolder(f); },
     stripChanged: renderStrip,
+    openPlan: () => setMode('account', 'cloud'),
     openAccount: (section) => setMode('account', section),
     share: sharePhotos,
     paintStorage,
   });
   $('library').replaceWith(library.el);
-  settingsPage = buildSettingsPage(app, settingsHooks);
-  $('accountPage').replaceWith(settingsPage.el);
+  accountPage = buildAccountPage(app, accountHooks);
+  $('accountPage').replaceWith(accountPage.el);
+  app.cloudState = () => cloud.cloud;
+  cloud.onCloudChange(() => { library?.repaintStorage?.(); paintTopAvatar(); });
   window.lumen = app; // handy for debugging from the console
   albums.loadAlbums().then(loadCatalog).then(() => folders.loadFolders().catch((e) => console.warn(e))).then(() => {
     refreshLibrary();
@@ -1818,6 +2013,11 @@ function boot() {
     setInterval(() => sweepFolders(false), 60000);
     window.addEventListener('focus', () => sweepFolders(false));
     setMode(app.images.length ? 'library' : 'edit');
+    startSync().then(async () => {
+      if (app.images.length && app.view.mode === 'edit' && !app.img) setMode('library');
+      // Phone: renewals, upgrades and purchases on another phone reach the account.
+      if (isMobileApp && cloud.cloud.signedIn && await syncStoreSubscriptions().catch(() => 0)) { await startSync(); paintTopAvatar(); }
+    });
   });
 }
 boot();

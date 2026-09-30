@@ -1,6 +1,8 @@
 // Albums: named collections of photos. An album lists photo keys (name:size:mtime), not local ids,
-// so an album survives re-importing its photos. Stored in the catalog on this device.
+// so the same album works on every device the library syncs to. Stored in the catalog and synced
+// through the account provider (last write wins per album).
 import * as catalog from './catalog.js';
+import * as cloud from './cloud.js';
 import { uid } from './util.js';
 
 let albums = [];
@@ -19,6 +21,7 @@ async function save(a) {
   a.updatedAt = Date.now();
   if (!albums.includes(a)) albums.push(a);
   await catalog.putAlbum(a);
+  cloud.pushAlbum(a);
   emit();
   return a;
 }
@@ -74,4 +77,9 @@ export async function mergeRemoteAlbum(r) {
   if (cur) Object.assign(cur, a); else albums.push(a);
   await catalog.putAlbum(cur || a);
   emit();
+}
+// Local albums the account hasn't seen yet (or has older copies of).
+export function pushAllAlbums(remote) {
+  const seen = new Map(remote.map((r) => [r.id, r.updatedAt || 0]));
+  for (const a of albums) if ((seen.get(a.id) ?? -1) < (a.updatedAt || 0)) cloud.pushAlbum(a);
 }

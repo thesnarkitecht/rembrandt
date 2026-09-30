@@ -195,7 +195,6 @@ body[data-mode="plan"] .workspace, body[data-mode="plan"] .library, body[data-mo
 .topbar { display: flex; align-items: center; gap: 12px; padding: 0 10px 0 14px; background: var(--bg); border-bottom: 1px solid var(--line-strong); min-width: 0; }
 .brand { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; color: var(--text); white-space: nowrap; }
 .brand svg { width: 18px; height: 18px; color: var(--text); }
-.support-btn .i { color: #d9566c; }
 #brandName { font-size: 12px; font-weight: 600; letter-spacing: 0.22em; text-transform: uppercase; }
 .modes { display: flex; gap: 2px; padding: 2px; border-radius: 9px; background: var(--well); box-shadow: inset 0 0 0 1px var(--line); }
 .mode-btn { height: 26px; padding: 0 13px; border: none; border-radius: 7px; background: transparent; color: var(--muted); font-weight: 550; font-size: 12.5px; cursor: pointer; }
@@ -672,6 +671,27 @@ body[data-mode="account"] .workspace, body[data-mode="account"] .library, body[d
 .acct-card { display: flex; flex-direction: column; gap: 12px; padding: 18px 20px; border-radius: 12px; background: var(--surface); border: 1px solid var(--line); }
 .acct-card h2 { margin: 0; font-size: 14px; font-weight: 650; }
 .acct-card .field .row .text-input { flex: 1; min-width: 0; }
+.cloud-ask-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.cloud-ask h2 { font-size: 17px; letter-spacing: -0.01em; }
+.cloud-ask-row .hint { margin: 4px 0 0; }
+.cloud-perks { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: 13px; color: var(--text-2); }
+.cloud-perks li { display: flex; gap: 8px; align-items: flex-start; }
+.cloud-perks .i { width: 15px; height: 15px; flex: none; margin-top: 1px; color: var(--text); }
+.cloud-switch { position: relative; width: 46px; height: 28px; flex: none; border: 0; padding: 0; border-radius: 14px; background: var(--track); cursor: pointer; transition: background 0.15s; }
+.cloud-switch::after { content: ""; position: absolute; left: 3px; top: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35); transition: transform 0.15s; }
+.cloud-switch.on { background: var(--accent-bg); }
+.cloud-switch.on::after { transform: translateX(18px); }
+.cloud-switch:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cloud-switch:disabled { opacity: 0.45; cursor: default; }
+.dlg.unlock { width: min(420px, calc(100vw - 24px)); }
+.unlock-body { padding: 26px 22px 18px; }
+.unlock-body h2 { margin: 0; font-size: 20px; letter-spacing: -0.01em; }
+.unlock-body .lead { margin: 0; color: var(--text-2); font-size: 13.5px; line-height: 1.5; }
+.unlock-mark { width: 44px; height: 44px; }
+.unlock-mark svg { width: 100%; height: 100%; }
+.unlock-panel .row-btns { margin-top: 4px; }
+.unlock-panel .row .text-input { flex: 1; min-width: 0; text-transform: uppercase; }
+.unlock-status { margin: 4px 0 0; min-height: 1em; font-size: 12.5px; color: var(--text-2); }
 .acct-card .seg { display: flex; }
 .acct-card .seg-btn { flex: 1; }
 .acct-card .lead { margin: 0; font-size: 13px; color: var(--text-2); line-height: 1.5; max-width: 62ch; }
@@ -721,6 +741,22 @@ body[data-mode="account"] .workspace, body[data-mode="account"] .library, body[d
 
 /* ------------------------------------------------------------------ small screens */
 
+/* Phones: keep clear of the notch, the rounded corners and the home indicator. */
+.topbar { padding-top: env(safe-area-inset-top); padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(10px, env(safe-area-inset-right)); }
+.app { grid-template-rows: calc(var(--top-h) + env(safe-area-inset-top)) minmax(0, 1fr) auto; padding-bottom: env(safe-area-inset-bottom); }
+.toast { margin-bottom: env(safe-area-inset-bottom); }
+
+/* Touch screens: bigger slider thumbs and tap targets, no hover-only affordances. */
+[data-touch] .range::-webkit-slider-thumb { width: 22px; height: 22px; margin-top: -9px; }
+[data-touch] .ctl.tracked .range::-webkit-slider-thumb { margin-top: -9px; }
+[data-touch] .range::-moz-range-thumb { width: 22px; height: 22px; }
+[data-touch] .range { height: 28px; }
+[data-touch] .icon-btn { min-width: 38px; min-height: 38px; }
+[data-touch] .menu-item { min-height: 40px; }
+[data-touch] .zoom .chip { min-height: 32px; min-width: 40px; }
+/* The phone app has no keyboard: hide shortcut hints. */
+[data-touch] kbd { display: none; }
+
 @media (max-width: 860px) {
   :root { --panel-w: 100%; }
   .workspace { grid-template-columns: 1fr; grid-template-rows: minmax(0, 1fr) minmax(0, 46%); }
@@ -728,13 +764,17 @@ body[data-mode="account"] .workspace, body[data-mode="account"] .library, body[d
   .panel-head { display: none; }
   .filmstrip { display: none; }
   .brand span, .file-title { display: none; }
-  .topbar { justify-content: space-between; padding: 0 8px; gap: 6px; }
+  .topbar { justify-content: space-between; padding: env(safe-area-inset-top) max(8px, env(safe-area-inset-right)) 0 max(8px, env(safe-area-inset-left)); gap: 6px; }
   .top-actions .btn.primary > span:not(.i) { display: none; }
   .top-actions .btn.primary { padding: 0 9px; }
   #btnRedo { display: none; }
   .hud { bottom: 8px; left: 8px; }
-  .library { grid-template-columns: minmax(0, 1fr); }
-  .lib-side { display: none; }
+  .library { grid-template-columns: minmax(0, 1fr); position: relative; }
+  /* Albums and collections slide in as a drawer. */
+  .library .lib-side, .library.no-side .lib-side { display: flex; position: absolute; inset: 0 auto 0 0; z-index: 20; width: min(280px, 82vw); transform: translateX(-102%); transition: transform 0.2s ease; box-shadow: 8px 0 24px rgba(0, 0, 0, 0.35); padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+  .library.side-open .lib-side { transform: none; }
+  .library.side-open .lib-main { filter: brightness(0.45); transition: filter 0.2s; }
+  .lib-zoom { display: none; }
   .lib-header { padding: 8px 12px; }
   .lib-content { padding: 4px 8px 16px; }
   .lib-search { width: 130px; }
@@ -898,7 +938,7 @@ body[data-mode="account"] .top-actions > :not(.avatar-btn), body[data-mode="libr
 .splash.go .splash-name span { opacity: 1; transform: none; }
 @keyframes splash-shine { 0% { opacity: 1; transform: rotate(35deg) translateX(-30px); } 100% { opacity: 1; transform: rotate(35deg) translateX(190px); } }
 @media (prefers-reduced-motion: reduce) { .splash { display: none; } }
-.update-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.update-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 4px 0 8px; }
 .update-btn { color: var(--brand-dot); border-color: color-mix(in srgb, var(--brand-dot) 50%, var(--line)); }
 
 /* ---------------------------------------------------------------- batch editing */
@@ -909,6 +949,7 @@ body[data-mode="account"] .top-actions > :not(.avatar-btn), body[data-mode="libr
 .edit-tools .clip-btns { display: inline-flex; gap: 2px; }
 .dest-btn { justify-content: flex-start; gap: 8px; width: 100%; }
 .dest-btn .chev { margin-left: auto; width: 14px; height: 14px; color: var(--muted); }
+.support-btn .i { color: #d9566c; }
 
 /* rembrandt-server folder picker */
 .folder-pick { width: min(520px, calc(100vw - 32px)); }
