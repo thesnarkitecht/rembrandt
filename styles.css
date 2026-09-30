@@ -7,53 +7,54 @@
 
 :root {
   color-scheme: light;
-  --bg: #e7e7eb;
-  --canvas: #c9c9ce;
-  --panel: #fbfbfc;
-  --surface: #ffffff;
-  --raised: #e4e4e9;
-  --raised-hover: #d8d8de;
-  --field: #ffffff;
-  --hover: rgba(20, 20, 28, 0.06);
-  --selected: rgba(20, 20, 28, 0.11);
-  --line: rgba(20, 20, 28, 0.13);
-  --line-strong: rgba(20, 20, 28, 0.24);
-  --text: #111115;
-  --text-2: #2c2c33;
-  --muted: #54545d;
-  --dim: #63636c;
-  --accent: #2b2b31;
-  --edge: rgba(20, 20, 28, 0.48);
-  --accent-bg: #3d3d45;
-  --accent-bg-hover: #2b2b31;
-  --seg-on: #ffffff;
-  --well: #e6e6eb;
+  --bg: #e6dfd3;
+  --canvas: #cdc5b6;
+  --panel: #f2ede4;
+  --surface: #f8f4ed;
+  --raised: #e3dbce;
+  --raised-hover: #d8cfc0;
+  --field: #fbf8f2;
+  --hover: rgba(23, 18, 12, 0.06);
+  --selected: rgba(23, 18, 12, 0.1);
+  --line: rgba(23, 18, 12, 0.13);
+  --line-strong: rgba(23, 18, 12, 0.24);
+  --text: #17120c;
+  --text-2: #2e261c;
+  --muted: #62584a;
+  --dim: #75695a;
+  --accent: #7a4a1f;
+  --edge: rgba(23, 18, 12, 0.45);
+  --accent-bg: #8a5829;
+  --accent-bg-hover: #6a4019;
+  --seg-on: #fbf8f2;
+  --well: #e2dace;
   --brand-dot: #b87a38;
   --mark-1: #d6a458;
   --mark-2: #a8712f;
   --mark-3: #6f4520;
-  --accent-hover: #000000;
-  --accent-soft: rgba(20, 20, 28, 0.08);
-  --on-accent: #ffffff;
+  --accent-hover: #4f2f12;
+  --accent-soft: rgba(138, 88, 41, 0.12);
+  --on-accent: #fff7ea;
   --good: #16a36e;
   --warn: #d9651b;
   --danger: #e0364c;
-  --track: #aeaeb7;
-  --fill: rgba(20, 20, 28, 0.28);
-  --thumb: #1c1c21;
-  --thumb-fill: #ffffff;
-  --thumb-ring: #54545d;
-  --sec-head: rgba(20, 20, 28, 0.025);
-  --track-veil: rgba(255, 255, 255, 0.28);
-  --glass: rgba(251, 251, 252, 0.95);
+  --track: #b5ab9b;
+  --fill: rgba(138, 88, 41, 0.6);
+  --thumb: #17120c;
+  --thumb-fill: #fbf8f2;
+  --thumb-ring: #62584a;
+  --sec-head: rgba(23, 18, 12, 0.025);
+  --track-veil: rgba(251, 248, 242, 0.3);
+  --glass: rgba(242, 237, 228, 0.95);
   --scrim: rgba(20, 20, 26, 0.35);
-  --chart-bg: #ededf0;
-  --chart-grid: rgba(24, 24, 32, 0.08);
-  --chart-line: rgba(24, 24, 32, 0.45);
+  --chart-bg: #ebe5da;
+  --chart-grid: rgba(23, 18, 12, 0.08);
+  --chart-line: rgba(23, 18, 12, 0.45);
   --shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
   --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.14);
   --font: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --mono: "Geist Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --display: "Antonio", "Arial Narrow", "Helvetica Neue", sans-serif;
   --panel-w: 304px;
   --top-h: 46px;
   --r: 3px;
@@ -62,98 +63,98 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --bg: #17171a;
-    --canvas: #0c0c0e;
-    --panel: #202024;
-    --surface: #2c2c32;
-    --raised: #36363d;
-    --raised-hover: #42424a;
-    --field: #121215;
-    --hover: rgba(255, 255, 255, 0.07);
-    --selected: rgba(255, 255, 255, 0.13);
-    --line: rgba(255, 255, 255, 0.12);
-    --line-strong: rgba(255, 255, 255, 0.22);
-    --text: #f5f5f7;
-    --text-2: #e0e0e6;
-    --muted: #b4b4be;
-    --dim: #8e8e98;
-    --accent: #e4e4e8;
-  --edge: rgba(255, 255, 255, 0.4);
-  --accent-bg: #55555e;
-  --on-accent: #ffffff;
-  --accent-bg-hover: #62626c;
-  --seg-on: #4a4a53;
-  --well: #131316;
+    --bg: #0f0d0b;
+    --canvas: #070605;
+    --panel: #13110f;
+    --surface: #1b1815;
+    --raised: #25211d;
+    --raised-hover: #302b26;
+    --field: #0b0a09;
+    --hover: rgba(238, 232, 222, 0.06);
+    --selected: rgba(238, 232, 222, 0.11);
+    --line: rgba(238, 232, 222, 0.1);
+    --line-strong: rgba(238, 232, 222, 0.19);
+    --text: #eee8de;
+    --text-2: #d8d0c3;
+    --muted: #a8a095;
+    --dim: #807970;
+    --accent: #e0b374;
+  --edge: rgba(238, 232, 222, 0.36);
+  --accent-bg: #c98f4f;
+  --on-accent: #140d05;
+  --accent-bg-hover: #e0b374;
+  --seg-on: #2a2521;
+  --well: #0b0a09;
   --brand-dot: #e3b574;
   --mark-1: #f4d292;
   --mark-2: #c98f4f;
   --mark-3: #8a5829;
-    --accent-hover: #ffffff;
-    --accent-soft: rgba(255, 255, 255, 0.1);
+    --accent-hover: #f4d292;
+    --accent-soft: rgba(201, 143, 79, 0.14);
     --good: #34d399;
     --warn: #ff8f4a;
     --danger: #ff5a6a;
-    --track: #56565f;
-    --fill: rgba(255, 255, 255, 0.4);
-    --thumb: #ffffff;
-    --thumb-fill: #e9e9ec;
-    --thumb-ring: #0c0c0e;
-    --sec-head: rgba(255, 255, 255, 0.035);
-    --track-veil: rgba(18, 18, 22, 0.42);
-    --glass: rgba(36, 36, 40, 0.95);
-    --scrim: rgba(0, 0, 0, 0.55);
-    --chart-bg: #151518;
-    --chart-grid: rgba(255, 255, 255, 0.06);
-    --chart-line: rgba(255, 255, 255, 0.4);
+    --track: #4a443d;
+    --fill: rgba(201, 143, 79, 0.8);
+    --thumb: #eee8de;
+    --thumb-fill: #eee8de;
+    --thumb-ring: #0b0a09;
+    --sec-head: rgba(238, 232, 222, 0.025);
+    --track-veil: rgba(15, 13, 11, 0.42);
+    --glass: rgba(19, 17, 15, 0.95);
+    --scrim: rgba(0, 0, 0, 0.6);
+    --chart-bg: #0b0a09;
+    --chart-grid: rgba(238, 232, 222, 0.06);
+    --chart-line: rgba(238, 232, 222, 0.4);
     --shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
     --shadow-pop: 0 10px 28px rgba(0, 0, 0, 0.5);
   }
 }
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #17171a;
-  --canvas: #0c0c0e;
-  --panel: #202024;
-  --surface: #2c2c32;
-  --raised: #36363d;
-  --raised-hover: #42424a;
-  --field: #121215;
-  --hover: rgba(255, 255, 255, 0.07);
-  --selected: rgba(255, 255, 255, 0.13);
-  --line: rgba(255, 255, 255, 0.12);
-  --line-strong: rgba(255, 255, 255, 0.22);
-  --text: #f5f5f7;
-  --text-2: #e0e0e6;
-  --muted: #b4b4be;
-  --dim: #8e8e98;
-  --accent: #e4e4e8;
-  --edge: rgba(255, 255, 255, 0.4);
-  --accent-bg: #55555e;
-  --on-accent: #ffffff;
-  --accent-bg-hover: #62626c;
-  --seg-on: #4a4a53;
-  --well: #131316;
+  --bg: #0f0d0b;
+  --canvas: #070605;
+  --panel: #13110f;
+  --surface: #1b1815;
+  --raised: #25211d;
+  --raised-hover: #302b26;
+  --field: #0b0a09;
+  --hover: rgba(238, 232, 222, 0.06);
+  --selected: rgba(238, 232, 222, 0.11);
+  --line: rgba(238, 232, 222, 0.1);
+  --line-strong: rgba(238, 232, 222, 0.19);
+  --text: #eee8de;
+  --text-2: #d8d0c3;
+  --muted: #a8a095;
+  --dim: #807970;
+  --accent: #e0b374;
+  --edge: rgba(238, 232, 222, 0.36);
+  --accent-bg: #c98f4f;
+  --on-accent: #140d05;
+  --accent-bg-hover: #e0b374;
+  --seg-on: #2a2521;
+  --well: #0b0a09;
   --brand-dot: #e3b574;
   --mark-1: #f4d292;
   --mark-2: #c98f4f;
   --mark-3: #8a5829;
-  --accent-hover: #ffffff;
-  --accent-soft: rgba(255, 255, 255, 0.1);
+  --accent-hover: #f4d292;
+  --accent-soft: rgba(201, 143, 79, 0.14);
   --good: #34d399;
   --warn: #ff8f4a;
   --danger: #ff5a6a;
-  --track: #56565f;
-  --fill: rgba(255, 255, 255, 0.4);
-  --thumb: #ffffff;
-  --thumb-fill: #e9e9ec;
-  --thumb-ring: #0c0c0e;
-  --sec-head: rgba(255, 255, 255, 0.035);
-  --track-veil: rgba(18, 18, 22, 0.42);
-  --glass: rgba(36, 36, 40, 0.95);
-  --scrim: rgba(0, 0, 0, 0.55);
-  --chart-bg: #151518;
-  --chart-grid: rgba(255, 255, 255, 0.06);
-  --chart-line: rgba(255, 255, 255, 0.4);
+  --track: #4a443d;
+  --fill: rgba(201, 143, 79, 0.8);
+  --thumb: #eee8de;
+  --thumb-fill: #eee8de;
+  --thumb-ring: #0b0a09;
+  --sec-head: rgba(238, 232, 222, 0.025);
+  --track-veil: rgba(15, 13, 11, 0.42);
+  --glass: rgba(19, 17, 15, 0.95);
+  --scrim: rgba(0, 0, 0, 0.6);
+  --chart-bg: #0b0a09;
+  --chart-grid: rgba(238, 232, 222, 0.06);
+  --chart-line: rgba(238, 232, 222, 0.4);
   --shadow: 0 1px 0 rgba(0, 0, 0, 0.3);
   --shadow-pop: 0 10px 28px rgba(0, 0, 0, 0.5);
 }
@@ -981,3 +982,42 @@ body.gated { overflow: hidden; }
 .row-btns.center { justify-content: center; }
 .seg.sizes { display: grid; grid-template-columns: repeat(5, 1fr); }
 .plan-one { max-width: none; }
+
+/* ------------------------------------------------------------------ house style
+   The website's look carried into the editor: condensed Antonio for titles, small uppercase mono for
+   labels, tabs and buttons, hairlines and square corners. Kept to type and borders; layout is unchanged. */
+
+#brandName { font: 400 13px var(--display); letter-spacing: 0.3em; }
+.brand svg { color: var(--mark-2); }
+.mode-btn, .tool-tabs .rail-btn, .btn, .sec-head, .subhead, .side-head, .seg button, .acct-nav-item, .lib-count, .file-title {
+  font-family: var(--mono); text-transform: uppercase; letter-spacing: 0.06em; }
+.mode-btn { font-size: 11px; font-weight: 500; }
+.mode-btn.on { box-shadow: inset 0 -2px 0 var(--accent-bg), inset 0 0 0 1px var(--line-strong); }
+.tool-tabs .rail-btn { font-size: 9.5px; font-weight: 500; }
+.tool-tabs .rail-btn.on { box-shadow: inset 0 -2px 0 var(--accent-bg), inset 0 0 0 1px var(--line-strong); }
+.btn { font-size: 11px; font-weight: 500; border-radius: 2px; }
+.btn.sm { font-size: 10.5px; }
+.btn.primary { border-color: var(--accent-bg); }
+.sec-head { font-size: 11px; font-weight: 500; letter-spacing: 0.08em; color: var(--text-2); }
+.sec.open .sec-head { color: var(--text); }
+.sec.open .sec-icon { color: var(--accent); }
+.subhead, .side-head { font-size: 10.5px; font-weight: 500; letter-spacing: 0.08em; }
+.file-title { font-size: 11px; color: var(--muted); }
+.acct-nav-item { font-size: 11.5px; }
+.acct-nav-item.on { box-shadow: inset 2px 0 0 var(--accent-bg); }
+.side-item.on { box-shadow: inset 2px 0 0 var(--accent-bg); }
+.lib-count { font-size: 10.5px; }
+.lib-title, .acct-title, .acct-hero h1, .empty h1 { font-family: var(--display); font-weight: 300; text-transform: uppercase; letter-spacing: -0.005em; }
+.lib-title { font-size: 30px; line-height: 1; }
+.acct-title, .acct-hero h1 { font-size: 40px; line-height: 1; }
+.empty h1 { font-size: 30px; line-height: 1.05; margin-bottom: 10px; }
+.empty-card { border-radius: 2px; border-width: 1px; }
+.dlg { border-radius: 2px; }
+.dlg-head h2, .acct-card h2 { font-family: var(--display); font-weight: 400; text-transform: uppercase; letter-spacing: 0; }
+.dlg-head h2 { font-size: 24px; line-height: 1.05; }
+.acct-card h2 { font-size: 20px; line-height: 1.05; }
+.cloud-ask h2 { font-size: 24px; }
+.acct-card { border-radius: 2px; }
+.val { color: var(--text); }
+.ctl.changed .val { color: var(--accent); }
+.ph-group-head h2 { font: 400 19px/1 var(--display); text-transform: uppercase; letter-spacing: 0.01em; }
