@@ -1,12 +1,15 @@
-// Opening sequence: the two pieces of the R slide together, a light passes over the gold, and
-// REMBRANDT settles in underneath. About two seconds. It plays once per launch (once per browser
-// session on the web), any key or click skips it, and it stays off for people who prefer reduced
-// motion or turned it off in Preferences.
+// Opening sequence: Rembrandt's 1659 self-portrait develops in as bronze halftone, left to right
+// like a print coming up in the tray, while REMBRANDT rises letter by letter over it and a bronze
+// line fills underneath; then the whole screen lifts away. About two and a half seconds. It plays once
+// per launch (once per browser session on the web), any key or click skips it, and it stays off for
+// people who prefer reduced motion or turned it off in Preferences.
 import { prefs } from './account.js';
-import { BRAND, MARK_PATHS } from './brand.js';
+import { BRAND } from './brand.js';
 
 const SEEN = 'lumen:splash';
-const HOLD = 2300; // ms until it fades out
+const HOLD = 2400;      // ms until it lifts
+const PAINTING = 'src/art/selfportrait-1659.jpg';   // Rembrandt van Rijn, 1659, public domain
+const DOTS = ['#8a5829', '#c98f4f', '#f4d292'];
 
 function shouldPlay() {
   if (prefs.splash === false) return false;
@@ -15,23 +18,48 @@ function shouldPlay() {
   return true;
 }
 
-const [BOWL, TRIANGLE] = MARK_PATHS;
+const clamp = (v) => Math.min(1, Math.max(0, v));
+const ease = (t) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+
+// The painting as a grid of brightness values, cropped to cover the canvas, contrast stretched.
+function sample(img, cols, rows) {
+  const c = document.createElement('canvas'); c.width = cols; c.height = rows;
+  const g = c.getContext('2d', { willReadFrequently: true });
+  const s = Math.max(cols / img.width, rows / img.height), w = img.width * s, h = img.height * s;
+  g.drawImage(img, (cols - w) / 2, (rows - h) * 0.28, w, h);
+  const d = g.getImageData(0, 0, cols, rows).data, lum = new Float32Array(cols * rows);
+  let lo = 1, hi = 0;
+  for (let i = 0; i < lum.length; i++) { const v = (0.2126 * d[i * 4] + 0.7152 * d[i * 4 + 1] + 0.0722 * d[i * 4 + 2]) / 255; lum[i] = v; if (v < lo) lo = v; if (v > hi) hi = v; }
+  for (let i = 0; i < lum.length; i++) lum[i] = Math.pow(clamp((lum[i] - lo) / Math.max(0.05, hi - lo)), 1.25);
+  return lum;
+}
+
+function develop(canvas, img) {
+  const dpr = Math.min(devicePixelRatio || 1, 2), r = canvas.getBoundingClientRect();
+  canvas.width = Math.round(r.width * dpr); canvas.height = Math.round(r.height * dpr);
+  const cell = 8 * dpr, cols = Math.ceil(canvas.width / cell), rows = Math.ceil(canvas.height / cell);
+  const lum = sample(img, cols, rows), g = canvas.getContext('2d'), max = cell * 0.56, t0 = performance.now();
+  const frame = (now) => {
+    const t = clamp((now - t0) / 1500);
+    g.clearRect(0, 0, canvas.width, canvas.height);
+    const paths = [new Path2D(), new Path2D(), new Path2D()];
+    for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+      const v = lum[y * cols + x];
+      const rad = max * Math.sqrt(v) * ease(clamp((t * 1.6 - (x / cols) * 0.6 - (1 - v) * 0.4) * 3));
+      if (rad < 0.35) continue;
+      const cx = (x + 0.5) * cell, cy = (y + 0.5) * cell, p = paths[v < 0.38 ? 0 : v < 0.72 ? 1 : 2];
+      p.moveTo(cx + rad, cy); p.arc(cx, cy, rad, 0, Math.PI * 2);
+    }
+    paths.forEach((p, k) => { g.fillStyle = DOTS[k]; g.fill(p); });
+    if (t < 1 && canvas.isConnected) requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+}
+
 const markup = () => `
-  <svg class="splash-r" viewBox="-4 -4 108 108" aria-hidden="true">
-    <defs>
-      <linearGradient id="splash-gold" gradientUnits="userSpaceOnUse" x1="100" y1="0" x2="0" y2="100">
-        <stop offset="0" stop-color="#F6D799"/><stop offset=".5" stop-color="#C98F4F"/><stop offset="1" stop-color="#7E4F22"/>
-      </linearGradient>
-      <linearGradient id="splash-shine" x1="0" y1="0" x2="1" y2="0">
-        <stop offset="0" stop-color="#fff6e4" stop-opacity="0"/><stop offset=".5" stop-color="#fff6e4" stop-opacity=".75"/><stop offset="1" stop-color="#fff6e4" stop-opacity="0"/>
-      </linearGradient>
-      <clipPath id="splash-clip"><path d="${BOWL}"/><path d="${TRIANGLE}"/></clipPath>
-    </defs>
-    <path class="splash-bowl" fill="url(#splash-gold)" d="${BOWL}"/>
-    <path class="splash-tri" fill="url(#splash-gold)" d="${TRIANGLE}"/>
-    <g clip-path="url(#splash-clip)"><rect class="splash-shine" x="-40" y="-60" width="34" height="220" fill="url(#splash-shine)"/></g>
-  </svg>
-  <div class="splash-name">${BRAND.name.toUpperCase().split('').map((c, i) => `<span style="--i:${i}">${c}</span>`).join('')}</div>`;
+  <canvas class="splash-art" aria-hidden="true"></canvas>
+  <div class="splash-name">${BRAND.name.toUpperCase().split('').map((c, i) => `<span style="--i:${i}">${c}</span>`).join('')}</div>
+  <i class="splash-bar"></i>`;
 
 function play() {
   const root = document.getElementById('splash');
@@ -46,13 +74,18 @@ function play() {
     if (done) return;
     done = true;
     root.classList.add('out');
-    setTimeout(() => root.remove(), 420);
+    setTimeout(() => root.remove(), 800);
     removeEventListener('keydown', finish, true);
   };
   root.addEventListener('pointerdown', finish);
   addEventListener('keydown', finish, true);
-  // Start once the font is in, so the letters don't swap mid-animation.
-  (document.fonts?.ready || Promise.resolve()).then(() => requestAnimationFrame(() => root.classList.add('go')));
+  // The painting develops as soon as it loads; if it's slow the name plays on its own.
+  const img = new Image();
+  img.onload = () => { if (!done) develop(stage.querySelector('.splash-art'), img); };
+  img.src = PAINTING;
+  // Start the letters once the font is in, so they don't swap mid-animation.
+  const fonts = document.fonts ? Promise.race([document.fonts.load('200 64px Antonio'), new Promise((r) => setTimeout(r, 400))]) : Promise.resolve();
+  fonts.then(() => requestAnimationFrame(() => root.classList.add('go')));
   setTimeout(finish, HOLD);
   setTimeout(finish, 5000); // never block the app, whatever happens to fonts
 }

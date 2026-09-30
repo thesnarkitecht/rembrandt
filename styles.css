@@ -3,6 +3,7 @@
 
 @font-face { font-family: "Geist"; src: url("src/fonts/geist.woff2") format("woff2"); font-weight: 400 700; font-display: swap; }
 @font-face { font-family: "Geist Mono"; src: url("src/fonts/geist-mono.woff2") format("woff2"); font-weight: 400 500; font-display: swap; }
+@font-face { font-family: "Antonio"; src: url("src/fonts/antonio.woff2") format("woff2"); font-weight: 100 700; font-display: swap; }
 
 :root {
   color-scheme: light;
@@ -921,22 +922,19 @@ body[data-mode="account"] .top-actions > :not(.avatar-btn), body[data-mode="libr
 .src-sub .seg { margin-top: 8px; }
 
 /* ---------------------------------------------------------------- opening sequence */
-.splash { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; background: radial-gradient(ellipse at 50% 42%, #1a1714 0%, #0b0b0c 62%); color: #f4f1ea; cursor: default; transition: opacity 0.4s ease, visibility 0.4s; }
+.splash { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; overflow: hidden; background: #0b0a09; color: #eee8de; cursor: default; transition: transform 0.8s cubic-bezier(0.76, 0, 0.24, 1); }
 .splash[hidden] { display: none; }
-.splash.out { opacity: 0; visibility: hidden; }
-.splash-stage { display: grid; justify-items: center; gap: clamp(22px, 4vh, 36px); }
-.splash-r { width: clamp(100px, 17vmin, 160px); height: auto; overflow: visible; }
-/* The two pieces start apart along the leg's diagonal and slide together. */
-.splash-bowl, .splash-tri { opacity: 0; transition: transform 0.75s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.5s ease; }
-.splash-bowl { transform: translate(14px, -12px); }
-.splash-tri { transform: translate(-14px, 12px); transition-delay: 0.08s; }
-.splash.go .splash-bowl, .splash.go .splash-tri { opacity: 1; transform: none; }
-.splash-shine { transform-box: view-box; opacity: 0; }
-.splash.go .splash-shine { animation: splash-shine 0.9s ease-in-out 0.7s both; }
-.splash-name { display: flex; font-size: clamp(20px, 3.4vmin, 30px); font-weight: 500; letter-spacing: 0.34em; margin-right: -0.34em; line-height: 1; }
-.splash-name span { opacity: 0; transform: translateY(0.35em); transition: opacity 0.45s ease, transform 0.55s cubic-bezier(0.2, 0.8, 0.2, 1); transition-delay: calc(0.45s + var(--i) * 0.04s); }
-.splash.go .splash-name span { opacity: 1; transform: none; }
-@keyframes splash-shine { 0% { opacity: 1; transform: rotate(35deg) translateX(-30px); } 100% { opacity: 1; transform: rotate(35deg) translateX(190px); } }
+.splash.out { transform: translateY(-100%); }
+.splash-stage { position: relative; display: grid; justify-items: center; align-content: center; gap: clamp(16px, 3vh, 26px); width: 100%; height: 100%; }
+/* The painting sits behind the name, faded out towards the edges so the letters stay clear. */
+.splash-art { position: absolute; left: 50%; top: 50%; height: 92vh; aspect-ratio: 4 / 5; transform: translate(-50%, -50%); opacity: 0.6;
+  -webkit-mask-image: radial-gradient(closest-side, #000 55%, transparent); mask-image: radial-gradient(closest-side, #000 55%, transparent); }
+.splash-name { position: relative; display: flex; overflow: hidden; font: 200 clamp(56px, 12vw, 150px)/0.9 Antonio, "Arial Narrow", sans-serif; letter-spacing: 0.02em; text-shadow: 0 0 40px rgba(11, 10, 9, 0.9); }
+.splash-name span { display: inline-block; transform: translateY(105%); transition: transform 0.8s cubic-bezier(0.2, 0.8, 0.2, 1); transition-delay: calc(0.1s + var(--i) * 0.04s); }
+.splash.go .splash-name span { transform: none; }
+.splash-bar { position: relative; width: min(420px, 60vw); height: 1px; background: rgba(238, 232, 222, 0.15); overflow: hidden; }
+.splash-bar::after { content: ""; position: absolute; inset: 0; background: #c98f4f; transform-origin: 0 50%; transform: scaleX(0); transition: transform 1s cubic-bezier(0.6, 0, 0.2, 1) 0.35s; }
+.splash.go .splash-bar::after { transform: scaleX(1); }
 @media (prefers-reduced-motion: reduce) { .splash { display: none; } }
 .update-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 4px 0 8px; }
 .update-btn { color: var(--brand-dot); border-color: color-mix(in srgb, var(--brand-dot) 50%, var(--line)); }
