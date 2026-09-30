@@ -7,49 +7,49 @@
 
 :root {
   color-scheme: light;
-  --bg: #e6dfd3;
-  --canvas: #cdc5b6;
-  --panel: #f2ede4;
-  --surface: #f8f4ed;
-  --raised: #e3dbce;
-  --raised-hover: #d8cfc0;
-  --field: #fbf8f2;
-  --hover: rgba(23, 18, 12, 0.06);
-  --selected: rgba(23, 18, 12, 0.1);
-  --line: rgba(23, 18, 12, 0.13);
-  --line-strong: rgba(23, 18, 12, 0.24);
-  --text: #17120c;
-  --text-2: #2e261c;
-  --muted: #62584a;
-  --dim: #75695a;
-  --accent: #7a4a1f;
-  --edge: rgba(23, 18, 12, 0.45);
-  --accent-bg: #8a5829;
-  --accent-bg-hover: #6a4019;
-  --seg-on: #fbf8f2;
-  --well: #e2dace;
+  --bg: #e9e4db;
+  --canvas: #d6d0c5;
+  --panel: #efebe4;
+  --surface: #f3efe8;
+  --raised: #e4ded4;
+  --raised-hover: #dbd4c8;
+  --field: #f6f3ee;
+  --hover: rgba(40, 33, 25, 0.05);
+  --selected: rgba(40, 33, 25, 0.08);
+  --line: rgba(40, 33, 25, 0.1);
+  --line-strong: rgba(40, 33, 25, 0.17);
+  --text: #3a322a;
+  --text-2: #4a4137;
+  --muted: #7a7064;
+  --dim: #877c6f;
+  --accent: #8f6135;
+  --edge: rgba(40, 33, 25, 0.3);
+  --accent-bg: #c69a68;
+  --accent-bg-hover: #b88a57;
+  --seg-on: #f6f3ee;
+  --well: #e2dcd2;
   --brand-dot: #b87a38;
   --mark-1: #d6a458;
   --mark-2: #a8712f;
   --mark-3: #6f4520;
-  --accent-hover: #4f2f12;
-  --accent-soft: rgba(138, 88, 41, 0.12);
-  --on-accent: #fff7ea;
+  --accent-hover: #6f4a26;
+  --accent-soft: rgba(176, 124, 71, 0.12);
+  --on-accent: #2b1d10;
   --good: #16a36e;
   --warn: #d9651b;
-  --danger: #e0364c;
-  --track: #b5ab9b;
-  --fill: rgba(138, 88, 41, 0.6);
-  --thumb: #17120c;
-  --thumb-fill: #fbf8f2;
-  --thumb-ring: #62584a;
+  --danger: #c9485a;
+  --track: #c3baad;
+  --fill: rgba(176, 124, 71, 0.55);
+  --thumb: #4a4137;
+  --thumb-fill: #f6f3ee;
+  --thumb-ring: #7a7064;
   --sec-head: rgba(23, 18, 12, 0.025);
   --track-veil: rgba(251, 248, 242, 0.3);
-  --glass: rgba(242, 237, 228, 0.95);
-  --scrim: rgba(20, 20, 26, 0.35);
-  --chart-bg: #ebe5da;
-  --chart-grid: rgba(23, 18, 12, 0.08);
-  --chart-line: rgba(23, 18, 12, 0.45);
+  --glass: rgba(239, 235, 228, 0.95);
+  --scrim: rgba(40, 33, 25, 0.28);
+  --chart-bg: #ece7df;
+  --chart-grid: rgba(40, 33, 25, 0.07);
+  --chart-line: rgba(40, 33, 25, 0.35);
   --shadow: 0 1px 0 rgba(0, 0, 0, 0.04);
   --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.14);
   --font: "Geist", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -1017,3 +1017,9 @@ body.gated { overflow: hidden; }
 .val { color: var(--text); }
 .ctl.changed .val { color: var(--accent); }
 .ph-group-head h2 { font: 400 19px/1 var(--display); text-transform: uppercase; letter-spacing: 0.01em; }
+
+/* Delete confirmation */
+.dlg.confirm-delete { width: min(400px, calc(100vw - 32px)); }
+.cd-thumbs { display: flex; gap: 6px; padding: 20px 20px 0; }
+.cd-thumbs img { width: 72px; height: 54px; object-fit: cover; border: 1px solid var(--line); }
+.confirm-delete .hint { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }

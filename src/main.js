@@ -1231,8 +1231,32 @@ function commitPendingDelete() {
   finalizeDelete(removed.map(([e]) => e));
 }
 
-// One click: delete with Undo.
+// Two clicks: every delete (the photo's trash button, the toolbar, the menus, the Delete key) asks in
+// a dialog in the middle of the screen first; after that there's still Undo for a few seconds.
 function deletePhotos(ids) {
+  const list = ids.map((id) => app.images.find((x) => x.id === id)).filter(Boolean);
+  if (!list.length) return;
+  const n = list.length, one = n === 1;
+  const dlg = el('dialog', { class: 'dlg confirm-delete' });
+  const close = () => { dlg.close(); dlg.remove(); };
+  const go = el('button', { class: 'btn danger', type: 'button', onclick: () => { close(); deleteNow(ids); } }, one ? 'Delete' : `Delete ${n}`);
+  const thumbs = list.slice(0, 4).filter((e) => e.thumbUrl);
+  dlg.append(
+    thumbs.length ? el('div', { class: 'cd-thumbs' }, ...thumbs.map((e) => el('img', { src: e.thumbUrl, alt: '' }))) : '',
+    el('div', { class: 'dlg-head' }, el('h2', {}, one ? 'Delete this photo?' : `Delete ${n} photos?`)),
+    el('div', { class: 'dlg-body' }, el('p', { class: 'hint' }, one
+      ? `“${list[0].name}” and its edits are removed from your library${cloud.cloud.available ? ' and Cloud sync' : ''}.`
+      : `They and their edits are removed from your library${cloud.cloud.available ? ' and Cloud sync' : ''}.`)),
+    el('div', { class: 'dlg-foot' }, el('button', { class: 'btn ghost', type: 'button', onclick: close }, 'Cancel'), go),
+  );
+  dlg.addEventListener('cancel', (ev) => { ev.preventDefault(); close(); });
+  dlg.addEventListener('click', (ev) => { if (ev.target === dlg) close(); });   // click outside
+  document.body.append(dlg);
+  dlg.showModal();
+  go.focus();
+}
+
+function deleteNow(ids) {
   if (!ids.length) return;
   commitPendingDelete();
   const removed = detachPhotos(ids);
