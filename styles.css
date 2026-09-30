@@ -389,7 +389,14 @@ body.dragging .drop-veil { display: grid; }
 .panel-body { flex: 1; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
 .panel-view { padding-bottom: 32px; }
 body:not(.has-image) .panel-body { opacity: 0.35; pointer-events: none; }
-.edit-tools { display: flex; align-items: center; gap: 6px; padding: 6px 12px 8px; }
+.edit-tools { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: stretch; gap: 6px; padding: 6px 12px 8px; }
+/* Auto, Color, B&W and More are four equal cells: the Color / B&W pair is unwrapped into the grid. */
+.edit-tools > .grow { display: none; }
+.edit-tools .treatment { display: contents; }
+.edit-tools > .btn, .edit-tools .seg-btn, .edit-tools > .icon-btn { width: auto; height: 30px; margin: 0; padding: 0 6px; border-radius: 2px; }
+.edit-tools .seg-btn { border: 1px solid var(--line); background: transparent; font-size: 11px; font-weight: 500; }
+.edit-tools .seg-btn.on { border-color: var(--line-strong); background: var(--seg-on); box-shadow: none; }
+.edit-tools > .icon-btn { border: 1px solid var(--line); }
 
 .sec { border-top: 1px solid var(--line-strong); }
 .sec-head { display: flex; align-items: center; gap: 9px; height: 38px; padding: 0 8px 0 12px; cursor: pointer; font-weight: 600; font-size: 12.5px; color: var(--text); background: var(--sec-head); }
