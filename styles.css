@@ -411,15 +411,6 @@ body:not(.has-image) .panel-body { opacity: 0.35; pointer-events: none; }
 .range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 3px var(--accent-soft), 0 0 0 1px var(--accent); }
 .val { width: 54px; height: 18px; padding: 0 3px; border-radius: 4px; border: 1px solid transparent; background: transparent; text-align: right; font: 11.5px var(--mono); color: var(--text-2); user-select: text; -webkit-user-select: text; }
 .ctl.changed .val { color: var(--text); }
-/* Editor panel: name, track and value on one row (as in Lightroom), so twice as many controls fit.
-   Touch screens keep the taller stacked layout for easier dragging. */
-@media (pointer: fine) {
-  .panel-body .ctl { display: grid; grid-template-columns: 92px minmax(0, 1fr) 48px; align-items: center; column-gap: 8px; padding: 2px 0; }
-  .panel-body .ctl-top { display: contents; }
-  .panel-body .ctl label { grid-column: 1; grid-row: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .panel-body .ctl .range { grid-column: 2; grid-row: 1; }
-  .panel-body .ctl .val { grid-column: 3; grid-row: 1; width: 100%; }
-}
 .val:hover { border-color: var(--line-strong); }
 .val:focus { outline: none; border-color: var(--accent); background: var(--field); color: var(--text); }
 .size-range { width: 90px; }
