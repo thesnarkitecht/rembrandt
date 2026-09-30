@@ -1,7 +1,8 @@
 // App controller: image library, view (zoom/pan), tools, history, keyboard, persistence.
 import { Engine } from '../engine/src/engine.js';
 import { BRAND } from './brand.js';
-import { planName } from './pricing.js';
+import { planName, isPaid } from './pricing.js';
+import { gated, updateGate } from './hosted-gate.js';
 import { readLensProfile } from './lens.js';
 import { isMobileApp, isTouch } from './platform.js';
 import { refreshUnlock, isUnlocked } from './unlock.js';
@@ -515,7 +516,7 @@ let accountPage = null;
 async function paintStorage(node) {
   const cl = cloud.cloud, info = cl.info || {};
   let used, total, label;
-  if (cl.provider === 'lumen' && cl.plan === 'cloud' && info.quota_bytes) { used = info.storage_bytes || 0; total = info.quota_bytes; label = 'Online storage'; }
+  if (cl.provider === 'lumen' && isPaid(cl.plan) && info.quota_bytes) { used = info.storage_bytes || 0; total = info.quota_bytes; label = 'Online storage'; }
   else {
     const est = await catalog.storageEstimate();
     if (!est?.quota) { node.hidden = true; return; }
@@ -2005,7 +2006,10 @@ function boot() {
   accountPage = buildAccountPage(app, accountHooks);
   $('accountPage').replaceWith(accountPage.el);
   app.cloudState = () => cloud.cloud;
-  cloud.onCloudChange(() => { library?.repaintStorage?.(); paintTopAvatar(); });
+  cloud.onCloudChange(() => { library?.repaintStorage?.(); paintTopAvatar(); gate(); });
+  // The website's editor (CONFIG.hosted) opens for Cloud subscribers; everyone else signs in first.
+  const gate = () => updateGate(app, cloud.cloud, async () => { await startSync(); gate(); });
+  if (gated()) gate();
   window.lumen = app; // handy for debugging from the console
   albums.loadAlbums().then(loadCatalog).then(() => folders.loadFolders().catch((e) => console.warn(e))).then(() => {
     refreshLibrary();

@@ -27,7 +27,7 @@
         "default-src": "'self'",
         "script-src": "'self' 'wasm-unsafe-eval'",
         "worker-src": "'self' blob:",
-        "connect-src": "'self' ipc: http://ipc.localhost https://*.supabase.co https://*.r2.cloudflarestorage.com https://ims-na1.adobelogin.com https://lr.adobe.io https://api.github.com",
+        "connect-src": "'self' ipc: http://ipc.localhost https://*.supabase.co https://*.backblazeb2.com https://ims-na1.adobelogin.com https://lr.adobe.io https://api.github.com",
         "img-src": "'self' data: blob: https:",
         "style-src": "'self' 'unsafe-inline'",
         "font-src": "'self' data:",

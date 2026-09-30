@@ -6,6 +6,7 @@ const DEFAULTS = {
   supportUrl: '',                     // a donation page; the Support button only shows when this is set
   siteUrl: '',                        // the Rembrandt website (pricing page, share links, OAuth redirects); defaults to this page's origin
   serverUrl: undefined,               // set by rembrandt-server ('' = same origin): its photos folder
+  hosted: false,                      // true only on the official website's editor: it opens for Cloud sync subscribers
 
   // Cloud sync (optional, paid). Accounts live on a Supabase project; the anon key is public by
   // design (row-level security protects the data). Without these, Cloud sync is simply hidden.
@@ -13,10 +14,12 @@ const DEFAULTS = {
   supabaseAnonKey: '',
   paddleClientToken: '',    // Paddle Billing client-side token (checkout on the website)
   paddleEnvironment: 'sandbox',
-  prices: {                 // Paddle price ids
-    syncMonthly: '', syncYearly: '',            // Cloud Editing (no storage)
-    cloudMonthly: '', cloudYearly: '',          // Cloud · 128 GB
-    cloudPlusMonthly: '', cloudPlusYearly: '',  // Cloud · 1 TB
+  prices: {                 // Paddle price ids for each Cloud sync size (see src/pricing.js)
+    cloud_128_monthly: '', cloud_128_yearly: '',
+    cloud_192_monthly: '', cloud_192_yearly: '',
+    cloud_256_monthly: '', cloud_256_yearly: '',
+    cloud_512_monthly: '', cloud_512_yearly: '',
+    cloud_1tb_monthly: '', cloud_1tb_yearly: '',
   },
 
   // Phone apps (used by the rembrandt-mobile build).

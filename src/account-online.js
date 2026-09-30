@@ -2,6 +2,7 @@
 // someone turns Cloud sync on in Settings.
 // Copyright © 2026 the Rembrandt contributors. Licensed under the GNU GPL v3 or later (see LICENSE).
 import { el } from './util.js';
+import { PLANS } from './pricing.js';
 import { button } from './ui.js';
 import * as sb from './backend/supabase.js';
 import { backendConfigured } from './config.js';
@@ -103,7 +104,7 @@ export function openExternal() {
 
 export function onlineSection(app, cl, changed, openPlan) {
   if (!cl.signedIn) return signInForm(app, changed);
-  const planName = { free: 'Free', sync: 'Cloud Editing', cloud: 'Cloud Storage', cloud_plus: 'Cloud Storage 1 TB' }[cl.plan] || cl.plan;
+  const planName = PLANS[cl.plan]?.name || 'Free';
   const out = button('Sign out', async () => { await sb.signOut(); await changed(); }, 'sm ghost');
   return el('div', { class: 'online' },
     el('div', { class: 'row between' },

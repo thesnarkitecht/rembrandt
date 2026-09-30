@@ -962,3 +962,24 @@ body[data-mode="account"] .top-actions > :not(.avatar-btn), body[data-mode="libr
 .folder-row .i { width: 16px; height: 16px; color: var(--muted); }
 .folder-row .i:last-child { transform: rotate(-90deg); }
 .folder-list > .hint { padding: 12px; margin: 0; }
+
+/* The website's editor without a Cloud plan (hosted-gate.js) */
+body.gated { overflow: hidden; }
+.gate { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 16px; background: var(--bg); overflow-y: auto; }
+.gate-bg { position: absolute; inset: 0; pointer-events: none; background:
+  radial-gradient(40% 50% at 20% 20%, color-mix(in srgb, var(--mark-2, #c8964f) 16%, transparent), transparent 70%),
+  radial-gradient(45% 55% at 85% 80%, color-mix(in srgb, var(--mark-1, #7a5a3a) 14%, transparent), transparent 70%);
+  animation: gate-drift 18s ease-in-out infinite alternate; }
+@keyframes gate-drift { from { transform: translate3d(-2%, -1%, 0) scale(1); } to { transform: translate3d(2%, 1.5%, 0) scale(1.06); } }
+@media (prefers-reduced-motion: reduce) { .gate-bg { animation: none; } }
+.gate-card { position: relative; width: min(440px, 100%); padding: 32px 28px 24px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.35); text-align: center; }
+.gate-card h1 { font-size: 22px; margin: 12px 0 6px; }
+.gate-card .lead { color: var(--text-2); margin: 0 0 18px; }
+.gate-card .signin { text-align: left; }
+.gate-mark { width: 44px; height: 44px; margin: 0 auto; }
+.gate-mark svg { width: 100%; height: 100%; }
+.gate-links { margin: 20px 0 0; font-size: 12.5px; color: var(--muted); }
+.gate-links a, .gate-card .hint a { color: var(--text-2); }
+.row-btns.center { justify-content: center; }
+.seg.sizes { display: grid; grid-template-columns: repeat(5, 1fr); }
+.plan-one { max-width: none; }

@@ -15,7 +15,7 @@ import { prefs, savePrefs } from './account.js';
 import { getAppearance, setAppearance } from './theme.js';
 import { signInForm, openExternal } from './account-online.js';
 import { updateRow } from './update-check.js';
-import { PLANS, planName, isPaid, hasCloudStorage } from './pricing.js';
+import { PLANS, TIERS, planName, isPaid, hasCloudStorage } from './pricing.js';
 import { ring, fmtBytes } from './ring.js';
 import { BRAND } from './brand.js';
 import { isMobileApp, isTauri, isIOS } from './platform.js';
@@ -41,6 +41,7 @@ export function buildAccountPage(app, hooks) {
   root.append(nav, body);
   let current = isMobileApp && !isUnlocked() ? 'unlock' : 'cloud';
   let period = 'year';
+  let pick = null;      // the Cloud sync size shown in the plan picker
   let turningOn = false;   // the user switched Cloud sync on and is signing in
   let pricesLoaded = false; // phone: store prices asked for once
   const cl = () => app.cloudState();
@@ -110,11 +111,11 @@ export function buildAccountPage(app, hooks) {
         el('div', {}, el('h2', {}, on ? (isPaid(c.plan) ? 'Cloud sync is on' : 'One more step: choose a plan') : 'Turn on Cloud sync?'), el('p', { class: 'hint' }, status)),
         sw),
       !on && !turningOn ? el('ul', { class: 'cloud-perks' }, [
-        'Your edits, ratings and albums on every device: computer, phone and browser',
-        'Back up your originals, or link them from Google Photos and use no storage',
+        'Your photos, edits and albums on every device: computer, phone and browser',
+        'Edit in any browser at the Rembrandt website, nothing to install',
         'Share links to your photos',
       ].map((t) => el('li', {}, icon('check'), t))) : null,
-      !on && !turningOn && backendConfigured() ? el('p', { class: 'hint' }, isMobileApp ? 'Editing, AI and export never need it.' : `From $${PLANS.sync.year} a year. Editing, AI and export never need it.`) : null));
+      !on && !turningOn && backendConfigured() ? el('p', { class: 'hint' }, isMobileApp ? 'Editing, AI and export never need it.' : `From $${TIERS[0].month} a month. Editing, AI and export never need it.`) : null));
 
     if (!on) {
       if (turningOn && backendConfigured()) {
@@ -167,7 +168,7 @@ export function buildAccountPage(app, hooks) {
       out.push(card('Plan',
         el('div', { class: 'plan-now' },
           el('div', {}, el('div', { class: 'plan-now-name' }, planName(cur)),
-            el('div', { class: 'hint' }, `${PLANS[cur]?.storage ? `${fmtBytes(PLANS[cur].storage)} online storage` : 'Edits sync everywhere · photos stay where they are'}${info.period_end ? ` · renews ${fmtDate(info.period_end)}` : ''}`)),
+            el('div', { class: 'hint' }, `${PLANS[cur].size} for your photos · sync and the web editor${info.period_end ? ` · renews ${fmtDate(info.period_end)}` : ''}`)),
           manage),
         el('p', { class: 'hint' }, note)));
     }
@@ -186,23 +187,22 @@ export function buildAccountPage(app, hooks) {
           else if (r === 'pending') toast('Waiting for approval. Cloud sync turns on when the purchase goes through.');
         });
       };
-      const tier = (p, blurb, feats, featured) => {
-        const isCur = cur === p.id;
-        const price = (isMobileApp && storePrice(p.store[period])) || `$${p[period]}`;
-        const b = button(isCur ? 'Current plan' : isPaid(cur) ? `Switch to ${p.name}` : `Get ${p.name}`, () => choose(p, b), isCur ? 'ghost' : 'primary');
-        if (isCur) b.disabled = true;
-        return el('div', { class: 'tier' + (isCur ? ' current' : '') + (featured ? ' featured' : '') },
-          el('div', { class: 'tier-name' }, p.name, featured ? el('span', { class: 'tier-tag' }, 'Most popular') : null),
-          el('div', { class: 'tier-price' }, el('b', {}, price), el('span', {}, period === 'month' ? 'per month' : 'per year')),
-          el('div', { class: 'tier-blurb' }, blurb),
-          el('ul', {}, feats.map((f) => el('li', {}, icon('check'), f))),
-          b);
-      };
-      out.push(el('div', { class: 'tiers-head' }, el('h2', {}, isPaid(cur) ? 'Plans' : 'Choose a plan'), per.el));
-      out.push(el('div', { class: 'tiers' },
-        tier(PLANS.sync, 'Edit anywhere. Your photos stay where they are.', ['Edits, ratings and albums on every device', 'Link Google Photos, Drive, Dropbox, OneDrive: no storage used', 'Share links']),
-        tier(PLANS.cloud, 'Cloud Editing, plus your originals kept safe online.', ['Everything in Cloud Editing', `${fmtBytes(PLANS.cloud.storage)} for original photos`, 'Open any photo on any device'], true),
-        tier(PLANS.cloud_plus, 'For large RAW libraries.', ['Everything in Cloud Storage', `${fmtBytes(PLANS.cloud_plus.storage)} for original photos`, 'Priority support'])));
+      // One plan in five sizes: pick the storage, see the price.
+      if (!pick || !PLANS[pick]) pick = isPaid(cur) ? cur : 'cloud_256';
+      const p = PLANS[pick];
+      const isCur = cur === p.id;
+      const local = isMobileApp && storePrice(p.store[period]);  // the store's price, in the local currency
+      const price = local || `$${p[period]}`;
+      const b = button(isCur ? 'Current plan' : isPaid(cur) ? `Switch to ${p.size}` : `Get Cloud sync · ${p.size}`, () => choose(p, b), isCur ? 'ghost' : 'primary');
+      if (isCur) b.disabled = true;
+      const sizes = segmented(TIERS.map((t) => ({ value: t.id, label: t.size })), pick, (v) => { pick = v; render(); }, 'sizes');
+      out.push(el('div', { class: 'tiers-head' }, el('h2', {}, isPaid(cur) ? 'Change plan' : 'Choose your storage'), per.el));
+      out.push(el('div', { class: 'tier plan-one' + (isCur ? ' current' : '') },
+        el('div', { class: 'field' }, el('span', {}, 'Storage for your original photos'), sizes.el),
+        el('div', { class: 'tier-price' }, el('b', {}, price), el('span', {}, period === 'month' ? 'per month' : local ? 'per year' : `per year · $${(p.year / 12).toFixed(2)}/mo`)),
+        el('ul', {}, ['Your photos, edits, ratings and albums on every device', 'The web editor at the Rembrandt website, in any browser',
+          'Link Google Photos, Drive, Dropbox and OneDrive without using storage', 'Share links to your photos'].map((f) => el('li', {}, icon('check'), f))),
+        b));
     }
 
     if (isMobileApp) {

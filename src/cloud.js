@@ -1,9 +1,10 @@
 // Online account & sync.
 // Copyright © 2026 the Rembrandt contributors. Licensed under the GNU GPL v3 or later (see LICENSE).
 //
-// Accounts (email, Google, Apple or Microsoft) live in Supabase; originals in Cloudflare R2.
+// Accounts (email, Google, Apple or Microsoft) live in Supabase; originals in Backblaze B2.
 // Paid plans sync edits, ratings, flags, albums and thumbnails; Cloud plans also back up originals
 // so photos can be edited anywhere. Without a configured backend the app works offline.
+import { isPaid } from './pricing.js';
 import { backendConfigured } from './config.js';
 import * as sb from './backend/supabase.js';
 
@@ -62,7 +63,7 @@ const lumenProvider = {
       console.warn('Could not load plan', e);
       state.plan = 'free';
     }
-    state.available = ['sync', 'cloud', 'cloud_plus'].includes(state.plan);
+    state.available = isPaid(state.plan);
     state.status = state.available ? 'syncing' : 'offline';
     return state.available;
   },
@@ -194,13 +195,13 @@ export function deletePhoto(key) {
   if (!state.available || !key) return;
   schedule(docId(key), null);
   if (storesOriginals()) {
-    sb.fn('r2', { op: 'delete', photoId: docId(key) }).catch(() => {});
+    sb.fn('storage', { op: 'delete', photoId: docId(key) }).catch(() => {});
   }
 }
 
 // ------------------------------------------------------------------ original files (Cloud plan)
 
-export const storesOriginals = () => state.provider === 'lumen' && (state.plan === 'cloud' || state.plan === 'cloud_plus');
+export const storesOriginals = () => state.provider === 'lumen' && isPaid(state.plan);
 
 export async function uploadOriginal(rec, file) {
   if (!storesOriginals() || !rec?.key || !file) return false;
@@ -208,7 +209,7 @@ export async function uploadOriginal(rec, file) {
   clearTimeout(timers.get(id));
   await flush(id); // the row must exist before the object is recorded
   try {
-    const { url, type } = await sb.fn('r2', { op: 'put', photoId: id, size: file.size, type: file.type || 'application/octet-stream' });
+    const { url, type } = await sb.fn('storage', { op: 'put', photoId: id, size: file.size, type: file.type || 'application/octet-stream' });
     // The upload link only accepts this exact size and type.
     const r = await fetch(url, { method: 'PUT', body: file, headers: { 'Content-Type': type || file.type || 'application/octet-stream' } });
     if (!r.ok) throw new Error(`Upload failed (${r.status})`);
@@ -222,7 +223,7 @@ export async function uploadOriginal(rec, file) {
 export async function fetchOriginal(rec) {
   if (state.provider !== 'lumen' || !state.signedIn || !rec?.key) return null;
   try {
-    const { url } = await sb.fn('r2', { op: 'get', photoId: docId(rec.key) });
+    const { url } = await sb.fn('storage', { op: 'get', photoId: docId(rec.key) });
     const r = await fetch(url);
     if (!r.ok) return null;
     const blob = await r.blob();

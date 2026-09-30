@@ -12,7 +12,7 @@ export const listShares = () => sb.rest(`shares?select=token,title,item_count,cr
 export const revokeShare = (token) => sb.fn('share', { op: 'revoke', token });
 
 export const listOnlineOriginals = () => sb.rest(`photos?select=id,key,name,original_size,updated_at&user_id=eq.${uid()}&original_key=not.is.null&deleted=eq.false&order=original_size.desc&limit=200`);
-export const removeOnlineOriginal = (photoId) => sb.fn('r2', { op: 'delete', photoId });
+export const removeOnlineOriginal = (photoId) => sb.fn('storage', { op: 'delete', photoId });
 
 
 export const exportAccountData = () => sb.fn('account', { op: 'export' });
