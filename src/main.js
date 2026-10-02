@@ -2005,7 +2005,7 @@ function watchDesktopSignIn() {
   const check = async () => {
     try {
       const r = await t.invoke('take_auth_code');
-      if (!r) return;
+      if (!r?.code) return;
       if (r.state?.startsWith('adobe')) { await adobe.completeAdobeSignIn(r.code, r.state); return; }
       await sb.completeSignIn(r.code); app.toast('Signed in'); await startSync(); paintTopAvatar();
     } catch (e) { app.toast(`Sign-in failed: ${e.message}`); }
