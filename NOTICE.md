@@ -6,6 +6,7 @@
 | `native/LibRaw/`, `src/vendor/libraw/` | LibRaw, used under LGPL-2.1 (see below) |
 | `src/vendor/mediapipe/` | MediaPipe Tasks Vision 1.0.1, Apache-2.0 |
 | `models/` | MediaPipe / Google models, Apache-2.0 (see `models/README.md`) |
+| `src/vendor/nsfw/` | TensorFlow.js 4.22.0, Apache-2.0; NSFWJS 4.3.0 model, MIT (see `src/vendor/nsfw/README.md`) |
 | `src/fonts/` | Geist and Geist Mono, SIL Open Font License 1.1 (`src/fonts/OFL.txt`) |
 
 ## Additional permission: app stores (GPL-3.0 section 7)
@@ -26,6 +27,13 @@ this distribution under `native/LibRaw/`.
 © Google LLC. `src/vendor/mediapipe/` holds the unmodified `@mediapipe/tasks-vision` runtime
 (source map reference removed); `models/` holds the unmodified model files listed in
 `models/README.md`. Licensed under the Apache License 2.0 (`src/vendor/mediapipe/LICENSE`).
+
+## TensorFlow.js 4.22.0 (Apache-2.0) and the NSFWJS model (MIT)
+`src/vendor/nsfw/tf.min.js` is the unmodified TensorFlow.js browser bundle (source map reference removed), © Google LLC, licensed
+under the Apache License 2.0 (`src/vendor/nsfw/LICENSE-tfjs`). `model.json` and
+`group1-shard1of1.bin` are the MobileNetV2 model from NSFWJS 4.3.0, © 2019 Infinite Red, Inc.,
+licensed under the MIT License (`src/vendor/nsfw/LICENSE-nsfwjs`), converted from the package's
+JavaScript copies without changing the weights.
 
 ## Published methods used by the Rembrandt Engine
 The engine is an independent implementation of published methods: sRGB (IEC 61966-2-1), ITU-R

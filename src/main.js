@@ -33,6 +33,7 @@ import { paintAvatar, prefs } from './account.js';
 import { buildAccountPage } from './account-page.js';
 import { listOnlineOriginals } from './backend/account-api.js';
 import * as cloud from './cloud.js';
+import * as syncCheck from './sync-check.js';
 import * as sb from './backend/supabase.js';
 import { backendConfigured, CONFIG } from './config.js';
 import * as albums from './albums.js';
@@ -592,9 +593,9 @@ async function mergeRemote(r) {
   if (!r?.key) return;
   let e = app.images.find((x) => x.key === r.key);
   if (!e) {
-    e = newEntry({ id: uid(), key: r.key, name: r.name, addedAt: Date.now(), rating: r.rating, flag: r.flag, params: r.params, edited: r.edited, updatedAt: r.updatedAt, w: r.w, h: r.h, kind: r.kind, raw: r.raw, cloudThumb: r.thumb, linked: r.source || null, offline: true, stored: false });
+    e = newEntry({ id: uid(), key: r.key, name: r.name, addedAt: Date.now(), rating: r.rating, flag: r.flag, params: r.params, edited: r.edited, updatedAt: r.updatedAt, w: r.w, h: r.h, kind: r.kind, raw: r.raw, cloudThumb: r.thumb, linked: r.source || null, offline: true, stored: false, screen: 'ok' });
     app.images.push(e);
-    await catalog.putPhoto({ id: e.id, key: e.key, name: e.name, addedAt: e.addedAt, rating: e.rating, flag: e.flag, params: e.params, edited: e.edited, updatedAt: e.updatedAt, w: e.w, h: e.h, kind: e.kind, raw: e.raw, cloudThumb: e.cloudThumb, linked: e.linked, offline: true, stored: false });
+    await catalog.putPhoto({ id: e.id, key: e.key, name: e.name, addedAt: e.addedAt, rating: e.rating, flag: e.flag, params: e.params, edited: e.edited, updatedAt: e.updatedAt, w: e.w, h: e.h, kind: e.kind, raw: e.raw, cloudThumb: e.cloudThumb, linked: e.linked, offline: true, stored: false, screen: 'ok' });
     if (r.thumb) { const b = await (await fetch(r.thumb)).blob(); thumbURL(e, b); catalog.putThumb(e.id, b); }
     return;
   }
@@ -613,6 +614,45 @@ async function mergeRemote(r) {
   }
 }
 
+// Nothing syncs until the owner has seen the Cloud warning on this device and each photo has passed
+// the on-device check; flagged photos stay here (On this device only).
+let syncAcked = null;
+cloud.setSyncGate({
+  cleared: (e) => !!syncAcked?.done && syncCheck.cleared(e),
+  check: async (e) => { if (!syncAcked) return 'later'; await syncAcked; return syncCheck.check(e); },
+});
+let keptHere = 0;
+const toastKept = debounce(() => {
+  const n = keptHere; keptHere = 0;
+  if (!n) return;
+  app.toast(`${n === 1 ? 'A photo looks' : `${n} photos look`} explicit, so ${n === 1 ? 'it stays' : 'they stay'} on this device`, { ms: 7000, action: { label: 'Show', onClick: () => { setMode('library'); library?.showView('local'); } } });
+}, 1200);
+syncCheck.onFlagged((e) => {
+  // In case it synced before the check existed.
+  if (cloud.cloud.available) cloud.deletePhoto(e.key);
+  keptHere++;
+  toastKept();
+  refreshLibrary();
+});
+async function keepOnDevice(ids) {
+  const list = app.images.filter((e) => ids.includes(e.id));
+  await syncCheck.keepLocal(list);
+  if (cloud.cloud.available) for (const e of list) cloud.deletePhoto(e.key);
+  refreshLibrary();
+  app.toast(`${list.length === 1 ? 'Kept' : `Kept ${list.length} photos`} on this device only`);
+}
+async function syncAnyway(ids) {
+  const list = app.images.filter((e) => ids.includes(e.id));
+  if (!list.length || !(await syncCheck.confirmSyncAnyway(list.length))) return;
+  await syncCheck.allowSync(list);
+  for (const e of list) {
+    cloud.pushPhoto(e);
+    const f = cloud.storesOriginals() && !e.src && !e.linked && (e.file || (await catalog.getFile(e.id)));
+    if (f) cloud.uploadOriginal(e, f);
+  }
+  refreshLibrary();
+}
+
 let stopSync = null;
 async function startSync() {
   stopSync?.();
@@ -625,6 +665,11 @@ async function startSync() {
   const st = await cloud.initCloud();
   paintTopAvatar();
   if (!st.available) return;
+  if (!syncAcked) {
+    syncAcked = syncCheck.acknowledgeSync(st.uid);
+    syncAcked.then(() => { syncAcked.done = true; });
+  }
+  await syncAcked;
   const remote = await cloud.pullAll();
   const seen = new Set();
   for (const r of remote) { seen.add(r.key); await mergeRemote(r); }
@@ -802,7 +847,7 @@ async function importItems(items, opts = {}) {
       cloud.pushPhoto(e);
       // Photos in synced folders already live on disk; only copied-in photos are backed up online.
       // Linked photos stay in the service they came from and never use Rembrandt storage.
-      if (!it.src && !it.linked && cloud.storesOriginals()) cloud.uploadOriginal(e, file).then((ok) => { if (!ok) app.toast(`${e.name} couldn't be stored online — it stays on this device`); });
+      if (!it.src && !it.linked && cloud.storesOriginals()) cloud.uploadOriginal(e, file).then((ok) => { if (ok === false) app.toast(`${e.name} couldn't be stored online — it stays on this device`); });
       it.lr?.collections.forEach((c) => (collections.get(c) || collections.set(c, []).get(c)).push(e.key));
       first ||= e;
       done.push(e);
@@ -2014,7 +2059,7 @@ function boot() {
   app.updateUndo();
   app.buildPanel();
   library = buildLibrary(app, {
-    openInEditor, removePhotos, deletePhotos, setRating, setFlag, syncSettings, exportPhotos,
+    openInEditor, removePhotos, deletePhotos, keepOnDevice, syncAnyway, syncOn: () => cloud.cloud.available, setRating, setFlag, syncSettings, exportPhotos,
     copyEdits: copyEditsFrom, pasteEdits: pasteEditsTo, resetEdits, photoMenu, presetMenu, pointAnchor, clipboard: batch.clipboard, describeClip: batch.describeClip,
     importFiles: () => openImporter(),
     syncFolder: (f) => (f ? syncFolder(f) : addSyncedFolder()),

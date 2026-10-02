@@ -8,6 +8,7 @@ import { icon } from './icons.js';
 import { iconButton, button, popMenu } from './ui.js';
 import * as A from './albums.js';
 import * as F from './folders.js';
+import { localOnly } from './sync-check.js';
 
 const PREF = 'lumen:library';
 const DEF = { view: 'all', sort: 'captured', size: 200, sidebar: true };
@@ -23,6 +24,7 @@ export const SMART = [
   { id: 'edited', name: 'Edited', icon: 'edit', test: (e) => !!e.edited },
   { id: 'raw', name: 'RAW', icon: 'raw', test: (e) => !!e.raw },
   { id: 'rejected', name: 'Rejected', icon: 'x', test: (e) => e.flag === -1 },
+  { id: 'local', name: 'On this device only', icon: 'laptop', test: localOnly },
 ];
 const SORTS = [['captured', 'Date taken (newest)'], ['captured-asc', 'Date taken (oldest)'], ['added', 'Date added'], ['name', 'File name'], ['rating', 'Rating']];
 
@@ -97,6 +99,19 @@ export function buildLibrary(app, api) {
       { label: 'Export album…', icon: 'export', onClick: () => api.exportPhotos(albumPhotos(a).map((x) => x.id)) },
       { sep: true },
       { label: 'Delete album', icon: 'trash', onClick: async () => { await A.deleteAlbum(a.id); if (prefs.view === 'album:' + a.id) setView('albums'); else refresh(); app.toast(`Deleted “${a.name}”. The photos stay in your library.`); } },
+    ];
+  }
+
+  // Cloud sync: keep photos off Cloud, or sync ones the on-device check kept here.
+  function syncItems() {
+    if (!api.syncOn?.()) return [];
+    const list = app.images.filter((e) => selected.has(e.id));
+    const here = list.filter(localOnly).map((e) => e.id), rest = list.filter((e) => !localOnly(e) && !(e.offline && !e.stored)).map((e) => e.id);
+    if (!here.length && !rest.length) return [];
+    return [
+      { sep: true },
+      rest.length ? { label: 'Keep on this device only', icon: 'laptop', onClick: () => { selected.clear(); api.keepOnDevice(rest); } } : null,
+      here.length ? { label: 'Sync anyway…', icon: 'cloud', onClick: () => { selected.clear(); api.syncAnyway(here); } } : null,
     ];
   }
 
@@ -209,6 +224,7 @@ export function buildLibrary(app, api) {
           n === 1 ? { label: 'Choose what to copy…', icon: 'copy', onClick: () => api.copyEdits(ids()[0], true) } : null,
           { label: 'Apply preset…', icon: 'presets', onClick: () => api.presetMenu(ids(), header.querySelector('[aria-label="More"]') || header) },
           { label: n > 1 ? `Reset edits on ${n} photos` : 'Reset edits', icon: 'reset', onClick: () => api.resetEdits(ids()) },
+          ...syncItems(),
           a ? { label: 'Remove from album', icon: 'minus', onClick: async () => { await A.removeFromAlbum(a.id, keysOf(ids())); selected.clear(); refresh(); } } : null,
           { sep: true },
           { label: n > 1 ? `Delete ${n} photos` : 'Delete', icon: 'trash', onClick: () => removeSelected() },
@@ -444,7 +460,10 @@ export function buildLibrary(app, api) {
       total = order.length;
       if (!app.images.length) renderEmpty('library');
       else if (!order.length) renderEmpty('none');
-      else renderPhotos(order);
+      else {
+        if (prefs.view === 'local') content.append(el('p', { class: 'lib-hint local-hint' }, 'These photos stay on this device and never go to Cloud, either because the check on this device found them explicit or because you chose to keep them here. To send one anyway, select it and choose Sync anyway.'));
+        renderPhotos(order);
+      }
     }
     renderHeader(total);
     renderSide();

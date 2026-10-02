@@ -1026,6 +1026,10 @@ body.gated { overflow: hidden; }
 
 /* Delete confirmation */
 .dlg.confirm-delete { width: min(400px, calc(100vw - 32px)); }
+.dlg.confirm-sync { width: min(440px, calc(100vw - 32px)); }
+.confirm-sync .dlg-body { display: grid; gap: 10px; }
+.confirm-sync .hint { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.lib-hint.local-hint { margin: 4px 0 14px; }
 .cd-thumbs { display: flex; gap: 6px; padding: 20px 20px 0; }
 .cd-thumbs img { width: 72px; height: 54px; object-fit: cover; border: 1px solid var(--line); }
 .confirm-delete .hint { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; overflow-wrap: anywhere; }

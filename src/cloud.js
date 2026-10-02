@@ -168,8 +168,15 @@ function schedule(id, body) {
   timers.set(id, setTimeout(() => flush(id), 800));
 }
 
+// Nothing of a photo syncs until the on-device check (sync-check.js) clears it; photos it keeps on
+// this device never sync unless the owner chooses to.
+let gate = null;
+export const setSyncGate = (g) => { gate = g; };
+const pass = async (rec) => !gate || (await gate.check(rec)) === 'ok';
+
 export function pushPhoto(rec, thumbDataUrl) {
   if (!state.available || !rec?.key) return;
+  if (gate && !gate.cleared(rec)) { pass(rec).then((ok) => { if (ok) pushPhoto(rec, thumbDataUrl); }); return; }
   schedule(docId(rec.key), {
     key: rec.key, name: rec.name, rating: rec.rating || 0, flag: rec.flag || 0,
     edited: !!rec.edited, params: rec.params || null, updatedAt: rec.updatedAt || Date.now(),
@@ -203,8 +210,10 @@ export function deletePhoto(key) {
 
 export const storesOriginals = () => state.provider === 'lumen' && isPaid(state.plan);
 
+// Resolves true when stored, false on failure, null when the photo is kept on this device.
 export async function uploadOriginal(rec, file) {
   if (!storesOriginals() || !rec?.key || !file) return false;
+  if (!(await pass(rec))) return null;
   const id = docId(rec.key);
   clearTimeout(timers.get(id));
   await flush(id); // the row must exist before the object is recorded
