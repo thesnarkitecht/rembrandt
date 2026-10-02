@@ -213,7 +213,14 @@ export async function uploadOriginal(rec, file) {
     // The upload link only accepts this exact size and type.
     const r = await fetch(url, { method: 'PUT', body: file, headers: { 'Content-Type': type || file.type || 'application/octet-stream' } });
     if (!r.ok) throw new Error(`Upload failed (${r.status})`);
-    return true;
+    // The upload lands in quarantine; the server moves it into place once it has passed its safety
+    // check, which can take a few seconds for formats checked through the thumbnail.
+    for (let i = 0; ; i++) {
+      try { await sb.fn('storage', { op: 'commit', photoId: id }); return true; } catch (e) {
+        if (e?.code !== 'checking' || i >= 8) throw e;
+        await new Promise((ok) => setTimeout(ok, 1500 * (i + 1)));
+      }
+    }
   } catch (e) {
     failed(e);
     return false;
