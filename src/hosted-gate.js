@@ -3,7 +3,7 @@
 // app, rembrandt-server and any other copy of the web app are free and never show it.
 import { el } from './util.js';
 import { button } from './ui.js';
-import { CONFIG } from './config.js';
+import { CONFIG, backendConfigured } from './config.js';
 import { markSvg } from './brand.js';
 import { TIERS, isPaid } from './pricing.js';
 import { signInForm } from './account-online.js';
@@ -24,7 +24,13 @@ export function updateGate(app, state, refresh) {
     el('a', { href: `${repo}#self-host-it`, target: '_blank', rel: 'noopener' }, 'Self-host it free'), ' · ',
     el('a', { href: `${site}/` }, 'About Rembrandt'));
   card.append(el('div', { class: 'gate-mark', html: markSvg() }));
-  if (!state.signedIn) {
+  if (!backendConfigured()) {
+    // Before Cloud sync opens, the site's editor has nothing to sign in to.
+    card.append(
+      el('h1', {}, 'Rembrandt in your browser'),
+      el('p', { class: 'lead' }, 'The web editor comes with Cloud sync, which is coming soon. Until then, Rembrandt is free on your computer.'),
+      el('div', { class: 'row-btns center' }, el('a', { class: 'btn primary', href: `${site}/download.html` }, 'Get the desktop app')));
+  } else if (!state.signedIn) {
     card.append(
       el('h1', {}, 'Rembrandt in your browser'),
       el('p', { class: 'lead' }, `The web editor comes with Cloud sync, from $${TIERS[0].month} a month. Sign in to open your library, or create an account.`),

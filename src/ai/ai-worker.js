@@ -5,6 +5,11 @@
 // All maps are refined with a fast guided filter using the photo's luminance as guide, so edges
 // follow the image. Output: Float32Array in [0, 1], same size as the input bitmap.
 /* global Vision */
+// MediaPipe reports usage statistics to Google (odml.pa.googleapis.com) through fetch. Rembrandt keeps
+// everything on the device, so those requests are answered here and never leave it.
+const netFetch = self.fetch.bind(self);
+self.fetch = (input, init) => (/^https:\/\/[^/]*odml\.pa\.googleapis\.com\//.test(String(input?.url ?? input))
+  ? Promise.resolve(new Response('', { status: 200 })) : netFetch(input, init));
 importScripts('../vendor/mediapipe/vision_bundle.js');
 
 const BASE = new URL('../', self.location.href).href;

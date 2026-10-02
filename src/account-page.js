@@ -102,7 +102,7 @@ export function buildAccountPage(app, hooks) {
       if (on) { turnOff(sw); return; }
       turningOn = !turningOn; render();
     });
-    const status = !backendConfigured() ? 'Cloud sync opens at launch. Until then everything stays on this device.'
+    const status = !backendConfigured() ? 'Cloud sync is coming soon. Everything stays on this device.'
       : on ? (isPaid(c.plan) ? (c.status === 'error' ? `Paused, retrying · ${c.me?.email}` : `On · ${c.me?.email}`) : `Signed in as ${c.me?.email} · choose a plan to start syncing`)
       : turningOn ? 'Sign in to turn it on. New here? The same step creates your account.'
       : 'Off. Your library stays on this device, and you don’t need an account.';
