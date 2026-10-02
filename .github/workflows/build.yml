@@ -60,7 +60,20 @@ jobs:
           if [ -n "${WINDOWS_THUMBPRINT:-}" ]; then
             sign=(--config "{\"bundle\":{\"windows\":{\"certificateThumbprint\":\"$WINDOWS_THUMBPRINT\",\"digestAlgorithm\":\"sha256\",\"timestampUrl\":\"http://timestamp.digicert.com\"}}}")
           fi
+          # Without an Apple certificate, sign the Mac app ad hoc. A completely unsigned app that was
+          # downloaded is reported as "damaged" with no way to open it; an ad-hoc signed one gets the
+          # usual "Apple could not verify" prompt, which System Settings › Privacy & Security can allow.
+          if [ "$RUNNER_OS" = macOS ] && [ -z "${APPLE_SIGNING_IDENTITY:-}" ]; then
+            sign=(--config '{"bundle":{"macOS":{"signingIdentity":"-"}}}')
+          fi
           npx tauri build ${{ inputs.args }} "${sign[@]}"
+      - name: Check the Mac app's signature
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          app=$(ls -d src-tauri/target/${{ inputs.target }}/release/bundle/macos/*.app | head -1)
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign -dv "$app" 2>&1 | grep -E 'Identifier|Signature|TeamIdentifier|Authority' || true
       - name: Build rembrandt-server
         shell: bash
         run: |
