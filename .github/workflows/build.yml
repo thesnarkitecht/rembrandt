@@ -70,8 +70,14 @@ jobs:
       - name: Check the Mac app's signature
         if: runner.os == 'macOS'
         shell: bash
+        # Checks the app inside the .dmg, which is what people download (the loose .app is removed
+        # once the .dmg is made).
         run: |
-          app=$(ls -d src-tauri/target/${{ inputs.target }}/release/bundle/macos/*.app | head -1)
+          dmg=$(ls src-tauri/target/${{ inputs.target }}/release/bundle/dmg/*.dmg | head -1)
+          mnt=$(mktemp -d)
+          hdiutil attach -nobrowse -readonly -mountpoint "$mnt" "$dmg" >/dev/null
+          trap 'hdiutil detach "$mnt" -quiet || true' EXIT
+          app=$(ls -d "$mnt"/*.app | head -1)
           codesign --verify --deep --strict --verbose=2 "$app"
           codesign -dv "$app" 2>&1 | grep -E 'Identifier|Signature|TeamIdentifier|Authority' || true
       - name: Build rembrandt-server
