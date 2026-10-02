@@ -6,6 +6,7 @@ import { button, segmented, toggle } from './ui.js';
 import { icon } from './icons.js';
 import { CONFIG, backendConfigured } from './config.js';
 import * as sb from './backend/supabase.js';
+import { explicitBlob } from './sync-check.js';
 
 const SHARE_LONG = 2048;
 
@@ -64,10 +65,18 @@ export function openShare(app, ids, { title, render, exportPhotos, signIn }) {
     const make = button('Create link', async () => {
       make.disabled = true;
       try {
-        const blobs = await renderAll();
+        let blobs = await renderAll();
+        // Share links can't include sexually explicit photos (Cloud checks them again before the link
+        // goes live). Leave flagged ones out here so the rest can still be shared.
+        setStatus('Checking…', 'busy');
+        const keep = [];
+        for (let i = 0; i < blobs.length; i++) if (!(await explicitBlob(blobs[i]))) keep.push(i);
+        if (!keep.length) throw new Error(`Share links can't include sexually explicit photos${n === 1 ? '.' : ', and all of these were flagged.'}`);
+        const left = blobs.length - keep.length;
+        blobs = keep.map((i) => blobs[i]);
         setStatus('Uploading…', 'busy');
-        const r = await createShareLink({ title: name, blobs, expiresDays: expires, allowDownload, names: photos.map((p) => p.name) });
-        setStatus('');
+        const r = await createShareLink({ title: name, blobs, expiresDays: expires, allowDownload, names: keep.map((i) => photos[i].name) });
+        setStatus(left ? `${left === 1 ? 'One photo was' : `${left} photos were`} left out: share links can't include sexually explicit photos.` : '');
         paintLink(r.url);
       } catch (e) { setStatus(e.message, 'error'); make.disabled = false; }
     }, 'sm primary', 'link');

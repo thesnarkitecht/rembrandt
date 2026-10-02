@@ -31,6 +31,11 @@ function classify(bitmap) {
   });
 }
 
+// Is this rendered image sexually explicit? Throws if the check can't run.
+export async function explicitBlob(blob) {
+  return flagged(await classify(await createImageBitmap(blob)));
+}
+
 async function source(e) {
   try { if (e.thumbUrl) return await createImageBitmap(await (await fetch(e.thumbUrl)).blob()); } catch { /* try the stored copy */ }
   const b = await catalog.getThumb(e.id);
