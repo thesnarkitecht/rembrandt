@@ -51,6 +51,8 @@ import { upscale, maxScale } from './ai/upscale.js';
 import { buildNavSide } from './navside.js';
 import { createDevelopFX } from './develop-fx.js';
 import { begin as beginProgress } from './portrait-progress.js';
+import { createDirect } from './direct.js';
+import { createCommandBar } from './command.js';
 import { el, svgEl, clamp, clone, debounce, setPath, srgbToLinear, uid, warmDownloads, deepMerge } from './util.js';
 import { icon } from './icons.js';
 import { sliderHooks, closeMenu, popMenu } from './ui.js';
@@ -1661,6 +1663,10 @@ function exportPhotos(ids) {
 
 let pointer = null;
 let spaceDown = false;
+// Direct editing (src/direct.js): mouse or pen, Edit tool, photo fitted, nothing else going on.
+const direct = createDirect(app, viewer);
+const directOn = (e) => e.pointerType !== 'touch' && e.button <= 0 && !spaceDown && app.state.tool === 'edit' && app.view.fit
+  && !app.state.pick && !app.state.before && app.state.compare === 'off';
 // Touch: two fingers pinch-zoom and pan; one finger swipes to the next photo when the photo fits
 // the screen; a double tap zooms to 100%.
 const touches = new Map();
@@ -1709,6 +1715,7 @@ viewer.addEventListener('pointerdown', (e) => {
     pointer = { kind: 'tool', tool };
     return;
   }
+  if (directOn(e) && direct.down(x, y)) { pointer = { kind: 'direct' }; return; }
   pointer = { kind: 'pan', x, y, pan: [...app.view.pan], fit: app.view.fit, touch: e.pointerType === 'touch', t: performance.now() };
   viewer.classList.add('panning');
 });
@@ -1731,6 +1738,8 @@ viewer.addEventListener('pointermove', (e) => {
     if (pointer?.kind === 'pan' && pointer.touch && pointer.fit) return;
   }
   if (pointer?.kind === 'tool') { pointer.tool.move(e, x, y); return; }
+  if (pointer?.kind === 'direct') { direct.move(x, y); return; }
+  if (!pointer && directOn(e)) direct.hover(x, y); else direct.hide();
   if (pointer?.kind === 'split') { app.state.splitX = clamp(x / viewer.clientWidth, 0.02, 0.98); app.requestRender(); return; }
   if (pointer?.kind === 'pan') {
     const d = DPR();
@@ -1743,7 +1752,7 @@ viewer.addEventListener('pointermove', (e) => {
   if (tool === maskOverlay) { maskOverlay.move(e, x, y); app.drawOverlay(); }
   if (tool === retouchOverlay) retouchOverlay.move(e, x, y);
   const onSplit = app.state.compare === 'split' && app.state.tool === 'edit' && Math.abs(x - app.state.splitX * viewer.clientWidth) < 20;
-  viewer.style.cursor = app.state.pick ? 'crosshair' : onSplit ? 'ew-resize' : spaceDown ? 'grab' : tool ? tool.cursor(x, y) : '';
+  viewer.style.cursor = app.state.pick ? 'crosshair' : onSplit ? 'ew-resize' : spaceDown ? 'grab' : tool ? tool.cursor(x, y) : app.view.fit ? '' : 'grab';
 });
 
 const endPointer = (e) => {
@@ -1770,12 +1779,13 @@ const endPointer = (e) => {
     }
   }
   if (pointer?.kind === 'tool') pointer.tool.up();
+  if (pointer?.kind === 'direct') direct.up();
   pointer = null;
   viewer.classList.remove('panning');
 };
 viewer.addEventListener('pointerup', endPointer);
 viewer.addEventListener('pointercancel', endPointer);
-viewer.addEventListener('pointerleave', () => { if (!pointer) { maskOverlay.leave(); retouchOverlay.hover = null; app.drawOverlay(); } });
+viewer.addEventListener('pointerleave', () => { direct.hide(); if (!pointer) { maskOverlay.leave(); retouchOverlay.hover = null; app.drawOverlay(); } });
 
 viewer.addEventListener('wheel', (e) => {
   if (!app.img) return;
@@ -1853,6 +1863,7 @@ $('btnFit').addEventListener('click', () => app.fitView());
 // Navigator & presets side panel (desktop). Hidden or shown with N; remembered.
 navSide = buildNavSide(app);
 app.developFX = createDevelopFX(app, viewer);
+const commandBar = createCommandBar(app);
 $('navside').append(navSide.el);
 const setNavSide = (on) => {
   document.body.classList.toggle('nav-off', !on);
@@ -1861,6 +1872,8 @@ const setNavSide = (on) => {
 };
 setNavSide((() => { try { return localStorage.getItem('rembrandt:navside') !== '0'; } catch { return true; } })());
 $('btnNav').addEventListener('click', () => setNavSide(document.body.classList.contains('nav-off')));
+$('btnAsk').addEventListener('click', () => commandBar.open());
+$('askKey').textContent = isMac ? '⌘K' : 'Ctrl K';
 $('btn100').addEventListener('click', () => app.img && app.zoomTo(app.engine.fullH));
 // Cloud plan: upload originals that aren't online yet; free local space for ones that are.
 async function onlineKeys() {
@@ -1997,6 +2010,7 @@ window.addEventListener('keydown', (e) => {
   if (mod && k.toLowerCase() === 'y') { e.preventDefault(); app.redo(); return; }
   if (mod && k.toLowerCase() === 'o') { e.preventDefault(); $('fileInput').click(); return; }
   if (mod && k.toLowerCase() === 'e') { e.preventDefault(); $('btnExport').click(); return; }
+  if (mod && k.toLowerCase() === 'k' && app.view.mode !== 'library') { e.preventDefault(); commandBar.open(); return; }
   if (app.view.mode === 'library') {
     if (!mod && (k === 'e' || k === 'd')) { const sel = library.selection(); if (sel.length) openInEditor(sel[0]); else setMode('edit'); e.preventDefault(); return; }
     if (k === '?' && !mod) { $('helpDialog').showModal(); return; }

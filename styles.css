@@ -1175,3 +1175,45 @@ img.empty-mark { display: block; width: 64px; height: 64px; margin: 0 auto 22px;
 :root[data-app="mobile"] .pp-card { left: 50%; bottom: calc(16px + env(safe-area-inset-bottom)); transform: translate(-50%, 14px); }
 :root[data-app="mobile"] .pp-card.on { transform: translate(-50%, 0); }
 @media (prefers-reduced-motion: reduce) { .pp-card { transition: opacity 0.2s; } }
+
+/* ------------------------------------------------------------------ edit with words (⌘K) */
+.ask-btn { display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 6px 0 10px; border: 1px solid var(--line); border-radius: 14px;
+  background: var(--surface); color: var(--muted); font: 400 12px var(--font); cursor: pointer; transition: border-color 0.15s, color 0.15s; flex: none; }
+.ask-btn:hover { border-color: color-mix(in srgb, var(--accent) 50%, var(--line)); color: var(--text); }
+.ask-btn .i { width: 14px; height: 14px; color: var(--accent); }
+.ask-btn kbd, .cmd-field kbd { font: 500 9.5px var(--mono); color: var(--dim); background: var(--raised); border-radius: 8px; padding: 3px 6px; }
+body[data-mode="library"] .ask-btn, body[data-mode="account"] .ask-btn { display: none; }
+@media (max-width: 760px) { .ask-btn span, .ask-btn kbd { display: none; } .ask-btn { padding: 0 8px; } }
+
+.cmd { position: fixed; inset: 0; z-index: 80; display: flex; justify-content: center; align-items: flex-start; padding-top: 14vh;
+  animation: cmd-in 0.16s ease-out; }
+.cmd[hidden] { display: none; }
+.cmd-box { width: min(620px, calc(100vw - 32px)); border-radius: 10px; overflow: hidden; background: var(--glass); backdrop-filter: blur(22px) saturate(1.2);
+  border: 1px solid var(--line-strong); box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.03) inset; }
+.cmd-field { display: flex; align-items: center; gap: 10px; padding: 0 14px; height: 54px; border-bottom: 1px solid var(--line); }
+.cmd-field > .i { width: 18px; height: 18px; color: var(--accent); }
+.cmd-input { flex: 1; min-width: 0; border: 0; background: transparent; color: var(--text); font: 400 17px var(--font); outline: none; }
+.cmd-input::placeholder { color: var(--dim); }
+.cmd-list { max-height: 50vh; overflow-y: auto; padding: 6px; }
+.cmd-row { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 6px; cursor: pointer; color: var(--text-2); font-size: 13px; }
+.cmd-row .i { width: 15px; height: 15px; color: var(--muted); }
+.cmd-row.on { background: var(--selected); color: var(--text); }
+.cmd-row.do .cmd-title { font: italic 400 18px/1.2 'Instrument Serif', Georgia, serif; color: var(--text); }
+.cmd-row.do .i { color: var(--accent); }
+.cmd-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmd-hint { font: 500 9.5px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); }
+.cmd-row.do.on .cmd-hint { color: var(--accent); }
+.cmd-empty { padding: 14px 12px 12px; color: var(--muted); font-size: 12.5px; line-height: 1.6; }
+@keyframes cmd-in { from { opacity: 0; } }
+.ctl.flash, .sec.flash > .sec-head { animation: flash 1.4s ease-out; }
+@keyframes flash { 0%, 30% { background: color-mix(in srgb, var(--accent) 22%, transparent); } 100% { background: transparent; } }
+
+/* ------------------------------------------------------------------ direct editing on the photo */
+.viewer[data-tool="edit"] { cursor: crosshair; }
+.direct-chip { position: absolute; left: 0; top: 0; z-index: 4; pointer-events: none; display: flex; align-items: center; gap: 6px; padding: 5px 9px 5px 6px;
+  border-radius: 12px; background: rgba(12, 11, 10, 0.78); color: #eee8de; font: 500 11px var(--font); white-space: nowrap; backdrop-filter: blur(8px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35); }
+.direct-chip[hidden] { display: none; }
+.direct-chip i { width: 12px; height: 12px; border-radius: 50%; background: var(--sw); box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.85); }
+.direct-chip b { font-weight: 500; color: #a8a095; margin-left: 2px; }
+.direct-chip em { font: 500 11px var(--mono); font-style: normal; color: #e0b374; margin-left: 2px; }
