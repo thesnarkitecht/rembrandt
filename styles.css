@@ -1108,8 +1108,8 @@ img.empty-mark { display: block; width: 64px; height: 64px; margin: 0 auto 22px;
 .navside { flex-direction: column; min-height: 0; background: var(--panel); border-right: 1px solid var(--line-strong); }
 .navside-in { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .navside .sec:first-child { border-top: 0; }
-.navside .sec:last-child { flex: 1; min-height: 0; display: flex; flex-direction: column; }
-.navside .sec:last-child .sec-body { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+.navside .sec[data-id="side-presets"] { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.navside .sec[data-id="side-presets"] .sec-body { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
 .navside .sec-body { padding: 6px 8px 10px; }
 .navside-in.no-photo .nav-frame, .navside-in.no-photo .nav-zooms { opacity: 0.4; pointer-events: none; }
 .nav-zooms { display: grid; grid-template-columns: repeat(5, 1fr); gap: 2px; margin-bottom: 6px; }
@@ -1198,11 +1198,11 @@ body[data-mode="library"] .ask-btn, body[data-mode="account"] .ask-btn { display
 .cmd-row { display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 6px; cursor: pointer; color: var(--text-2); font-size: 13px; }
 .cmd-row .i { width: 15px; height: 15px; color: var(--muted); }
 .cmd-row.on { background: var(--selected); color: var(--text); }
-.cmd-row.do .cmd-title { font: italic 400 18px/1.2 'Instrument Serif', Georgia, serif; color: var(--text); }
-.cmd-row.do .i { color: var(--accent); }
+.cmd-row.is-do .cmd-title { font: italic 400 18px/1.2 'Instrument Serif', Georgia, serif; color: var(--text); }
+.cmd-row.is-do .i { color: var(--accent); }
 .cmd-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cmd-hint { font: 500 9.5px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); }
-.cmd-row.do.on .cmd-hint { color: var(--accent); }
+.cmd-row.is-do.on .cmd-hint { color: var(--accent); }
 .cmd-empty { padding: 14px 12px 12px; color: var(--muted); font-size: 12.5px; line-height: 1.6; }
 @keyframes cmd-in { from { opacity: 0; } }
 .ctl.flash, .sec.flash > .sec-head { animation: flash 1.4s ease-out; }
@@ -1234,3 +1234,26 @@ body[data-mode="library"] .ask-btn, body[data-mode="account"] .ask-btn { display
 #panelBody .ctl:hover .val, #panelBody .ctl .val:focus { background: var(--field); border-color: var(--line); }
 #panelBody .ctl.changed .val { border-color: transparent; }
 #panelBody .sec + .sec, .navside .sec + .sec { border-top-color: var(--line); }
+
+/* Edit with words in the left panel: a chat at the bottom; results open upward above the field. */
+@media (min-width: 1100px) { :root:not([data-app="mobile"]) body:not(.nav-off) .ask-btn { display: none; } }
+.nav-ask { flex: none; border-top: 1px solid var(--line); padding: 8px; }
+.cmd.inline { position: static; display: flex; flex-direction: column; gap: 6px; padding: 0; animation: none; }
+.cmd.inline .cmd-box { width: auto; display: flex; flex-direction: column-reverse; border-radius: 8px; background: var(--field); backdrop-filter: none; box-shadow: none; border-color: var(--line); }
+.cmd.inline.active .cmd-box { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
+.cmd.inline .cmd-field { height: 38px; padding: 0 10px; gap: 8px; border-bottom: 0; }
+.cmd.inline .cmd-field > .i { width: 15px; height: 15px; }
+.cmd.inline .cmd-input { font-size: 12.5px; width: 0; }
+.cmd.inline .cmd-list { max-height: 42vh; padding: 4px; border-bottom: 1px solid var(--line); }
+.cmd.inline .cmd-list:empty { display: none; }
+.cmd.inline .cmd-row { padding: 7px 8px; font-size: 12px; gap: 8px; }
+.cmd.inline .cmd-row.is-do .cmd-title { font-size: 15px; white-space: normal; }
+.cmd.inline .cmd-hint { font-size: 8.5px; }
+.cmd.inline .cmd-empty { padding: 8px; font-size: 11.5px; line-height: 1.5; }
+.chat-log { display: flex; flex-direction: column; gap: 4px; max-height: 26vh; overflow-y: auto; scrollbar-width: none; }
+.chat-log:empty { display: none; }
+.chat-you { align-self: flex-end; max-width: 85%; padding: 5px 9px; border-radius: 10px 10px 2px 10px; background: var(--raised); color: var(--text); font-size: 12px; }
+.chat-me { align-self: flex-start; display: flex; align-items: baseline; gap: 8px; max-width: 95%; padding: 2px 2px 4px; color: var(--text-2);
+  font: italic 400 14.5px/1.25 'Instrument Serif', Georgia, serif; }
+.chat-undo { border: 0; background: none; padding: 0; color: var(--accent); font: 500 9.5px var(--mono); letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; }
+.chat-undo:hover { color: var(--accent-hover); }

@@ -1866,6 +1866,8 @@ $('btnFit').addEventListener('click', () => app.fitView());
 navSide = buildNavSide(app);
 app.developFX = createDevelopFX(app, viewer);
 const commandBar = createCommandBar(app);
+const sideChat = createCommandBar(app, navSide.ask);
+const askWithWords = () => (getComputedStyle($('navside')).display !== 'none' ? sideChat : commandBar).open();
 $('navside').append(navSide.el);
 const setNavSide = (on) => {
   document.body.classList.toggle('nav-off', !on);
@@ -1874,7 +1876,7 @@ const setNavSide = (on) => {
 };
 setNavSide((() => { try { return localStorage.getItem('rembrandt:navside') !== '0'; } catch { return true; } })());
 $('btnNav').addEventListener('click', () => setNavSide(document.body.classList.contains('nav-off')));
-$('btnAsk').addEventListener('click', () => commandBar.open());
+$('btnAsk').addEventListener('click', askWithWords);
 $('askKey').textContent = isMac ? '⌘K' : 'Ctrl K';
 $('btn100').addEventListener('click', () => app.img && app.zoomTo(app.engine.fullH));
 // Cloud plan: upload originals that aren't online yet; free local space for ones that are.
@@ -2012,7 +2014,7 @@ window.addEventListener('keydown', (e) => {
   if (mod && k.toLowerCase() === 'y') { e.preventDefault(); app.redo(); return; }
   if (mod && k.toLowerCase() === 'o') { e.preventDefault(); $('fileInput').click(); return; }
   if (mod && k.toLowerCase() === 'e') { e.preventDefault(); $('btnExport').click(); return; }
-  if (mod && k.toLowerCase() === 'k' && app.view.mode !== 'library') { e.preventDefault(); commandBar.open(); return; }
+  if (mod && k.toLowerCase() === 'k' && app.view.mode !== 'library') { e.preventDefault(); askWithWords(); return; }
   if (app.view.mode === 'library') {
     if (!mod && (k === 'e' || k === 'd')) { const sel = library.selection(); if (sel.length) openInEditor(sel[0]); else setMode('edit'); e.preventDefault(); return; }
     if (k === '?' && !mod) { $('helpDialog').showModal(); return; }

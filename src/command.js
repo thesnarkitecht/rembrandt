@@ -55,12 +55,25 @@ export function interpret(text, p) {
   return labels.length ? { next, labels } : null;
 }
 
-export function createCommandBar(app) {
+// `mount`: an element to live in permanently (the left panel), as a chat; without it, a ⌘K overlay.
+export function createCommandBar(app, mount = null) {
   const input = el('input', { class: 'cmd-input', type: 'text', spellcheck: 'false', placeholder: 'Say what you want — “warmer and a bit brighter”, “moody”, “blur the background”…', 'aria-label': 'Edit by description or find a control' });
   const list = el('div', { class: 'cmd-list', role: 'listbox' });
-  const box = el('div', { class: 'cmd-box' }, el('div', { class: 'cmd-field' }, icon('sparkle'), input, el('kbd', {}, 'esc')), list);
-  const root = el('div', { class: 'cmd', hidden: true }, box);
-  document.body.append(root);
+  const box = el('div', { class: 'cmd-box' }, el('div', { class: 'cmd-field' }, icon('sparkle'), input, mount ? null : el('kbd', {}, 'esc')), list);
+  const log = el('div', { class: 'chat-log' });
+  const root = mount ? el('div', { class: 'cmd inline' }, log, box) : el('div', { class: 'cmd', hidden: true }, box);
+  (mount || document.body).append(root);
+  if (mount) input.placeholder = 'Say what you want…';
+  let active = false;
+  // What was asked and what it did, newest last, with Undo on the latest.
+  function remember(q, did) {
+    log.querySelector('.chat-undo')?.remove();
+    const undo = el('button', { class: 'chat-undo', type: 'button' }, 'Undo');
+    undo.addEventListener('click', () => { app.undo(); undo.remove(); });
+    log.append(el('div', { class: 'chat-you' }, q), el('div', { class: 'chat-me' }, el('span', {}, did), undo));
+    while (log.children.length > 12) log.firstChild.remove();
+    log.scrollTop = log.scrollHeight;
+  }
 
   // Every slider and section, by name, from the Edit and AI panels (built once, off screen).
   let index = null;
@@ -96,7 +109,7 @@ export function createCommandBar(app) {
     rows = [...(it ? [{ kind: 'do', title: it.labels.join(' · '), hint: 'Apply', run: () => apply(it.next), preview: it.next }] : []), ...found].slice(0, 8);
     sel = Math.min(sel, Math.max(0, rows.length - 1));
     list.replaceChildren(...rows.map((r, i) => {
-      const row = el('div', { class: `cmd-row ${r.kind}${i === sel ? ' on' : ''}`, role: 'option' },
+      const row = el('div', { class: `cmd-row is-${r.kind}${i === sel ? ' on' : ''}`, role: 'option' },
         icon(r.kind === 'do' ? 'wand' : r.kind === 'preset' ? 'presets' : 'sliders'), el('span', { class: 'cmd-title' }, r.title), el('span', { class: 'cmd-hint' }, r.hint));
       row.addEventListener('mousemove', () => { if (sel !== i) { sel = i; paint(); } });
       row.addEventListener('click', () => run(i));
@@ -128,24 +141,37 @@ export function createCommandBar(app) {
     target.classList.remove('flash'); void target.offsetWidth; target.classList.add('flash');
     ctl?.querySelector('.val')?.focus();
   }
-  function run(i) { const r = rows[i]; close(); r?.run(); }
+  function run(i) {
+    const r = rows[i], q = input.value.trim();
+    close();
+    r?.run();
+    if (mount && r?.kind === 'do') remember(q, r.title);
+  }
   function open() {
     if (!app.img) return;
     base = app.params;
+    active = true;
     root.hidden = false;
-    input.value = '';
+    root.classList.add('active');
+    if (!mount) input.value = '';
     sel = 0;
     paint();
-    input.focus();
+    if (document.activeElement !== input) input.focus();
   }
   function close() {
-    if (root.hidden) return;
-    root.hidden = true;
+    if (!active) return;
+    active = false;
+    if (mount) { input.value = ''; list.textContent = ''; root.classList.remove('active'); } else root.hidden = true;
     input.blur();
     app.preview = null;
     app.requestRender();
   }
-  input.addEventListener('input', () => { sel = 0; paint(); });
+  if (mount) {
+    input.addEventListener('focus', () => { if (!active) open(); });
+    input.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== input) close(); }, 120));
+    list.addEventListener('pointerdown', (e) => e.preventDefault());   // keep focus while clicking a row
+  }
+  input.addEventListener('input', () => { if (!active) open(); sel = 0; paint(); });
   input.addEventListener('keydown', (e) => {
     e.stopPropagation();
     if (e.key === 'Escape') close();
@@ -153,5 +179,5 @@ export function createCommandBar(app) {
     else if (e.key === 'Enter') { e.preventDefault(); run(sel); }
   });
   root.addEventListener('pointerdown', (e) => { if (e.target === root) close(); });
-  return { open, close, get isOpen() { return !root.hidden; } };
+  return { open, close, get isOpen() { return active; } };
 }

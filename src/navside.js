@@ -1,5 +1,6 @@
 // Left side panel in Edit (desktop): Navigator (the photo with the visible area, zoom presets, click or
-// drag to move around) and a compact Presets list (hover to preview on the photo, click to apply).
+// drag to move around), a compact Presets list (hover to preview on the photo, click to apply), and
+// Edit with words at the bottom.
 // Copyright © 2026 the Rembrandt contributors. Licensed under the GNU GPL v3 or later (see LICENSE).
 import { el, clamp } from './util.js';
 import { section } from './ui.js';
@@ -92,6 +93,8 @@ export function buildNavSide(app) {
   }
   buildPresets();
 
-  root.append(nav.el, pre.el);
-  return { el: root, update, setThumb, refreshPresets: buildPresets };
+  // Edit with words lives at the bottom, like a chat (see command.js).
+  const ask = el('div', { class: 'nav-ask' });
+  root.append(nav.el, pre.el, ask);
+  return { el: root, update, setThumb, refreshPresets: buildPresets, ask };
 }
