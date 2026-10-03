@@ -7,7 +7,7 @@
   <meta name="description" content="A fast, private photo editor that runs entirely in your browser. Scene-referred processing, masking, presets. No ads, no uploads." />
   <meta name="theme-color" content="#1c1c1f" />
   <link rel="preload" href="src/fonts/geist.woff2" as="font" type="font/woff2" crossorigin />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='g' gradientUnits='userSpaceOnUse' x1='100' y1='0' x2='0' y2='100'%3E%3Cstop offset='0' stop-color='%23F4D292'/%3E%3Cstop offset='.5' stop-color='%23C98F4F'/%3E%3Cstop offset='1' stop-color='%238A5829'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7' fill='%230d0d0f'/%3E%3Cg transform='translate%286.5 6.5%29 scale%28.19%29' fill='url%28%23g%29'%3E%3Cpath d='M0 0H64A31.5 31.5 0 0 1 69.07 62.59L99 100H78L34.8 46H64A14.5 14.5 0 0 0 64 17H17Z'/%3E%3Cpath d='M0 35.1V100H59Z'/%3E%3C/g%3E%3C/svg%3E" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%230b0a09'/%3E%3Cg transform='translate%286.5 6.5%29 scale%28.19%29' fill='%23c98f4f'%3E%3Cpath d='M0 0H64A31.5 31.5 0 0 1 69.07 62.59L99 100H78L34.8 46H64A14.5 14.5 0 0 0 64 17H17Z'/%3E%3Cpath d='M0 35.1V100H59Z'/%3E%3C/g%3E%3C/svg%3E" />
   <link rel="stylesheet" href="styles.css" />
 </head>
 <body>
@@ -17,7 +17,7 @@
   <div class="app">
     <header class="topbar">
       <div class="brand">
-        <svg viewBox="-4 -4 108 108" aria-hidden="true"><defs><linearGradient id="rmark-head" gradientUnits="userSpaceOnUse" x1="100" y1="0" x2="0" y2="100"><stop offset="0" style="stop-color:var(--mark-1)"/><stop offset=".5" style="stop-color:var(--mark-2)"/><stop offset="1" style="stop-color:var(--mark-3)"/></linearGradient></defs><path fill="url(#rmark-head)" d="M0 0H64A31.5 31.5 0 0 1 69.07 62.59L99 100H78L34.8 46H64A14.5 14.5 0 0 0 64 17H17Z"/><path fill="url(#rmark-head)" d="M0 35.1V100H59Z"/></svg>
+        <svg viewBox="-4 -4 108 108" aria-hidden="true"><path fill="currentColor" d="M0 0H64A31.5 31.5 0 0 1 69.07 62.59L99 100H78L34.8 46H64A14.5 14.5 0 0 0 64 17H17Z"/><path fill="currentColor" d="M0 35.1V100H59Z"/></svg>
         <span id="brandName">Rembrandt</span>
       </div>
       <nav class="modes" aria-label="View">
@@ -45,10 +45,8 @@
 
         <div class="empty" id="empty">
           <div class="empty-card">
-            <div class="empty-mark">
-              <svg viewBox="0 0 48 48" aria-hidden="true"><rect x="5" y="9" width="38" height="30" rx="6" fill="none" stroke="currentColor" stroke-width="2"/><path d="m5 33 11-11 9 9 6-6 12 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="33" cy="18" r="3.2" fill="currentColor"/></svg>
-            </div>
-            <h1 id="emptyTitle">Drop photos to start editing</h1>
+            <img class="empty-mark" src="src/art/r-mark-halftone.svg" alt="" />
+            <h1 id="emptyTitle">Drop photos to start <em>editing</em></h1>
             <p id="emptyText">Everything happens on your device — nothing is uploaded.<br />JPEG · PNG · WebP · AVIF · TIFF · HEIC (where supported) · camera RAW</p>
             <button class="btn primary" id="btnOpenEmpty" data-icon="open"><span>Open photos</span></button>
           </div>

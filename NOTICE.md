@@ -7,7 +7,7 @@
 | `src/vendor/mediapipe/` | MediaPipe Tasks Vision 1.0.1, Apache-2.0 |
 | `models/` | MediaPipe / Google models, Apache-2.0 (see `models/README.md`) |
 | `src/vendor/nsfw/` | TensorFlow.js 4.22.0, Apache-2.0; NSFWJS 4.3.0 model, MIT (see `src/vendor/nsfw/README.md`) |
-| `src/fonts/` | Geist and Geist Mono, SIL Open Font License 1.1 (`src/fonts/OFL.txt`) |
+| `src/fonts/` | Geist, Geist Mono, Antonio and Instrument Serif, SIL Open Font License 1.1 (`src/fonts/OFL.txt`) |
 
 ## Additional permission: app stores (GPL-3.0 section 7)
 As an additional permission under section 7 of the GNU GPL version 3, you may convey Rembrandt, or a

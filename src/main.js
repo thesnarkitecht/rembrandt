@@ -2051,7 +2051,7 @@ function boot() {
   app.engine.previewLong = prefs.previewLong;
   paintAvatar($('avatar'));
   if (isTouch) {
-    $('emptyTitle').textContent = 'Open photos to start editing';
+    $('emptyTitle').innerHTML = 'Open photos to start <em>editing</em>';
     $('emptyText').textContent = 'Pick photos from your library. Everything happens on this device, and nothing is uploaded.';
   }
   canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); app.toast('Graphics context lost — reload the page to continue'); });
