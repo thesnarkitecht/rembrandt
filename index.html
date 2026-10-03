@@ -26,6 +26,7 @@
       </nav>
       <div class="file-title" id="fileTitle"></div>
       <div class="top-actions">
+        <button class="icon-btn" id="btnNav" data-icon="sidebar" title="Navigator &amp; presets (N)" aria-label="Show or hide the navigator and presets"></button>
         <button class="icon-btn" id="btnUndo" data-icon="undo" title="Undo (Ctrl/⌘ Z)" aria-label="Undo"></button>
         <button class="icon-btn" id="btnRedo" data-icon="redo" title="Redo (Ctrl/⌘ ⇧ Z)" aria-label="Redo"></button>
         <button class="icon-btn" id="btnBefore" data-icon="compare" title="Before / after (\)" aria-label="Before and after"></button>
@@ -39,6 +40,7 @@
     <section class="acct-page" id="accountPage"></section>
 
     <main class="workspace">
+      <aside class="navside" id="navside" aria-label="Navigator and presets"></aside>
       <section class="viewer" id="viewer" data-tool="edit">
         <canvas id="gl"></canvas>
         <svg id="overlay" class="overlay" xmlns="http://www.w3.org/2000/svg"></svg>

@@ -5,6 +5,7 @@
 // Paid plans sync edits, ratings, flags, albums and thumbnails; Cloud plans also back up originals
 // so photos can be edited anywhere. Without a configured backend the app works offline.
 import { isPaid } from './pricing.js';
+import { begin as beginProgress } from './portrait-progress.js';
 import { backendConfigured } from './config.js';
 import * as sb from './backend/supabase.js';
 
@@ -210,9 +211,26 @@ export function deletePhoto(key) {
 
 export const storesOriginals = () => state.provider === 'lumen' && isPaid(state.plan);
 
+// Uploads in flight, shown together on the progress card.
+const ups = { job: null, started: 0, ended: 0 };
+function trackUpload(p) {
+  if (!ups.job) { ups.job = beginProgress('Uploading to Cloud'); ups.started = 0; ups.ended = 0; }
+  ups.started++;
+  ups.job.update(ups.ended, ups.started);
+  return p.finally(() => {
+    ups.ended++;
+    if (ups.ended < ups.started) { ups.job.update(ups.ended, ups.started); return; }
+    ups.job.finish(`${ups.ended} uploaded`);
+    ups.job = null;
+  });
+}
+
 // Resolves true when stored, false on failure, null when the photo is kept on this device.
-export async function uploadOriginal(rec, file) {
-  if (!storesOriginals() || !rec?.key || !file) return false;
+export function uploadOriginal(rec, file) {
+  if (!storesOriginals() || !rec?.key || !file) return Promise.resolve(false);
+  return trackUpload(uploadOriginalNow(rec, file));
+}
+async function uploadOriginalNow(rec, file) {
   if (!(await pass(rec))) return null;
   const id = docId(rec.key);
   clearTimeout(timers.get(id));

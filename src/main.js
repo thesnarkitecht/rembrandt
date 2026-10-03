@@ -48,6 +48,9 @@ import { buildPresetsPanel, allPresets } from './panel-presets.js';
 import { computeHistogram, drawHistogram } from './histogram.js';
 import { openExport, renderExport, renderPixels } from './export.js';
 import { upscale, maxScale } from './ai/upscale.js';
+import { buildNavSide } from './navside.js';
+import { createDevelopFX } from './develop-fx.js';
+import { begin as beginProgress } from './portrait-progress.js';
 import { el, svgEl, clamp, clone, debounce, setPath, srgbToLinear, uid, warmDownloads, deepMerge } from './util.js';
 import { icon } from './icons.js';
 import { sliderHooks, closeMenu, popMenu } from './ui.js';
@@ -149,7 +152,9 @@ const app = {
     this.requestRender();
   },
   applySettings(s, name) {
+    const was = this.params;
     this.params = withSettings(this.params, s, this.img.aspect);
+    this.developFX?.play({ params: was, hold: new Promise((r) => setTimeout(r, 120)), minHold: 120 });
     this.commit();
     this.requestRender();
     if (name) this.toast(`Applied “${name}”`);
@@ -234,6 +239,13 @@ const app = {
     const cur = this.images[this.cur];
     const image = await this.srSource();
     if (scale > this.srMaxScale(image)) throw new Error('This photo is too large to enlarge that much on this device');
+    let finish;
+    this.developFX?.play({ hold: new Promise((r) => { finish = r; }) });
+    try {
+      return await this._superResolution(cur, image, { scale, denoise, onProgress, signal });
+    } finally { finish(); }
+  },
+  async _superResolution(cur, image, { scale, denoise, onProgress, signal }) {
     const out = await upscale(image, { scale, denoise, onProgress, signal });
     const c = el('canvas', { width: out.width, height: out.height });
     c.getContext('2d').putImageData(out, 0, 0);
@@ -334,6 +346,7 @@ const app = {
   },
 
   autoTone() {
+    if (this.img) this.developFX?.play({ params: clone(this.params), hold: new Promise((r) => setTimeout(r, 120)), minHold: 120 });
     const s = this.images[this.cur]?.sample;
     if (!s) return;
     const evs = [];
@@ -389,6 +402,7 @@ const app = {
     };
   },
   cssToQ(x, y) { return A.apply(this.m.cssToQ, x, y); },
+  qToCssPoint(x, y) { return A.apply(this.m.qToCss, x, y); },
   cssToP(x, y) { return A.apply(this.m.cssToP, x, y); },
   cssToUV(x, y) { return A.apply(this.m.cssToUV, x, y); },
 
@@ -463,6 +477,7 @@ const app = {
     this.drawOverlay();
     this.updateHud();
     this.scheduleHisto();
+    navSide?.update();
   },
 
   drawOverlay() {
@@ -821,10 +836,11 @@ async function importItems(items, opts = {}) {
   const done = [];
   const collections = new Map();
   const failed = [];
-  const many = items.length > 3;
+  const many = items.length > 1;
+  const job = many && opts.progress !== false ? beginProgress((opts.label || 'Importing').replace(/:$/, '')) : null;
   for (let n = 0; n < items.length; n++) {
     const it = items[n];
-    if (many) progress(`${opts.label || 'Importing'} ${n + 1} of ${items.length}…`);
+    job?.update(n, items.length);
     let file = it.file;
     try { file ||= await folders.fileFor(it.src, { ask: false }); } catch { file = null; }
     if (!file) continue;
@@ -908,6 +924,7 @@ async function importItems(items, opts = {}) {
   renderStrip();
   // One summary: what came in, and what couldn't be opened (by name, with the reason).
   const fresh = added - failed.length;
+  job?.finish(`${items.length - failed.length} imported`);
   const bad = failed.length === 1 ? `${failed[0].name} couldn't be opened: ${failed[0].why}`
     : failed.length ? `${failed.length} files couldn't be opened (${failed.slice(0, 3).map((f) => f.name).join(', ')}${failed.length > 3 ? ', …' : ''})` : '';
   if (first && opts.open) {
@@ -1572,6 +1589,7 @@ async function loadBackground(p) {
 }
 
 let srCache = null;
+let navSide = null;
 let engineDirty = false;
 
 // The engine renders effective settings (switched-off groups use their defaults).
@@ -1800,16 +1818,18 @@ async function downloadLightroom(cat, photos) {
   const queue = photos.slice();
   let done = 0, failed = 0;
   setMode('library');
+  const job = beginProgress('From Lightroom');
   while (queue.length) {
     const batch = queue.splice(0, 8);
     const files = [];
     await Promise.all(batch.map(async (p) => {
       try { files.push({ file: await adobe.downloadRendition(cat, p), lr: { ...p, crs: null }, rendered: true }); } catch (err) { console.warn(err); failed++; }
       done++;
-      progress(`Downloading from Lightroom: ${done} of ${photos.length}…`);
+      job.update(done, photos.length);
     }));
-    if (files.length) await importItems(files, { label: 'Importing from Lightroom:' });
+    if (files.length) await importItems(files, { label: 'Importing from Lightroom:', progress: false });
   }
+  job.finish(`${photos.length - failed} imported`);
   progress(`Imported ${photos.length - failed} photo${photos.length - failed === 1 ? '' : 's'} from Lightroom${failed ? ` (${failed} couldn’t be downloaded)` : ''}`, true);
 }
 const openImporter = (page) => openImport(app, importApi, page);
@@ -1829,6 +1849,18 @@ $('btnExport').addEventListener('click', () => {
 });
 document.querySelectorAll('[data-mode-btn]').forEach((b) => b.addEventListener('click', () => setMode(b.dataset.modeBtn)));
 $('btnFit').addEventListener('click', () => app.fitView());
+
+// Navigator & presets side panel (desktop). Hidden or shown with N; remembered.
+navSide = buildNavSide(app);
+app.developFX = createDevelopFX(app, viewer);
+$('navside').append(navSide.el);
+const setNavSide = (on) => {
+  document.body.classList.toggle('nav-off', !on);
+  try { localStorage.setItem('rembrandt:navside', on ? '1' : '0'); } catch { /* ignore */ }
+  requestAnimationFrame(() => app.requestRender());
+};
+setNavSide((() => { try { return localStorage.getItem('rembrandt:navside') !== '0'; } catch { return true; } })());
+$('btnNav').addEventListener('click', () => setNavSide(document.body.classList.contains('nav-off')));
 $('btn100').addEventListener('click', () => app.img && app.zoomTo(app.engine.fullH));
 // Cloud plan: upload originals that aren't online yet; free local space for ones that are.
 async function onlineKeys() {
@@ -1995,6 +2027,7 @@ window.addEventListener('keydown', (e) => {
     case 'w': app.pickWhiteBalance(); break;
     case 'z': app.toggleZoom(); break;
     case 'f': app.fitView(); break;
+    case 'n': setNavSide(document.body.classList.contains('nav-off')); break;
     case '?': $('helpDialog').showModal(); break;
     case 'x': if (t === 'crop') app.panel.swap(); break;
     case 'Enter': if (t === 'crop') app.setTool('edit'); break;
