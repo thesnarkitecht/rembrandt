@@ -8,3 +8,15 @@ All run locally in the browser through MediaPipe Tasks (TFLite, WebAssembly). No
 | `subject-person.tflite` | people segmentation | `storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite` |
 | `subject-general.tflite` | 21-class scene segmentation (DeepLab v3) | `storage.googleapis.com/mediapipe-models/image_segmenter/deeplab_v3/float32/latest/deeplab_v3.tflite` |
 | `object.tflite` | click-to-select objects (MagicTouch) | `storage.googleapis.com/mediapipe-models/interactive_segmenter/magic_touch/float32/latest/magic_touch.tflite` |
+
+## Super Resolution
+
+Runs on the GPU through Rembrandt's own WebGPU / WebGL2 kernels (`src/ai/upscale.js`), not MediaPipe.
+
+| File | Purpose | Source (BSD-3-Clause) |
+|---|---|---|
+| `sr-general-x4.bin` | Super Resolution and Restore: `realesr-general-x4v3` and `realesr-general-wdn-x4v3` (SRVGGNetCompact), converted to half precision | `github.com/xinntao/Real-ESRGAN/releases/download/v0.2.5.0/` |
+
+Format: the 4 bytes `RSR1`, then the two networks one after the other, each as 34 layers of weights
+`[out][in][3][3]`, biases `[out]` and (all but the last layer) PReLU slopes `[out]`, as little-endian
+float16. Real-ESRGAN is Copyright (c) 2021 Xintao Wang, under the BSD 3-Clause license (`LICENSE-Real-ESRGAN`).

@@ -45,17 +45,23 @@ function resizeCanvas(src, w, h) {
   return out;
 }
 
-// Renders `p` (default: the photo being edited) with the engine's current image.
-export async function renderExport(app, { format, quality, long }, p = app.params, mats = (pp, w, h) => app.outputMats(pp, w, h)) {
+// The edited photo at full resolution (`long`: at most this many pixels on its long edge), as ImageData.
+export async function renderPixels(app, { long = 0 } = {}, p = app.params, mats = (pp, w, h) => app.outputMats(pp, w, h)) {
   const { crop } = p.geometry;
   const E = app.engine;
   const nativeW = Math.round(crop.w * E.fullH), nativeH = Math.round(crop.h * E.fullH);
   const k = long ? Math.min(1, long / Math.max(nativeW, nativeH)) : 1;
   const outW = Math.max(1, Math.round(nativeW * k)), outH = Math.max(1, Math.round(nativeH * k));
   const res = await E.exportPixels(p, crop.w, crop.h, outH, (w, h) => mats(p, w, h));
-  let canvas = el('canvas', { width: res.w, height: res.h });
-  canvas.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(res.pixels.buffer), res.w, res.h), 0, 0);
-  if (res.w !== outW || res.h !== outH) canvas = resizeCanvas(canvas, outW, outH);
+  return { image: new ImageData(new Uint8ClampedArray(res.pixels.buffer), res.w, res.h), outW, outH };
+}
+
+// Renders `p` (default: the photo being edited) with the engine's current image.
+export async function renderExport(app, { format, quality, long }, p = app.params, mats = (pp, w, h) => app.outputMats(pp, w, h)) {
+  const { image, outW, outH } = await renderPixels(app, { long }, p, mats);
+  let canvas = el('canvas', { width: image.width, height: image.height });
+  canvas.getContext('2d').putImageData(image, 0, 0);
+  if (image.width !== outW || image.height !== outH) canvas = resizeCanvas(canvas, outW, outH);
   const [mime] = FORMATS[format];
   const blob = await new Promise((r) => canvas.toBlob(r, mime, clamp(quality, 1, 100) / 100));
   if (!blob) throw new Error('The browser could not encode this format.');

@@ -46,7 +46,8 @@ import { retouchPasses } from './retouch.js';
 import { RetouchOverlay, buildRetouchPanel, retouchState, deleteSelected, newSourceForSelected } from './tool-retouch.js';
 import { buildPresetsPanel, allPresets } from './panel-presets.js';
 import { computeHistogram, drawHistogram } from './histogram.js';
-import { openExport, renderExport } from './export.js';
+import { openExport, renderExport, renderPixels } from './export.js';
+import { upscale, maxScale } from './ai/upscale.js';
 import { el, svgEl, clamp, clone, debounce, setPath, srgbToLinear, uid, warmDownloads, deepMerge } from './util.js';
 import { icon } from './icons.js';
 import { sliderHooks, closeMenu, popMenu } from './ui.js';
@@ -212,6 +213,36 @@ const app = {
     const e = this.images[this.cur];
     if (!e || !this.params) return;
     ai.ensure(e, this.params).then(() => { this.aiError = null; this.requestRender(); this.refreshPanel(); }, (err) => this.aiFailed(err));
+  },
+  // Super Resolution: the edited photo at full resolution (cached while the edit is unchanged)...
+  async srSource() {
+    const cur = this.images[this.cur];
+    if (!cur || !this.img) throw new Error('Open a photo first');
+    const key = `${cur.id}|${JSON.stringify(this.params)}`;
+    if (srCache?.key === key) return srCache.image;
+    srCache = null;
+    if (engineDirty) { await applySource(cur); engineDirty = false; }
+    await ai.ensure(cur, this.params);
+    const { image } = await renderPixels(this);
+    srCache = { key, image };
+    return image;
+  },
+  srLimit: () => (isMobileApp ? 16_777_216 : 120_000_000),
+  srMaxScale(image) { return maxScale(image.width, image.height, this.srLimit()); },
+  // ...enlarged or restored, and added to the library as a new photo next to the original.
+  async superResolution({ scale, denoise, onProgress, signal }) {
+    const cur = this.images[this.cur];
+    const image = await this.srSource();
+    if (scale > this.srMaxScale(image)) throw new Error('This photo is too large to enlarge that much on this device');
+    const out = await upscale(image, { scale, denoise, onProgress, signal });
+    const c = el('canvas', { width: out.width, height: out.height });
+    c.getContext('2d').putImageData(out, 0, 0);
+    const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.95));
+    if (!blob) throw new Error('The enlarged photo could not be saved');
+    const base = cur.name.replace(/\.[^.]+$/, '');
+    const file = new File([blob], `${base}-${scale === 1 ? 'restored' : `${scale}x`}.jpg`, { type: 'image/jpeg', lastModified: Date.now() });
+    await openFiles([file]);
+    return { w: out.width, h: out.height };
   },
   aiFailed(err) {
     console.error(err);
@@ -1540,6 +1571,7 @@ async function loadBackground(p) {
   if (f) await setBackgroundImage(app.engine, key, f);
 }
 
+let srCache = null;
 let engineDirty = false;
 
 // The engine renders effective settings (switched-off groups use their defaults).

@@ -5,7 +5,8 @@
 | Rembrandt, including `engine/` and `brand/` (everything not listed below) | GNU GPL v3 or later — `LICENSE` |
 | `native/LibRaw/`, `src/vendor/libraw/` | LibRaw, used under LGPL-2.1 (see below) |
 | `src/vendor/mediapipe/` | MediaPipe Tasks Vision 1.0.1, Apache-2.0 |
-| `models/` | MediaPipe / Google models, Apache-2.0 (see `models/README.md`) |
+| `models/*.tflite` | MediaPipe / Google models, Apache-2.0 (see `models/README.md`) |
+| `models/sr-general-x4.bin` | Real-ESRGAN compact general models, BSD-3-Clause (`models/LICENSE-Real-ESRGAN`) |
 | `src/vendor/nsfw/` | TensorFlow.js 4.22.0, Apache-2.0; NSFWJS 4.3.0 model, MIT (see `src/vendor/nsfw/README.md`) |
 | `src/fonts/` | Geist, Geist Mono, Antonio and Instrument Serif, SIL Open Font License 1.1 (`src/fonts/OFL.txt`) |
 

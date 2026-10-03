@@ -1,10 +1,11 @@
 // AI panel: Enhance, Relight, Sky, Atmosphere, Sunrays, Skin, Lens Blur (with bokeh shapes), Motion,
-// Background and Refocus. Everything runs on this device.
+// Background, Super Resolution and Refocus. Everything runs on this device.
 // Copyright © 2026 the Rembrandt contributors. Licensed under the GNU GPL v3 or later (see LICENSE).
 import { el } from '../util.js';
 import { slider, section, segmented, toggle, button, disclosure } from '../ui.js';
 import { icon } from '../icons.js';
 import { defaultParams } from '../params.js';
+import { buildSRSection } from './panel-sr.js';
 
 export function buildAIPanel(app) {
   const D = defaultParams().ai;
@@ -160,12 +161,14 @@ export function buildAIPanel(app) {
   reg.push({ refresh: showRows });
   bg.body.append(mode.el, blurRow, colorRow, picRow);
 
-  reg.push(enhance, relight, sky, atmos, rays, skin, lens, motion, bg, refocus);
+  const sr = buildSRSection(app);
+  reg.push(enhance, relight, sky, atmos, rays, skin, lens, motion, bg, refocus, sr);
   const group = (name) => el('div', { class: 'ai-group' }, name);
   const root = el('div', { class: 'panel-view ai-panel' }, status, enhance.el,
     group('Light'), relight.el, sky.el, atmos.el, rays.el,
     group('People'), skin.el,
-    group('Lens'), lens.el, motion.el, bg.el, refocus.el);
+    group('Lens'), lens.el, motion.el, bg.el,
+    group('Detail'), sr.el, refocus.el);
   function refresh() { reg.forEach((c) => c.refresh()); }
   return { el: root, refresh };
 }
