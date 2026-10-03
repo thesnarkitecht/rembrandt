@@ -525,6 +525,7 @@ const app = {
     app.small = app.renderSmall(app.renderParams(), SMALL);
     app.hist = computeHistogram(app.small.data);
     navSide?.setThumb(app.small);
+    sideChat?.refresh();
     drawHistogram($('histo'), app.hist);
     $('clipHi').classList.toggle('hot', app.hist.clipHi);
     $('clipLo').classList.toggle('hot', app.hist.clipLo);

@@ -1249,18 +1249,64 @@ body[data-mode="library"] .ask-btn, body[data-mode="account"] .ask-btn { display
 .chat-undo { border: 0; background: none; padding: 0; color: var(--accent); font: 500 9.5px var(--mono); letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; }
 .chat-undo:hover { color: var(--accent-hover); }
 
-/* Presets in the chat, and its motion: messages rise in, the reply writes itself and catches the light. */
-.chat-chips { display: flex; flex-wrap: wrap; gap: 4px; }
-.chip-preset { height: 24px; padding: 0 9px; border: 1px solid var(--line); border-radius: 12px; background: transparent; color: var(--text-2);
-  font: 400 11.5px var(--font); cursor: pointer; transition: transform 0.15s cubic-bezier(0.2, 0.8, 0.2, 1), border-color 0.15s, color 0.15s, background 0.15s; }
-.chip-preset:hover { transform: translateY(-1px); border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); color: var(--text); background: var(--hover); }
-.chip-preset.hit { animation: chip-hit 0.6s ease-out; }
-@keyframes chip-hit { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); background: color-mix(in srgb, var(--accent) 25%, transparent); }
-  100% { box-shadow: 0 0 0 8px transparent; } }
+/* The chat: a header in the brand's voice, a greeting with ideas for this photo, replies that show
+   what changed, Looks (presets as thumbnails of this photo) and a field that glows while you type. */
+@property --chat-a { syntax: '<angle>'; inherits: false; initial-value: 0deg; }
+.chat-head { display: flex; align-items: center; gap: 7px; padding: 2px 2px 0; }
+.chat-head img { width: 15px; height: 15px; }
+.chat-head span { font: 600 12px/1 var(--display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--text); }
+.chat-head em { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; font: 500 8.5px var(--mono); font-style: normal; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); }
+.chat-head em::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); animation: chat-live 2.4s ease-in-out infinite; }
+@keyframes chat-live { 50% { opacity: 0.25; } }
+.chat-hello { padding: 6px 2px 2px; animation: chat-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.chat-hello p { margin: 0 0 10px; font: italic 400 21px/1.08 'Instrument Serif', Georgia, serif; color: var(--text); }
+.chat-ideas { display: flex; flex-wrap: wrap; gap: 5px; }
+.chat-idea { padding: 5px 10px; border-radius: 13px; border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line)); background: transparent;
+  color: var(--text-2); font: 400 11.5px var(--font); cursor: pointer; transition: background 0.15s, color 0.15s, transform 0.15s; }
+.chat-idea:hover { background: var(--accent-soft); color: var(--text); transform: translateY(-1px); }
+.chat-ideas .chat-idea { animation: chat-in 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.chat-ideas .chat-idea:nth-child(2) { animation-delay: 0.06s; } .chat-ideas .chat-idea:nth-child(3) { animation-delay: 0.12s; } .chat-ideas .chat-idea:nth-child(4) { animation-delay: 0.18s; }
+.chat-you { background: color-mix(in srgb, var(--accent) 16%, var(--surface)); }
+.chat-me { flex-wrap: wrap; row-gap: 6px; }
+.chat-me .say { flex: 1 1 auto; }
+.chat-me.undone { opacity: 0.45; text-decoration: line-through; }
+.chat-diff { flex-basis: 100%; display: flex; flex-wrap: wrap; gap: 3px; }
+.chat-diff span { display: inline-flex; gap: 4px; padding: 2px 6px; border-radius: 3px; background: var(--raised); color: var(--muted); font: 500 9.5px var(--mono); font-style: normal; letter-spacing: 0.02em;
+  animation: chat-in 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.chat-diff span:nth-child(2) { animation-delay: 0.05s; } .chat-diff span:nth-child(3) { animation-delay: 0.1s; } .chat-diff span:nth-child(n+4) { animation-delay: 0.15s; }
+.chat-diff b { font-weight: 500; color: var(--accent); }
+.chat-diff .more { color: var(--dim); }
+.chat-me.typing { flex-direction: row; gap: 4px; padding: 8px 4px; }
+.chat-me.typing i { width: 5px; height: 5px; border-radius: 50%; background: var(--accent); animation: chat-dot 0.9s ease-in-out infinite; }
+.chat-me.typing i:nth-child(2) { animation-delay: 0.15s; } .chat-me.typing i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes chat-dot { 0%, 100% { transform: scale(0.6); opacity: 0.35; } 40% { transform: scale(1.15); opacity: 1; } }
+.chat-sub { font: 500 9px var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--dim); padding: 0 2px; }
+.chat-looks { display: flex; gap: 6px; overflow-x: auto; scroll-snap-type: x proximity; scrollbar-width: none; padding: 2px 2px 4px; margin: -2px -2px 0;
+  -webkit-mask: linear-gradient(90deg, #000 85%, transparent); mask: linear-gradient(90deg, #000 85%, transparent); }
+.chat-looks::-webkit-scrollbar { display: none; }
+.look { flex: none; width: 74px; padding: 0; border: 0; background: none; color: var(--muted); cursor: pointer; scroll-snap-align: start; text-align: left; }
+.look canvas { display: block; width: 74px; height: 50px; object-fit: cover; border-radius: 4px; background: var(--well); box-shadow: 0 0 0 1px var(--line);
+  transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.18s; }
+.look span { display: block; margin-top: 4px; font: 400 10.5px/1.2 var(--font); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.look:hover canvas { transform: translateY(-2px); box-shadow: 0 0 0 1.5px var(--accent), 0 6px 14px rgba(0, 0, 0, 0.3); }
+.look:hover span { color: var(--text); }
+.look.hit canvas { animation: chip-hit 0.6s ease-out; }
+@keyframes chip-hit { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 70%, transparent); } 100% { box-shadow: 0 0 0 10px transparent; } }
+.cmd.inline .cmd-box { border-radius: 12px; }
+.cmd.inline.active .cmd-box { border-color: transparent; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  background: linear-gradient(var(--field), var(--field)) padding-box, conic-gradient(from var(--chat-a), var(--mark-3), var(--mark-1), var(--mark-2), var(--line), var(--mark-3)) border-box;
+  animation: chat-spin 4s linear infinite; }
+@keyframes chat-spin { to { --chat-a: 360deg; } }
+.chat-send { width: 24px; height: 24px; flex: none; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--accent-bg); color: var(--on-accent);
+  cursor: pointer; transform: scale(0); transition: transform 0.18s cubic-bezier(0.3, 1.5, 0.5, 1); }
+.chat-send .i { width: 14px; height: 14px; }
+.cmd.inline.typed .chat-send { transform: scale(1); }
 .chat-you, .chat-me { animation: chat-in 0.38s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
-.chat-me { animation-delay: 0.08s; }
 @keyframes chat-in { from { opacity: 0; transform: translateY(8px) scale(0.97); filter: blur(4px); } }
-.chat-me.done > span { background: linear-gradient(100deg, var(--text-2) 40%, var(--mark-1) 50%, var(--text-2) 60%) 0 0 / 250% 100%;
+.chat-me.done > .say { background: linear-gradient(100deg, var(--text-2) 40%, var(--mark-1) 50%, var(--text-2) 60%) 0 0 / 250% 100%;
   -webkit-background-clip: text; background-clip: text; color: transparent; animation: chat-shine 1.1s ease-out 1 both; }
 @keyframes chat-shine { from { background-position: 100% 0; } to { background-position: 0 0; } }
-@media (prefers-reduced-motion: reduce) { .chat-you, .chat-me, .chat-me.done > span, .chip-preset.hit { animation: none; } .chat-me.done > span { color: var(--text-2); background: none; } }
+@media (prefers-reduced-motion: reduce) {
+  .chat-you, .chat-me, .chat-hello, .chat-idea, .chat-diff span, .chat-me.done > .say, .look.hit canvas, .cmd.inline.active .cmd-box, .chat-head em::before { animation: none; }
+  .chat-me.done > .say { color: var(--text-2); background: none; }
+}
