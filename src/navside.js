@@ -1,10 +1,8 @@
 // Left side panel in Edit (desktop): Navigator (the photo with the visible area, zoom presets, click or
-// drag to move around), a compact Presets list (hover to preview on the photo, click to apply), and
-// Edit with words at the bottom.
+// drag to move around) and Edit with words, the chat that also holds the presets.
 // Copyright © 2026 the Rembrandt contributors. Licensed under the GNU GPL v3 or later (see LICENSE).
 import { el, clamp } from './util.js';
 import { section } from './ui.js';
-import { allPresets } from './panel-presets.js';
 
 const ZOOMS = [{ label: 'Fit', k: 0 }, { label: '50%', k: 0.5 }, { label: '100%', k: 1 }, { label: '200%', k: 2 }, { label: '400%', k: 4 }];
 
@@ -68,33 +66,8 @@ export function buildNavSide(app) {
     Object.assign(rect.style, { left: `${L * 100}%`, top: `${T * 100}%`, width: `${(R - L) * 100}%`, height: `${(B - T) * 100}%` });
   }
 
-  // ---- Presets
-  const pre = section('Presets', { id: 'side-presets', open: true });
-  const list = el('div', { class: 'nav-presets' });
-  pre.body.append(list);
-  let active = null;
-  function buildPresets() {
-    list.textContent = '';
-    let group = null;
-    for (const p of allPresets()) {
-      if (p.group !== group) { group = p.group; list.append(el('div', { class: 'np-group' }, group)); }
-      const b = el('button', { class: 'np', type: 'button', title: `Apply ${p.name}` }, p.name);
-      b.addEventListener('mouseenter', () => app.img && app.previewSettings(p.settings));
-      b.addEventListener('mouseleave', () => app.img && app.previewSettings(null));
-      b.addEventListener('click', () => {
-        if (!app.img) return;
-        app.previewSettings(null);
-        app.applySettings(p.settings, p.name);
-        active?.classList.remove('on');
-        active = b; b.classList.add('on');
-      });
-      list.append(b);
-    }
-  }
-  buildPresets();
-
-  // Edit with words lives at the bottom, like a chat (see command.js).
+  // Below it, Edit with words: a chat with the presets one click away (see command.js).
   const ask = el('div', { class: 'nav-ask' });
-  root.append(nav.el, pre.el, ask);
-  return { el: root, update, setThumb, refreshPresets: buildPresets, ask };
+  root.append(nav.el, ask);
+  return { el: root, update, setThumb, ask };
 }

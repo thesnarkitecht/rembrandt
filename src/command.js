@@ -70,10 +70,33 @@ export function createCommandBar(app, mount = null) {
     log.querySelector('.chat-undo')?.remove();
     const undo = el('button', { class: 'chat-undo', type: 'button' }, 'Undo');
     undo.addEventListener('click', () => { app.undo(); undo.remove(); });
-    log.append(el('div', { class: 'chat-you' }, q), el('div', { class: 'chat-me' }, el('span', {}, did), undo));
-    while (log.children.length > 12) log.firstChild.remove();
-    log.scrollTop = log.scrollHeight;
+    const said = el('span', {});
+    const me = el('div', { class: 'chat-me' }, said, undo);
+    log.append(el('div', { class: 'chat-you' }, q), me);
+    while (log.children.length > 16) log.firstChild.remove();
+    // The reply writes itself out, quickly.
+    let n = 0;
+    const tick = () => { said.textContent = did.slice(0, (n += 2)); log.scrollTop = log.scrollHeight; if (n < did.length) requestAnimationFrame(tick); else me.classList.add('done'); };
+    requestAnimationFrame(tick);
   }
+  // Presets as chips under the conversation: hover previews on the photo, a click applies.
+  const chips = el('div', { class: 'chat-chips' });
+  function paintChips() {
+    chips.replaceChildren(...allPresets().map((p) => {
+      const c = el('button', { class: 'chip-preset', type: 'button', title: `${p.group} preset` }, p.name);
+      c.addEventListener('mouseenter', () => app.img && app.previewSettings(p.settings));
+      c.addEventListener('mouseleave', () => app.img && !active && app.previewSettings(null));
+      c.addEventListener('click', () => {
+        if (!app.img) return;
+        app.previewSettings(null);
+        app.applySettings(p.settings);   // no toast: the chat says it
+        remember(p.name, `${p.name} applied`);
+        c.classList.remove('hit'); void c.offsetWidth; c.classList.add('hit');
+      });
+      return c;
+    }));
+  }
+  if (mount) { paintChips(); root.insertBefore(chips, box); }
 
   // Every slider and section, by name, from the Edit and AI panels (built once, off screen).
   let index = null;
@@ -96,7 +119,7 @@ export function createCommandBar(app, mount = null) {
     const found = [];
     const lq = q.toLowerCase();
     if (lq.length > 1) {
-      for (const p of allPresets()) if (score(lq, p.name)) found.push({ kind: 'preset', title: p.name, hint: `${p.group} preset`, run: () => app.applySettings(p.settings, p.name), score: score(lq, p.name) });
+      for (const p of allPresets()) if (score(lq, p.name)) found.push({ kind: 'preset', title: p.name, hint: `${p.group} preset`, settings: p.settings, run: () => app.applySettings(p.settings, mount ? undefined : p.name), score: score(lq, p.name) });
       if (!index) buildIndex();
       const seen = new Set();
       for (const c of index) {
@@ -116,9 +139,10 @@ export function createCommandBar(app, mount = null) {
       return row;
     }));
     if (!q) list.append(el('div', { class: 'cmd-empty' }, 'Try “brighter”, “recover the sky”, “golden hour”, “b&w with grain”, “less vignette”, or a control: “clarity”.'));
-    // Show what the selected edit would do, on the photo.
-    app.preview = rows[sel]?.preview || null;
-    app.requestRender();
+    // Show what the selected edit or preset would do, on the photo.
+    const r = rows[sel];
+    if (r?.settings) app.previewSettings(r.settings);
+    else { app.preview = r?.preview || null; app.requestRender(); }
   }
   function apply(next) {
     const was = app.params;
@@ -145,7 +169,7 @@ export function createCommandBar(app, mount = null) {
     const r = rows[i], q = input.value.trim();
     close();
     r?.run();
-    if (mount && r?.kind === 'do') remember(q, r.title);
+    if (mount && (r?.kind === 'do' || r?.kind === 'preset')) remember(q, r.kind === 'preset' ? `${r.title} applied` : r.title);
   }
   function open() {
     if (!app.img) return;
@@ -167,7 +191,7 @@ export function createCommandBar(app, mount = null) {
     app.requestRender();
   }
   if (mount) {
-    input.addEventListener('focus', () => { if (!active) open(); });
+    input.addEventListener('focus', () => { paintChips(); if (!active) open(); });
     input.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== input) close(); }, 120));
     list.addEventListener('pointerdown', (e) => e.preventDefault());   // keep focus while clicking a row
   }
