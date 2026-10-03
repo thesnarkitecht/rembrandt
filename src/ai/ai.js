@@ -52,6 +52,9 @@ export function aiNeeds(p) {
     if (a.blur.amount > 0) { need.add('depth'); if (a.blur.protect) need.add('subject'); }
     if (a.bg.mode !== 'none' || a.bg.blur > 0) need.add('subject');
     if (a.refocus?.amount > 0 && a.refocus.scope !== 'all') need.add('subject');
+    const r = a.relight, sk = a.sky;
+    if ((r && (r.near || r.far || r.warmth)) || (sk && (sk.deepen || sk.warmth || sk.saturation)) || a.atmos?.amount > 0 || a.rays?.amount > 0) need.add('depth');
+    if (a.enhance?.amount > 0 || a.skin?.amount > 0 || (a.motion?.amount > 0 && a.motion.protect !== false) || (sk && (sk.deepen || sk.warmth || sk.saturation)) || a.atmos?.amount > 0 || a.rays?.amount > 0) need.add('subject');
   }
   for (const m of p.masks || []) {
     for (const c of m.comps) {

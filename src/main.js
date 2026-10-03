@@ -12,6 +12,7 @@ import { localAdjustments } from './local-adjust.js';
 import { ai } from './ai/ai.js';
 import { lensPass, chain, setBackgroundImage, hasBackgroundImage, quality as lensQuality, lensActive } from './ai/lens.js';
 import { refocusPass, refocusActive } from './ai/refocus.js';
+import { studioPass, motionPass } from './ai/studio.js';
 import { buildAIPanel } from './ai/panel-ai.js';
 import { decodeFile, decodeRawLinear, sampleData, thumbnail, ACCEPT, RAW_EXT } from './loader.js';
 import * as folders from './folders.js';
@@ -246,7 +247,7 @@ const app = {
   startPick(kind) {
     this.state.pick = kind;
     viewer.classList.add('picking');
-    this.toast(kind === 'focus' ? 'Click where the photo should be in focus' : kind === 'wb' ? 'Click something that should be neutral grey or white' : kind === 'color' ? 'Click the color to select' : 'Click a tone to select');
+    this.toast(kind === 'sun' ? 'Click where the light comes from' : kind === 'focus' ? 'Click where the photo should be in focus' : kind === 'wb' ? 'Click something that should be neutral grey or white' : kind === 'color' ? 'Click the color to select' : 'Click a tone to select');
   },
   pickWhiteBalance() { if (this.img) this.startPick('wb'); },
   finishPick(uv) {
@@ -254,6 +255,12 @@ const app = {
     this.state.pick = null;
     viewer.classList.remove('picking');
     if (!kind || uv[0] < 0 || uv[0] > 1 || uv[1] < 0 || uv[1] > 1) return;
+    if (kind === 'sun') {
+      Object.assign(this.params.ai.rays, { x: Math.round(uv[0] * 1000) / 1000, y: Math.round(uv[1] * 1000) / 1000 });
+      if (!this.params.ai.rays.amount) this.params.ai.rays.amount = 50;
+      this.aiEnsure(); this.commit(); this.refreshPanel(); this.requestRender();
+      return;
+    }
     if (kind === 'focus') {
       const e = this.images[this.cur];
       const set = () => {
@@ -2037,7 +2044,9 @@ function boot() {
   document.querySelectorAll('[data-icon]').forEach((n) => n.prepend(icon(n.dataset.icon)));
   try {
     app.engine = new AppEngine(canvas);
-    app.engine.hostPasses = chain(refocusPass, localAdjustments, lensPass);
+    app.engine.hostPasses = chain(refocusPass, localAdjustments, studioPass, lensPass, motionPass);
+    // Test hook: ?debug exposes the app to automated checks.
+    if (new URLSearchParams(location.search).has('debug')) window.__rembrandt = app;
     app.engine.sourcePasses = retouchPasses;
     ai.onChange(() => { if (app.state.tool === 'ai' || app.state.tool === 'masks') app.refreshPanel(); app.requestRender(); });
   } catch (err) {

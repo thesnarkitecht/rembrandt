@@ -40,7 +40,14 @@ export function defaultParams(aspect = 1.5) {
     retouch: [],
     ai: {
       refocus: { amount: 0, radius: -1, scope: 'subject', protect: 30 },
-      blur: { amount: 0, focus: -1, range: 12, bokeh: 0, protect: true, sharpen: 0 },
+      blur: { amount: 0, focus: -1, range: 12, bokeh: 0, protect: true, sharpen: 0, blades: 0, catseye: 0 },
+      enhance: { amount: 0 },
+      relight: { near: 0, far: 0, boundary: 50, warmth: 0 },
+      sky: { deepen: 0, warmth: 0, saturation: 0 },
+      atmos: { amount: 0, warmth: 0, lift: 30, depth: 50 },
+      rays: { amount: 0, x: 0.72, y: 0.18, length: 50, warmth: 40 },
+      skin: { amount: 0 },
+      motion: { amount: 0, angle: 0, protect: true },
       bg: { mode: 'none', color: '#e9e6e1', image: null, blur: 0 },
     },
     off: {},  // adjustment groups switched off (see GROUPS)
@@ -63,6 +70,7 @@ export const GROUPS = {
   refocus: ['ai.refocus'],
   lens: ['ai.blur'],
   background: ['ai.bg'],
+  enhance: ['ai.enhance'], relight: ['ai.relight'], sky: ['ai.sky'], atmos: ['ai.atmos'], rays: ['ai.rays'], skin: ['ai.skin'], motion: ['ai.motion'],
   masks: ['masks'],
 };
 

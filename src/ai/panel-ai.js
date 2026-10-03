@@ -1,4 +1,5 @@
-// AI panel: Refocus (deblur), Lens Blur and Background. Everything runs on this device.
+// AI panel: Enhance, Relight, Sky, Atmosphere, Sunrays, Skin, Lens Blur (with bokeh shapes), Motion,
+// Background and Refocus. Everything runs on this device.
 // Copyright © 2026 the Rembrandt contributors. Licensed under the GNU GPL v3 or later (see LICENSE).
 import { el } from '../util.js';
 import { slider, section, segmented, toggle, button, disclosure } from '../ui.js';
@@ -27,6 +28,68 @@ export function buildAIPanel(app) {
   const on = (g) => ({ get: () => !app.params.off?.[g], set: (v) => app.setGroupOn(g, v) });
   const resetGroup = (k) => () => { app.params.ai[k] = structuredClone(D[k]); app.commit(); app.requestRender(); refresh(); };
 
+  // Shared: a section whose settings live in params.ai[key], switched on/off as group `g`.
+  // A section in use opens by default and carries a dot, so what's applied is visible at a glance.
+  const used = (key) => JSON.stringify(A()[key]) !== JSON.stringify(defaultParams().ai[key]);
+  const sec = (title, key, g, icn, open = false) => section(title, { id: `ai-${key}`, open: open || used(key), badge: { icon: icn },
+    right: used(key) ? el('span', { class: 'sec-dot', title: 'In use' }) : null, enabled: on(g), onReset: resetGroup(key) });
+  const ensure = () => { app.aiEnsure(); app.commit(); app.requestRender(); };
+
+  // ---- enhance: one slider
+  const enhance = sec('Enhance', 'enhance', 'enhance', 'wand', true);
+  enhance.body.append(
+    el('p', { class: 'ai-lede' }, 'One slider: depth, light and color, balanced for the subject.'),
+    S(() => A().enhance.amount, (v) => { A().enhance.amount = v; }, 'Amount', 0, 100, 0));
+
+  // ---- relight
+  const relight = sec('Relight', 'relight', 'relight', 'sun');
+  relight.body.append(
+    S(() => A().relight.near, (v) => { A().relight.near = v; }, 'Near', -100, 100, 0),
+    S(() => A().relight.far, (v) => { A().relight.far = v; }, 'Far', -100, 100, 0),
+    disclosure('ai-relight', 'More options',
+      S(() => A().relight.boundary, (v) => { A().relight.boundary = v; }, 'Depth boundary', 0, 100, 50),
+      S(() => A().relight.warmth, (v) => { A().relight.warmth = v; }, 'Near warmth', -100, 100, 0)));
+
+  // ---- sky
+  const sky = sec('Sky', 'sky', 'sky', 'cloud');
+  sky.body.append(
+    S(() => A().sky.deepen, (v) => { A().sky.deepen = v; }, 'Deepen', -100, 100, 0),
+    S(() => A().sky.warmth, (v) => { A().sky.warmth = v; }, 'Golden hour', -100, 100, 0),
+    S(() => A().sky.saturation, (v) => { A().sky.saturation = v; }, 'Saturation', -100, 100, 0));
+
+  // ---- atmosphere
+  const atmos = sec('Atmosphere', 'atmos', 'atmos', 'drop');
+  atmos.body.append(
+    S(() => A().atmos.amount, (v) => { A().atmos.amount = v; }, 'Haze', 0, 100, 0),
+    disclosure('ai-atmos', 'More options',
+      S(() => A().atmos.lift, (v) => { A().atmos.lift = v; }, 'Brightness', 0, 100, 30),
+      S(() => A().atmos.depth, (v) => { A().atmos.depth = v; }, 'Depth falloff', 0, 100, 50),
+      S(() => A().atmos.warmth, (v) => { A().atmos.warmth = v; }, 'Warmth', -100, 100, 0)));
+
+  // ---- sunrays
+  const rays = sec('Sunrays', 'rays', 'rays', 'sparkle');
+  rays.body.append(
+    S(() => A().rays.amount, (v) => { A().rays.amount = v; }, 'Amount', 0, 100, 0),
+    el('div', { class: 'inline-btns' }, button('Place the sun', () => app.startPick('sun'), 'sm', 'focus')),
+    disclosure('ai-rays', 'More options',
+      S(() => A().rays.length, (v) => { A().rays.length = v; }, 'Length', 0, 100, 50),
+      S(() => A().rays.warmth, (v) => { A().rays.warmth = v; }, 'Warmth', -100, 100, 40)));
+
+  // ---- skin
+  const skin = sec('Skin', 'skin', 'skin', 'subject');
+  skin.body.append(
+    S(() => A().skin.amount, (v) => { A().skin.amount = v; }, 'Smooth skin', 0, 100, 0),
+    el('p', { class: 'hint' }, 'On people only. Pores and edges stay.'));
+
+  // ---- motion
+  const motion = sec('Motion', 'motion', 'motion', 'linear');
+  const motionProtect = toggle('Keep subject sharp', () => A().motion.protect !== false, (v) => { A().motion.protect = v; ensure(); });
+  reg.push(motionProtect);
+  motion.body.append(
+    S(() => A().motion.amount, (v) => { A().motion.amount = v; }, 'Amount', 0, 100, 0),
+    S(() => A().motion.angle, (v) => { A().motion.angle = v; }, 'Direction', -90, 90, 0, { format: (v) => `${Math.round(v)}°` }),
+    motionProtect.el);
+
   // ---- refocus
   const refocus = section('Refocus', { id: 'ai-refocus', badge: { icon: 'focus' }, enabled: on('refocus'), onReset: resetGroup('refocus') });
   const scope = segmented([{ value: 'subject', label: 'Subject' }, { value: 'all', label: 'Whole photo' }], A().refocus.scope, (v) => {
@@ -50,6 +113,9 @@ export function buildAIPanel(app) {
   // ---- lens blur
   const lens = section('Lens Blur', { id: 'ai-lens', badge: { icon: 'aperture' }, enabled: on('lens'), onReset: resetGroup('blur') });
   const protect = toggle('Keep subject sharp', () => A().blur.protect, (v) => { A().blur.protect = v; app.aiEnsure(); app.commit(); app.requestRender(); });
+  const blades = segmented([{ value: 0, label: 'Round' }, { value: 5, label: '5' }, { value: 6, label: '6' }, { value: 8, label: '8' }, { value: 9, label: '9' }],
+    A().blur.blades || 0, (v) => { A().blur.blades = +v; ensure(); }, 'seg-sm');
+  reg.push({ refresh: () => blades.set(A().blur.blades || 0) });
   const showDepth = toggle('Show depth map', () => app.state.showDepth, (v) => { app.state.showDepth = v; app.requestRender(); });
   reg.push(protect, showDepth);
   lens.body.append(
@@ -62,6 +128,8 @@ export function buildAIPanel(app) {
       S(() => (A().blur.focus < 0 ? app.aiFocus() : A().blur.focus) * 100, (v) => { A().blur.focus = v / 100; }, 'Focal distance', 0, 100, 80,
         { format: (v) => (A().blur.focus < 0 ? 'Auto' : `${Math.round(v)}`) }),
       S(() => A().blur.bokeh, (v) => { A().blur.bokeh = v; }, 'Bokeh highlights', 0, 100, 0),
+      el('div', { class: 'subhead' }, 'Aperture'), blades.el,
+      S(() => A().blur.catseye, (v) => { A().blur.catseye = v; }, "Cat's eye", 0, 100, 0),
       protect.el, showDepth.el),
   );
 
@@ -92,8 +160,12 @@ export function buildAIPanel(app) {
   reg.push({ refresh: showRows });
   bg.body.append(mode.el, blurRow, colorRow, picRow);
 
-  reg.push(refocus, lens, bg);
-  const root = el('div', { class: 'panel-view' }, status, refocus.el, lens.el, bg.el);
+  reg.push(enhance, relight, sky, atmos, rays, skin, lens, motion, bg, refocus);
+  const group = (name) => el('div', { class: 'ai-group' }, name);
+  const root = el('div', { class: 'panel-view ai-panel' }, status, enhance.el,
+    group('Light'), relight.el, sky.el, atmos.el, rays.el,
+    group('People'), skin.el,
+    group('Lens'), lens.el, motion.el, bg.el, refocus.el);
   function refresh() { reg.forEach((c) => c.refresh()); }
   return { el: root, refresh };
 }

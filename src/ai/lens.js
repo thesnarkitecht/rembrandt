@@ -81,6 +81,8 @@ const GATHER = HEAD + COMMON + `
 uniform sampler2D uIn;
 uniform vec2 uTexel;
 uniform int uTaps; // 96, or fewer for a quick draft while a slider moves
+uniform float uBlades;  // 0 round, else the number of aperture blades
+uniform float uCatEye;  // 0..1: discs clipped toward the frame edges, like a fast lens wide open
 in vec2 vUv; out vec4 o;
 const int N = 96;
 void main() {
@@ -96,12 +98,26 @@ void main() {
     float fi = float(i);
     float rr = sqrt(fi / n) * R;
     float a = fi * 2.39996323;
-    vec2 uv = vUv + vec2(cos(a), sin(a)) * rr * uTexel;
+    vec2 off = vec2(cos(a), sin(a)) * rr;
+    // The aperture's shape, as a distance: a sample counts when it is inside the shape scaled to its
+    // own blur. Polygon with straight blades (slightly rotated, like a real iris).
+    float q = rr;
+    if (uBlades > 2.5) {
+      float seg = 6.2831853 / uBlades;
+      q = rr / (cos(seg * 0.5) / cos(mod(a + 0.3, seg) - seg * 0.5));
+    }
+    // Cat's eye: the disc is cut by a second one offset toward the frame centre.
+    if (uCatEye > 0.0) {
+      vec2 shift = (vUv - 0.5) * 2.0 * uCatEye * R * 1.1;
+      q = max(q, length(off + shift));
+    }
+    if (q > R) continue;
+    vec2 uv = vUv + off * uTexel;
     vec4 s = textureLod(uIn, uv, 0.0);
     float rs = s.a;
     // A sample behind this pixel may not spread over it further than this pixel's own blur.
     if (depthAt(uv) < d0 - 0.02) rs = min(rs, r0);
-    float w = clamp(rs - rr + 1.0, 0.0, 1.0);
+    float w = clamp(rs - q + 1.0, 0.0, 1.0);
     acc += s.rgb * w; ws += w;
   }
   o = vec4(acc / ws, r0);
@@ -195,6 +211,7 @@ function uniformsFor(engine, p) {
     uBgAspect: img ? img.aspect : 1, uImgAspect: engine.fullW / engine.fullH,
     uInC: REF_CONTRAST, uInK: k,
     uBokeh: a.blur.bokeh / 100,
+    uBlades: a.blur.blades || 0, uCatEye: (a.blur.catseye || 0) / 100,
     uFocusSharp: (a.blur.sharpen || 0) / 100,
     uDepthView: p._depthView && hasD ? 1 : 0,
     maxR,
