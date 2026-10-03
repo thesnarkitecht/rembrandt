@@ -77,7 +77,7 @@ export function buildEditPanel(app) {
   );
 
   // --- color
-  const color = sec('Color', 'color', { id: 'color', onReset: resetPaths(['temp', 'tint', 'vibrance', 'saturation']) });
+  const color = sec('Color', 'color', { id: 'color', open: false, onReset: resetPaths(['temp', 'tint', 'vibrance', 'saturation']) });
   const picker = iconButton('picker', 'Pick a neutral point (W)', () => app.pickWhiteBalance(), 'sm');
   color.body.append(
     el('div', { class: 'subhead' }, el('span', {}, 'White balance'), picker),

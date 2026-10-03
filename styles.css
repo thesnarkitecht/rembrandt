@@ -1217,3 +1217,20 @@ body[data-mode="library"] .ask-btn, body[data-mode="account"] .ask-btn { display
 .direct-chip i { width: 12px; height: 12px; border-radius: 50%; background: var(--sw); box-shadow: 0 0 0 1.5px rgba(255, 255, 255, 0.85); }
 .direct-chip b { font-weight: 500; color: #a8a095; margin-left: 2px; }
 .direct-chip em { font: 500 11px var(--mono); font-style: normal; color: #e0b374; margin-left: 2px; }
+
+/* ------------------------------------------------------------------ calmer panel
+   One section open at a time (src/ui.js), more air between rows, and section heads in the site's
+   voice: small mono capitals, a bronze marker on the open one, values that only show a box when
+   touched or changed. */
+#panelBody .sec-head, .navside .sec-head { height: 36px; padding: 0 10px 0 14px; font: 500 10.5px var(--mono); letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--muted); background: transparent; }
+#panelBody .sec-head:hover, .navside .sec-head:hover { color: var(--text); background: var(--hover); }
+#panelBody .sec.open > .sec-head, .navside .sec.open > .sec-head { color: var(--text); box-shadow: inset 2px 0 0 var(--accent); }
+#panelBody .sec.open > .sec-head::before, .navside .sec.open > .sec-head::before { color: var(--accent); }
+#panelBody .sec-body { padding: 4px 14px 16px; }
+#panelBody .ctl { min-height: 27px; column-gap: 10px; }
+#panelBody .ctl label { font-size: 12px; color: var(--text-2); }
+#panelBody .ctl .val { background: transparent; border-color: transparent; }
+#panelBody .ctl:hover .val, #panelBody .ctl .val:focus { background: var(--field); border-color: var(--line); }
+#panelBody .ctl.changed .val { border-color: transparent; }
+#panelBody .sec + .sec, .navside .sec + .sec { border-top-color: var(--line); }

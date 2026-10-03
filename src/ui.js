@@ -86,16 +86,20 @@ export function section(title, { id, open = true, onReset, right, badge, enabled
   }
   const head = el('div', { class: 'sec-head', role: 'button', tabindex: 0 },
     badgeEl, el('span', { class: 'sec-title' }, title), el('span', { class: 'grow' }), right || null, resetBtn, sw, icon('chevron', 'i chev'));
-  const root = el('section', { class: 'sec' + (isOpen ? ' open' : '') + (enabled && !enabled.get() ? ' off' : '') }, head, body);
-  const toggle = () => {
-    root.classList.toggle('open');
-    if (id) {
-      openState[id] = root.classList.contains('open');
-      try { localStorage.setItem('lumen:sections', JSON.stringify(openState)); } catch { /* ignore */ }
+  const root = el('section', { class: 'sec' + (isOpen ? ' open' : '') + (enabled && !enabled.get() ? ' off' : ''), 'data-id': id || null }, head, body);
+  const remember = (sec) => { if (sec.dataset.id) openState[sec.dataset.id] = sec.classList.contains('open'); };
+  // In the editing panel one section is open at a time, so it never piles up; Shift keeps the others.
+  const toggle = (e) => {
+    const opening = !root.classList.contains('open');
+    if (opening && !e?.shiftKey && root.closest('#panelBody')) {
+      for (const s of root.parentElement.querySelectorAll(':scope > .sec.open')) { s.classList.remove('open'); remember(s); }
     }
+    root.classList.toggle('open');
+    remember(root);
+    try { localStorage.setItem('lumen:sections', JSON.stringify(openState)); } catch { /* ignore */ }
   };
   head.addEventListener('click', toggle);
-  head.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
+  head.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(e); } });
   const refresh = () => { if (enabled) { const on = enabled.get(); sw.firstChild.checked = on; root.classList.toggle('off', !on); } };
   return { el: root, body, refresh, setChanged: (c) => root.classList.toggle('changed', !!c) };
 }

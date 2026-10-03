@@ -198,6 +198,8 @@ const app = {
     const t = this.state.tool;
     this.panel = t === 'crop' ? buildCropPanel(this) : t === 'masks' ? buildMaskPanel(this) : t === 'retouch' ? buildRetouchPanel(this) : t === 'presets' ? buildPresetsPanel(this) : t === 'ai' ? buildAIPanel(this) : buildEditPanel(this);
     body.append(this.panel.el);
+    // One section open at a time (see section() in ui.js): keep the first.
+    [...body.querySelectorAll('.sec.open')].slice(1).forEach((s) => s.classList.remove('open'));
   },
   refreshPanel() { this.panel?.refresh(); },
   rebuildPanel() {
