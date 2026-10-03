@@ -135,9 +135,8 @@ async function run(op, bitmap, point) {
   if (op === 'object') {
     const seg = await segmenter('object');
     const res = seg.segment(bitmap, { keypoint: { x: point[0], y: point[1] } });
-    const m = mask0(res); closeAll(res);
-    const mm = m.w === w && m.h === h ? m.data : m.data; // model output is at input size
-    return guided(L, mm, w, h, r, 4e-4);
+    const m = mask0(res); closeAll(res);   // model output is at input size
+    return guided(L, m.data, w, h, r, 4e-4);
   }
   throw new Error('Unknown AI operation ' + op);
 }

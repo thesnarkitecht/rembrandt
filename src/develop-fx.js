@@ -17,7 +17,7 @@ export function createDevelopFX(app, viewer) {
   let active = false;
 
   // Where the photo is on screen (css px), clipped to the viewer; and its pixels on a coarse grid.
-  function snapshot(params, cell) {
+  function snapshot(params) {
     if (!app.img || !app.m) return null;
     const c = params.geometry.crop;
     const [x0, y0] = app.qToCssPoint(c.cx - c.w / 2, c.cy - c.h / 2), [x1, y1] = app.qToCssPoint(c.cx + c.w / 2, c.cy + c.h / 2);
@@ -26,10 +26,9 @@ export function createDevelopFX(app, viewer) {
     const V = { x: Math.max(0, R.x), y: Math.max(0, R.y) };
     V.w = Math.min(vw, R.x + R.w) - V.x; V.h = Math.min(vh, R.y + R.h) - V.y;
     if (V.w < 8 || V.h < 8) return null;
-    const sw = Math.max(8, Math.min(480, Math.round(R.w / cell))), sh = Math.max(8, Math.min(480, Math.round(R.h / cell)));
-    let px;
-    try { px = app.engine.readPixels(params, sw, sh, { ...app.outputMats(params, sw, sh), scale: sh / c.h, cropTest: true }); } catch { return null; }
-    return { R, V, sw, sh, px };
+    let img;
+    try { img = app.renderSmall(params, 360); } catch { return null; }
+    return img && { R, V, sw: img.width, sh: img.height, px: img.data };
   }
 
   function grid(snap, cell, light) {
@@ -110,8 +109,7 @@ export function createDevelopFX(app, viewer) {
     const id = ++run;
     const light = getComputedStyle(document.documentElement).colorScheme.trim() === 'light';
     const cell = Math.max(6, Math.round(Math.min(viewer.clientWidth, viewer.clientHeight) / 90));
-    const snap = snapshot(params || app.renderParams(), cell);
-    app.requestRender();   // readPixels used the engine; put the view back
+    const snap = snapshot(params || app.renderParams());
     if (!snap) { await hold; return; }
     const g = grid(snap, cell, light);
     active = true;

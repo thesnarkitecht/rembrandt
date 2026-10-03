@@ -9,8 +9,8 @@
 // It runs as our own GPU kernels, no ML runtime:
 //   • WebGPU compute (Metal on Apple silicon, D3D12/Vulkan elsewhere). Activations are stored in
 //     half precision when the GPU supports it (all Apple GPUs do), which halves memory traffic on
-//     unified memory; arithmetic stays in 32-bit. Each workgroup computes a 16×8 tile for 16 output
-//     channels, with the input tile and the weights staged in threadgroup memory.
+//     unified memory; arithmetic stays in 32-bit. Each workgroup computes a 64×8 tile for 16 output
+//     channels (4 pixels per thread), with the input tile and the weights staged in threadgroup memory.
 //   • WebGL2 fragment shaders where WebGPU is missing (Linux, older macOS): half-float texture
 //     arrays, four output channel groups per pass.
 // The image is processed in overlapping tiles so memory stays bounded at any size.
@@ -100,18 +100,26 @@ async function webgpu() {
   })().catch(() => null));
 }
 
-const TW = 16, TH = 8;
+// Workgroup: 16×8 threads, each computing PX pixels (strided by 16 along x) × 16 output channels, so
+// every weight block read from threadgroup memory feeds PX pixels instead of one.
+const TW = 16, TH = 8, PX = 4, TX = TW * PX;
 function convWGSL(f16, IG, CH, srcF32, prelu, OGT) {
   const S = f16 ? 'f16' : 'f32';
   const src = srcF32 ? 'f32' : S;
-  const T = (TW + 2) * (TH + 2);
-  let body = '';
-  for (let o = 0; o < 4; o++) body += `        a${o} += wsh[(${o}u * ${CH}u + g) * 9u + t] * v;\n`;
+  const RW = TX + 2, T = RW * (TH + 2);
+  const O = [0, 1, 2, 3], K = [...Array(PX).keys()];
+  const decl = O.flatMap((o) => K.map((k) => `var a${o}${k} = vec4f(0.0);`)).join(' ');
+  const body = K.map((k) => `        let v${k} = tile[b + ${k * TW}u];\n`).join('')
+    + O.map((o) => `        let m${o} = wsh[(${o}u * ${CH}u + g) * 9u + t];\n` + K.map((k) => `        a${o}${k} += m${o} * v${k};\n`).join('')).join('');
   let store = '';
-  for (let o = 0; o < 4; o++) {
-    store += `  { var r = a${o} + bias[og0 + ${o}u];\n`;
-    if (prelu) store += `    let s = bias[${OGT}u + og0 + ${o}u]; r = select(s * r, r, r >= vec4f(0.0));\n`;
-    store += `    dst[((og0 + ${o}u) * p.h + gy) * p.w + gx] = vec4<${S}>(r); }\n`;
+  for (const k of K) {
+    store += `  { let gx = wg.x * ${TX}u + lid.x + ${k * TW}u;\n    if (gx < p.w) {\n`;
+    for (const o of O) {
+      store += `      { var r = a${o}${k} + bias[og0 + ${o}u];\n`;
+      if (prelu) store += `        let s = bias[${OGT}u + og0 + ${o}u]; r = select(s * r, r, r >= vec4f(0.0));\n`;
+      store += `        dst[((og0 + ${o}u) * p.h + gy) * p.w + gx] = vec4<${S}>(r); }\n`;
+    }
+    store += '    } }\n';
   }
   return `${f16 ? 'enable f16;\n' : ''}
 struct P { w: u32, h: u32 }
@@ -124,16 +132,15 @@ var<workgroup> tile: array<vec4f, ${CH * T}>;
 var<workgroup> wsh: array<mat4x4f, ${4 * CH * 9}>;
 @compute @workgroup_size(${TW}, ${TH}, 1)
 fn main(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_id) lid: vec3u, @builtin(local_invocation_index) li: u32) {
-  let x0 = i32(wg.x * ${TW}u) - 1;
+  let x0 = i32(wg.x * ${TX}u) - 1;
   let y0 = i32(wg.y * ${TH}u) - 1;
-  let gx = wg.x * ${TW}u + lid.x;
   let gy = wg.y * ${TH}u + lid.y;
   let og0 = wg.z * 4u;
-  var a0 = vec4f(0.0); var a1 = vec4f(0.0); var a2 = vec4f(0.0); var a3 = vec4f(0.0);
+  ${decl}
   for (var c0 = 0u; c0 < ${IG}u; c0 += ${CH}u) {
     for (var i = li; i < ${CH * T}u; i += ${TW * TH}u) {
       let g = i / ${T}u; let r = i % ${T}u;
-      let sx = x0 + i32(r % ${TW + 2}u); let sy = y0 + i32(r / ${TW + 2}u);
+      let sx = x0 + i32(r % ${RW}u); let sy = y0 + i32(r / ${RW}u);
       var v = vec4f(0.0);
       if (sx >= 0 && sy >= 0 && sx < i32(p.w) && sy < i32(p.h)) { v = vec4f(src[((c0 + g) * p.h + u32(sy)) * p.w + u32(sx)]); }
       tile[i] = v;
@@ -145,12 +152,12 @@ fn main(@builtin(workgroup_id) wg: vec3u, @builtin(local_invocation_id) lid: vec
     workgroupBarrier();
     for (var g = 0u; g < ${CH}u; g++) {
       for (var t = 0u; t < 9u; t++) {
-        let v = tile[g * ${T}u + (lid.y + t / 3u) * ${TW + 2}u + lid.x + t % 3u];
+        let b = g * ${T}u + (lid.y + t / 3u) * ${RW}u + lid.x + t % 3u;
 ${body}      }
     }
     workgroupBarrier();
   }
-  if (gx >= p.w || gy >= p.h) { return; }
+  if (gy >= p.h) { return; }
 ${store}}`;
 }
 
@@ -187,7 +194,7 @@ class GPURunner {
     this.g = g;
     const { device } = g;
     this.layers = layers.map((L, l) => {
-      const IG = Math.ceil(L.ic / 4), OGT = L.oc / 4, CH = IG >= 2 ? 2 : 1;
+      const IG = Math.ceil(L.ic / 4), OGT = L.oc / 4, CH = 1;
       const key = `${IG}:${CH}:${l === 0}:${L.prelu}:${OGT}`;
       let pipe = g.pipes.get(key);
       if (!pipe) {
@@ -235,7 +242,7 @@ class GPURunner {
       pass.setBindGroup(0, device.createBindGroup({ layout: L.pipe.getBindGroupLayout(0), entries: [
         { binding: 0, resource: { buffer: src } }, { binding: 1, resource: { buffer: dst } },
         { binding: 2, resource: { buffer: L.wb } }, { binding: 3, resource: { buffer: L.bb } }, { binding: 4, resource: { buffer: dims } }] }));
-      pass.dispatchWorkgroups(Math.ceil(w / TW), Math.ceil(h / TH), L.OGT / 4);
+      pass.dispatchWorkgroups(Math.ceil(w / TX), Math.ceil(h / TH), L.OGT / 4);
       pass.end();
       src = dst; dst = dst === this.A ? this.B : this.A;
     });

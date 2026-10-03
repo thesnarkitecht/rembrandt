@@ -1,7 +1,7 @@
 // Left side panel in Edit (desktop): Navigator (the photo with the visible area, zoom presets, click or
 // drag to move around) and a compact Presets list (hover to preview on the photo, click to apply).
 // Copyright © 2026 the Rembrandt contributors. Licensed under the GNU GPL v3 or later (see LICENSE).
-import { el, debounce, clamp } from './util.js';
+import { el, clamp } from './util.js';
 import { section } from './ui.js';
 import { allPresets } from './panel-presets.js';
 
@@ -41,30 +41,16 @@ export function buildNavSide(app) {
   frame.addEventListener('pointerdown', (ev) => { frame.setPointerCapture(ev.pointerId); panTo(ev); });
   frame.addEventListener('pointermove', (ev) => { if (frame.hasPointerCapture(ev.pointerId)) panTo(ev); });
 
-  // The thumbnail is the edited photo, re-rendered a moment after the edit settles.
-  let thumbKey = '';
-  const drawThumb = debounce(() => {
-    if (!app.img || !app.engine?.L || app.state.tool === 'crop') return;
-    const p = app.params;
-    const key = JSON.stringify(p) + app.cur;
-    if (key === thumbKey) return;
-    try {
-      const { crop } = p.geometry;
-      const ar = crop.w / crop.h;
-      const W = 360, w = ar >= 1 ? W : Math.round(W * ar), h = ar >= 1 ? Math.round(W / ar) : W;
-      const px = app.engine.readPixels(p, w, h, { ...app.outputMats(p, w, h), scale: h / crop.h, cropTest: true });
-      thumb.width = w; thumb.height = h;
-      thumb.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(px.buffer), w, h), 0, 0);
-      frame.style.aspectRatio = `${w} / ${h}`;
-      thumbKey = key;
-      app.requestRender();
-    } catch (err) { console.warn(err); }
-  }, 350);
+  // The thumbnail is the small render the histogram already made (see scheduleHisto in main.js).
+  function setThumb(img) {
+    if (thumb.width !== img.width || thumb.height !== img.height) { thumb.width = img.width; thumb.height = img.height; }
+    thumb.getContext('2d').putImageData(img, 0, 0);
+    frame.style.aspectRatio = `${img.width} / ${img.height}`;
+  }
 
   function update() {
     root.classList.toggle('no-photo', !app.img);
     if (!app.img || !app.m) return;
-    drawThumb();
     const k = app.view.fit ? 0 : app.view.scale / app.engine.fullH;
     zoomBtns.forEach((b, i) => b.classList.toggle('on', ZOOMS[i].k ? Math.abs(ZOOMS[i].k - k) < 0.01 : app.view.fit));
     // The visible part of the photo, as a rectangle on the thumbnail.
@@ -107,5 +93,5 @@ export function buildNavSide(app) {
   buildPresets();
 
   root.append(nav.el, pre.el);
-  return { el: root, update, refreshPresets: buildPresets };
+  return { el: root, update, setThumb, refreshPresets: buildPresets };
 }

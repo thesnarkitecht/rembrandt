@@ -514,14 +514,13 @@ const app = {
     $('btnBefore').classList.toggle('on', this.state.before || this.state.compare !== 'off');
   },
 
+  // One small render per edit feeds the histogram and the navigator (same size, so the engine reuses
+  // its readback target).
   scheduleHisto: debounce(function histo() {
     if (!app.img || !app.engine.L) return;
-    const p = app.renderParams();
-    const { crop } = p.geometry;
-    const ar = crop.w / crop.h;
-    const w = Math.max(1, Math.round(ar >= 1 ? 256 : 256 * ar)), h = Math.max(1, Math.round(ar >= 1 ? 256 / ar : 256));
-    const px = app.engine.readPixels(p, w, h, { ...app.outputMats(p, w, h), scale: h / crop.h, cropTest: true });
-    app.hist = computeHistogram(px);
+    app.small = app.renderSmall(app.renderParams(), SMALL);
+    app.hist = computeHistogram(app.small.data);
+    navSide?.setThumb(app.small);
     drawHistogram($('histo'), app.hist);
     $('clipHi').classList.toggle('hot', app.hist.clipHi);
     $('clipLo').classList.toggle('hot', app.hist.clipLo);
@@ -1588,6 +1587,7 @@ async function loadBackground(p) {
   if (f) await setBackgroundImage(app.engine, key, f);
 }
 
+const SMALL = 360;
 let srCache = null;
 let navSide = null;
 let engineDirty = false;
