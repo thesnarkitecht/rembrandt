@@ -5,9 +5,12 @@
 import { el } from './util.js';
 
 const COLS = 46, ROWS = 57;
-let art = null;
-function loadArt() {
-  return (art ||= new Promise((resolve) => {
+const arts = new Map();
+// The portrait as a grid of cells (luminance, colour, and when each cell takes colour). Also used,
+// smaller, by the studio in the left panel (command.js).
+export function loadArt(COLS = 46, ROWS = 57) {
+  const key = `${COLS}x${ROWS}`;
+  if (!arts.has(key)) arts.set(key, new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
       const c = document.createElement('canvas');
@@ -34,6 +37,7 @@ function loadArt() {
     img.onerror = () => resolve(null);
     img.src = new URL('./art/selfportrait-1659.jpg', import.meta.url).href;
   }));
+  return arts.get(key);
 }
 
 let card = null;

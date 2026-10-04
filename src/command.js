@@ -2,12 +2,13 @@
 // background"), previewed on the photo as you type; anything else finds the control ("vignette",
 // "temperature") and takes you to it. Runs on this device: a small vocabulary, no language model.
 // Copyright © 2026 the Rembrandt contributors. Licensed under the GNU GPL v3 or later (see LICENSE).
-import { el, clamp, clone, deepMerge, getPath } from './util.js';
-import { withSettings } from './params.js';
+import { el, clamp, clone, deepMerge, getPath, setPath } from './util.js';
+import { withSettings, HSL_NAMES } from './params.js';
 import { icon } from './icons.js';
 import { allPresets } from './panel-presets.js';
 import { buildEditPanel } from './panel-edit.js';
 import { buildAIPanel } from './ai/panel-ai.js';
+import { createStudio } from './studio.js';
 
 const c100 = (v) => clamp(Math.round(v), -100, 100);
 const add = (key, d, lo = -100, hi = 100) => (p, k) => ({ [key]: clamp(Math.round((p[key] + d * k) * 100) / 100, lo, hi) });
@@ -40,13 +41,115 @@ const INTENTS = [
 ];
 const strength = (s) => (/\b(much|lot|very|way|really|super)\b/.test(s) ? 2 : /\b(bit|slight|little|touch|tad|hint)\b/.test(s) ? 0.5 : 1) * (/\b(less|no|remove|without|reduce)\b/.test(s) ? -1 : 1);
 
+// ---- Exact requests: a control, a direction and a number. "down exposure by ten points",
+// "shadows +25", "set contrast to 20", "exposure half a stop brighter", "blue saturation -30",
+// "reset clarity". Slider units throughout; exposure in stops (points are hundredths of a stop).
+// [words, path, label, lo, hi, decimals]. Earlier entries win, so "lens blur" beats "blur".
+const CONTROLS = [
+  [/\bexpos(ure|e)?\b|\bev\b/, 'exposure', 'Exposure', -5, 5, 2],
+  [/\bcontrast\b/, 'contrast', 'Contrast'],
+  [/\bhighlights?\b/, 'highlights', 'Highlights'],
+  [/\bshadows?\b/, 'shadows', 'Shadows'],
+  [/\bwhites?\b/, 'whites', 'Whites'],
+  [/\bblacks?\b/, 'blacks', 'Blacks'],
+  [/\btemp(erature)?\b|\bwarm(th|er)?\b|\bcool(er)?\b|\bwhite balance\b/, 'temp', 'Temperature'],
+  [/\btint\b/, 'tint', 'Tint'],
+  [/\bvibrance\b/, 'vibrance', 'Vibrance'],
+  [/\bsaturation\b|\bsat\b/, 'saturation', 'Saturation'],
+  [/\btexture\b/, 'texture', 'Texture'],
+  [/\bclarity\b/, 'clarity', 'Clarity'],
+  [/\bdehaze\b/, 'dehaze', 'Dehaze'],
+  [/\bhaze\b/, 'haze', 'Haze'],
+  [/\bvignette\b/, 'vignette.amount', 'Vignette'],
+  [/\bgrain\b/, 'grain.amount', 'Grain', 0, 100],
+  [/\bsharpen(ing|ness)?\b/, 'sharpen.amount', 'Sharpen', 0, 150],
+  [/\bnoise( reduction)?\b|\bdenoise\b/, 'nr.luma', 'Noise reduction', 0, 100],
+  [/\bcolou?r noise\b/, 'nr.chroma', 'Color noise', 0, 100],
+  [/\benhance\b/, 'ai.enhance.amount', 'Enhance', 0, 100],
+  [/\b(lens |background )?blur\b|\bbokeh\b/, 'ai.blur.amount', 'Lens blur', 0, 100],
+  [/\batmosphere\b|\bfog\b/, 'ai.atmos.amount', 'Atmosphere', 0, 100],
+  [/\bsun ?rays\b/, 'ai.rays.amount', 'Sunrays', 0, 100],
+  [/\bskin\b/, 'ai.skin.amount', 'Skin', 0, 100],
+];
+const HUES = [/\breds?\b/, /\boranges?\b/, /\byellows?\b/, /\bgreens?\b/, /\b(cyans?|aquas?)\b/, /\bblues?\b/, /\b(lavenders?|purples?)\b/, /\bmagentas?\b/];
+const HSL_PART = [[/\bhue\b/, 'hue', 'hue'], [/\bsat(uration)?\b/, 'sat', 'saturation'], [/\b(lum(inance)?|brightness)\b/, 'lum', 'luminance']];
+
+const ONES = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+const TENS = { twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90 };
+// Number words → digits: "twenty-five" → 25, "one and a half" → 1.5, "half a stop" → 0.5 stop.
+export function digits(t) {
+  return t
+    .replace(/\b(twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)[\s-](one|two|three|four|five|six|seven|eight|nine)\b/g, (_, a, b) => String(TENS[a] + ONES.indexOf(b)))
+    .replace(/\b(twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)\b/g, (w) => String(TENS[w]))
+    .replace(/\b(a|one) hundred\b/g, '100')
+    .replace(new RegExp(`\\b(${ONES.join('|')}) and a half\\b`, 'g'), (_, w) => String(ONES.indexOf(w) + 0.5))
+    .replace(/\b(\d+) and a half\b/g, (_, n) => String(+n + 0.5))
+    .replace(/\bhalf an? \b|\ba half\b|\bhalf\b/g, '0.5 ')
+    .replace(/\ba (quarter|third)( of an?)?\b/g, (_, q) => (q === 'quarter' ? '0.25' : '0.33'))
+    .replace(new RegExp(`\\b(${ONES.join('|')})\\b`, 'g'), (w) => String(ONES.indexOf(w)))
+    .replace(/\ban? (stop|point)\b/g, '1 $1')
+    .replace(/−/g, '-');
+}
+
+const UP = /\b(up|increase|raise|boost|more|add|plus|lift|brighter|higher|bump|push|warmer)\b/;
+const DOWN = /\b(down|decrease|lower|reduce|drop|less|minus|subtract|cut|darker|cooler|take( off)?)\b/;
+const RESET = /\b(reset|zero|clear|remove|no|none|neutral)\b/;
+// One clause → { path, label, value, lo, hi, dp, says } with `value` the new slider value, or null.
+function exact(s, p) {
+  let path, label, lo = -100, hi = 100, dp = 0;
+  const hue = HUES.findIndex((re) => re.test(s)), part = HSL_PART.find(([re]) => re.test(s));
+  if (hue >= 0 && part && !/\bwhite balance\b/.test(s)) {
+    path = `hsl.${part[1]}.${hue}`;
+    label = `${HSL_NAMES[hue]} ${part[2]}`;
+  } else {
+    const c = CONTROLS.find(([re]) => re.test(s));
+    if (!c) return null;
+    [, path, label, lo = -100, hi = 100, dp = 0] = c;
+  }
+  if (path === 'temp' && /\bcool/.test(s) && !/\bwarm/.test(s)) s += ' down';
+  const cur = getPath(p, path) || 0;
+  const m = s.match(/([+-]?)\s*(\d+(?:\.\d+)?)\s*(%|points?|pts?|stops?|ev)?/);
+  if (!m) {
+    if (RESET.test(s) && !UP.test(s)) return { path, label, lo, hi, dp, value: 0 };
+    // "more clarity", "a bit less texture": a step of the slider (vignette's slider runs the other way).
+    if (!/\b(more|less|up|down|increase|decrease|raise|lower|reduce|boost)\b/.test(s) || /^(temp|ai\.)/.test(path)) return null;
+    const k = strength(s.replace(/\b(less|reduce)\b/, '')) * (DOWN.test(s) ? -1 : 1) * (path === 'vignette.amount' ? -1 : 1);
+    return { path, label, lo, hi, dp, value: clamp(+(cur + (path === 'exposure' ? 0.3 : 15) * k).toFixed(dp), lo, hi) };
+  }
+  let n = +m[2];
+  const unit = m[3] || '';
+  // Exposure is in stops; "10 points", "10%" or a number too big to be stops means hundredths.
+  if (path === 'exposure' && (/^(p|%)/.test(unit) || (!/^(s|ev)/.test(unit) && n > 5))) n /= 100;
+  // "by" or a sign: a change. "to", "at", "set": a value. Otherwise a direction word makes it a
+  // change ("lower highlights 40"), and a bare number is the value ("contrast 20").
+  const neg = /\b(minus|negative)\b/.test(s);
+  const down = DOWN.test(s) && !UP.test(s.replace(DOWN, ''));
+  let value;
+  if (/\b(set|to|at)\b|=/.test(s) && !/\bby\b/.test(s)) value = m[1] === '-' || neg ? -n : n;
+  else if (m[1]) value = cur + (m[1] === '-' ? -n : n);
+  else if (/\bby\b/.test(s)) value = cur + (down || neg ? -n : n);
+  else if (UP.test(s) || down) value = cur + (down ? -n : n);
+  else value = neg ? -n : n;
+  value = clamp(+value.toFixed(dp), lo, hi);
+  return { path, label, lo, hi, dp, value };
+}
+const fmtV = (v, dp) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(dp)}`;
+
 // Words → { patch, labels } against `p`, or null when nothing is understood.
 export function interpret(text, p) {
   let next = clone(p), labels = [];
-  const t = text.toLowerCase().replace(/black and white/g, 'b&w');
-  for (const clause of t.split(/,|\band\b|\bthen\b|\bwith\b|\+/)) {
+  const t = digits(text.toLowerCase().replace(/black and white/g, 'b&w'))
+    // "exposure +0.5 contrast 20": a number followed by another control starts a new clause.
+    .replace(/(\d(?:\.\d+)?\s*(?:%|points?|pts?|stops?|ev)?)\s+(?=[a-z])(?!(?:points?|pts?|stops?|ev|brighter|darker|warmer|cooler|up|down|higher|lower)\b)/g, '$1, ');
+  for (const clause of t.split(/,|;|\band\b|\bthen\b|\bwith\b|\s\+\s/)) {
     const s = clause.trim();
     if (!s) continue;
+    const x = exact(s, next);
+    if (x) {
+      setPath(next, x.path, x.value);
+      labels.push(`${x.label} ${x.value === 0 && RESET.test(s) ? 'reset' : `to ${fmtV(x.value, x.dp)}`}`);
+      continue;
+    }
     const hit = INTENTS.find(([re]) => re.test(s));
     if (!hit) continue;
     const k = strength(s);
@@ -97,13 +200,12 @@ export function createCommandBar(app, mount = null) {
   const input = el('input', { class: 'cmd-input', type: 'text', spellcheck: 'false', placeholder: 'Say what you want — “warmer and a bit brighter”, “moody”, “blur the background”…', 'aria-label': 'Edit by description or find a control' });
   const list = el('div', { class: 'cmd-list', role: 'listbox' });
   const box = el('div', { class: 'cmd-box' }, el('div', { class: 'cmd-field' }, icon('sparkle'), input, mount ? null : el('kbd', {}, 'esc')), list);
-  const log = el('div', { class: 'chat-log' });
   const send = el('button', { class: 'chat-send', type: 'button', 'aria-label': 'Apply' }, icon('send'));
   const looks = el('div', { class: 'chat-looks' });
+  // In the left panel the conversation is the studio (studio.js): a small Rembrandt that does the edits.
+  const studio = mount ? createStudio(app) : null;
   const root = mount
-    ? el('div', { class: 'cmd inline' },
-      el('div', { class: 'chat-head' }, el('img', { src: 'src/art/r-mark-halftone.svg', alt: '' }), el('span', {}, 'Rembrandt')),
-      log, el('div', { class: 'chat-sub' }, 'Looks'), looks, box)
+    ? el('div', { class: 'cmd inline' }, studio.el, el('div', { class: 'chat-sub' }, 'Looks'), looks, box)
     : el('div', { class: 'cmd', hidden: true }, box);
   (mount || document.body).append(root);
   let active = false;
@@ -112,45 +214,25 @@ export function createCommandBar(app, mount = null) {
     send.addEventListener('pointerdown', (e) => e.preventDefault());
     send.addEventListener('click', () => run(sel));
     // Example requests take turns in the empty field.
-    const EX = ['Say what you want…', 'warmer and a bit brighter', 'recover the sky', 'golden hour', 'b&w with grain', 'blur the background', 'less vignette'];
+    const EX = ['Say what you want…', 'down exposure by ten points', 'warmer and a bit brighter', 'shadows +25', 'recover the sky', 'set contrast to 20', 'golden hour', 'blue saturation −30', 'b&w with grain 20'];
     let ex = 0;
     input.placeholder = EX[0];
     setInterval(() => { if (!active && !input.value) input.placeholder = EX[(ex = (ex + 1) % EX.length)]; }, 3200);
   }
 
-  // A reply: typing dots, then the sentence writes itself out, then what changed, with Undo.
-  function remember(q, did, was, now) {
-    log.querySelector('.chat-hello')?.remove();
-    log.querySelector('.chat-undo')?.remove();
-    const said = el('span', { class: 'say' });
-    const me = el('div', { class: 'chat-me typing' }, el('i'), el('i'), el('i'));
-    log.append(el('div', { class: 'chat-you' }, q), me);
-    while (log.children.length > 16) log.firstChild.remove();
-    log.scrollTop = log.scrollHeight;
-    setTimeout(() => {
-      const undo = el('button', { class: 'chat-undo', type: 'button' }, 'Undo');
-      undo.addEventListener('click', () => { app.undo(); undo.remove(); me.classList.add('undone'); });
-      const pills = changes(was, now);
-      me.className = 'chat-me';
-      me.replaceChildren(said, pills.length ? el('div', { class: 'chat-diff' }, ...pills.slice(0, 6).map(([l, v]) => el('span', {}, l, el('b', {}, v))),
-        pills.length > 6 ? el('span', { class: 'more' }, `+${pills.length - 6}`) : null) : null, undo);
-      let n = 0;
-      const tick = () => { said.textContent = did.slice(0, (n += 2)); log.scrollTop = log.scrollHeight; if (n < did.length) requestAnimationFrame(tick); else me.classList.add('done'); };
-      requestAnimationFrame(tick);
-    }, 280);
+  // Words in the studio: Rembrandt thinks, then makes each change on the photo in turn.
+  function ask(q) {
+    const it = interpret(q, app.params);
+    if (!it) { studio.record(q, 'I don’t know that one yet. Try “exposure +0.3” or “warmer”.', app.params, app.params); return; }
+    studio.perform(q, it.next, () => {
+      app.preview = null;
+      app.commit();
+      app.refreshPanel();
+      app.aiEnsure();
+    });
   }
-
-  // Greeting with ideas read from this photo (app.small: the small render the histogram keeps).
-  function hello() {
-    const ideas = suggest(app.small);
-    log.replaceChildren(el('div', { class: 'chat-hello' },
-      el('p', {}, 'What should this photo feel like?'),
-      el('div', { class: 'chat-ideas' }, ...ideas.map((t) => {
-        const b = el('button', { class: 'chat-idea', type: 'button' }, t);
-        b.addEventListener('click', () => { const it = interpret(t, app.params); if (it) { const was = app.params; apply(it.next); remember(t, it.labels.join(' · '), was, it.next); } });
-        return b;
-      }))));
-  }
+  studio?.el.addEventListener('ask', (e) => ask(e.detail));
+  const hello = () => studio.hello(suggest(app.small), ask);
 
   // Looks: every preset as a thumbnail of this photo. Hover previews it, a click applies it.
   let looksKey = '', looksJob = 0;
@@ -169,7 +251,7 @@ export function createCommandBar(app, mount = null) {
         const was = app.params;
         app.previewSettings(null);
         app.applySettings(p.settings);   // no toast: the chat says it
-        remember(p.name, `${p.name} applied`, was, app.params);
+        studio.record(p.name, `${p.name}, applied`, was, app.params);
         t.classList.remove('hit'); void t.offsetWidth; t.classList.add('hit');
       });
       return { t, cv, p };
@@ -197,7 +279,7 @@ export function createCommandBar(app, mount = null) {
     if (!mount || !app.img) return;
     const id = app.images[app.cur]?.id;
     if (id !== photo) { photo = id; hello(); }
-    else if (log.querySelector('.chat-hello')) hello();
+    else if (studio.greeting) hello();
     paintLooks();
   }
 
@@ -271,8 +353,9 @@ export function createCommandBar(app, mount = null) {
   function run(i) {
     const r = rows[i], q = input.value.trim(), was = app.params;
     close();
+    if (mount && (r?.kind === 'do' || (!r && q))) return ask(q);
     r?.run();
-    if (mount && (r?.kind === 'do' || r?.kind === 'preset')) remember(q, r.kind === 'preset' ? `${r.title} applied` : r.title, was, app.params);
+    if (mount && r?.kind === 'preset') studio.record(q, `${r.title}, applied`, was, app.params);
   }
   function open() {
     if (!app.img) return;
