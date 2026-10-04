@@ -29,6 +29,12 @@ const pathsOf = (part) => (part === 'crop' ? ['geometry'] : GROUPS[part] || []);
 
 // Copies the chosen parts of an edit.
 export function copyEdits(params, parts, from = '', srcAspect = null) {
+  clip = takeEdits(params, parts, from, srcAspect);
+  try { localStorage.setItem(KEY, JSON.stringify(clip)); localStorage.setItem(PARTS_KEY, JSON.stringify(parts)); } catch { /* too big to keep across reloads */ }
+  return clip;
+}
+// The chosen parts of an edit, ready for pasteEdits, without touching the clipboard.
+export function takeEdits(params, parts, from = '', srcAspect = null) {
   const settings = {};
   for (const part of parts) for (const path of pathsOf(part)) setPath(settings, path, clone(getPath(params, path)));
   // A focus point and a background picture belong to one photo.
@@ -36,9 +42,7 @@ export function copyEdits(params, parts, from = '', srcAspect = null) {
   if (settings.ai?.bg?.mode === 'image') settings.ai.bg = { ...settings.ai.bg, mode: 'none', image: null };
   const off = {};
   for (const part of parts) if (params.off?.[part]) off[part] = true;
-  clip = { parts: [...parts], settings, off, from, srcAspect, at: Date.now() };
-  try { localStorage.setItem(KEY, JSON.stringify(clip)); localStorage.setItem(PARTS_KEY, JSON.stringify(parts)); } catch { /* too big to keep across reloads */ }
-  return clip;
+  return { parts: [...parts], settings, off, from, srcAspect, at: Date.now() };
 }
 
 // The photo's edit with the copied parts pasted in. `aspect` is the photo's width / height.

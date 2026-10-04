@@ -3,7 +3,8 @@
 // "temperature") and takes you to it. Runs on this device: a small vocabulary, no language model.
 // Copyright © 2026 the Rembrandt contributors. Licensed under the GNU GPL v3 or later (see LICENSE).
 import { el, clamp, clone, deepMerge, getPath, setPath } from './util.js';
-import { withSettings, HSL_NAMES } from './params.js';
+import { HSL_NAMES } from './params.js';
+import * as batch from './batch.js';
 import { icon } from './icons.js';
 import { allPresets } from './panel-presets.js';
 import { buildEditPanel } from './panel-edit.js';
@@ -174,47 +175,72 @@ function changes(a, b) {
   return out;
 }
 
-// A few ideas for this photo, from its small render: exposure, clipping, cast and colour.
-export function suggest(img) {
-  const ideas = [];
-  if (img) {
-    const d = img.data, n = d.length / 4;
-    let Y = 0, hi = 0, lo = 0, ch = 0, rb = 0;
-    for (let i = 0; i < d.length; i += 4) {
-      const r = d[i] / 255, g = d[i + 1] / 255, b = d[i + 2] / 255, y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-      Y += y; hi += y > 0.97; lo += y < 0.05; ch += Math.max(r, g, b) - Math.min(r, g, b); rb += r - b;
-    }
-    Y /= n; ch /= n; rb /= n;
-    if (hi / n > 0.02) ideas.push('recover the highlights');
-    if (lo / n > 0.12) ideas.push('lift the shadows');
-    if (Y < 0.3) ideas.push('a bit brighter'); else if (Y > 0.68) ideas.push('a bit darker');
-    if (ch < 0.12) ideas.push('more vivid');
-    if (rb < -0.04) ideas.push('warmer'); else if (rb > 0.14) ideas.push('a little cooler');
+// ---- "Paste the edits from the previous photo", "same as photo 3", "match garden.jpg", "paste edits".
+// → { clip, label } (clip as batch.pasteEdits takes it), { error } when it can't tell, or null.
+const ORDINALS = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth', 'tenth'];
+const PASTE_RE = /\b(paste|edits? from|settings from|look (from|of)|same (as|look)|match|copy (the )?(edits?|settings|look))\b/;
+export function pasteSource(app, clause) {
+  const t = digits(clause.toLowerCase());
+  if (!PASTE_RE.test(t)) return null;
+  const imgs = app.images, cur = app.cur;
+  const name = (e) => e.name.toLowerCase().replace(/\.[a-z0-9]+$/, '');
+  let e, m;
+  if (/\b(previous|prior|prev|last|before)\b/.test(t)) e = imgs[cur - 1];
+  else if (/\bnext\b/.test(t)) e = imgs[cur + 1];
+  else if ((m = t.match(/\b(?:photo|image|picture|pic|shot|number|no\.?|#)\s*#?(\d+)\b/))) e = imgs[+m[1] - 1];
+  else if ((m = t.match(new RegExp(`\\b(${ORDINALS.join('|')})\\b`)))) e = imgs[ORDINALS.indexOf(m[1])];
+  else e = imgs.find((x, i) => i !== cur && name(x).length > 2 && t.includes(name(x)));
+  if (e && e !== imgs[cur]) {
+    const { params, aspect } = app.editOfPhoto(e);
+    return { clip: batch.takeEdits(params, batch.rememberedParts(), e.name, aspect), label: `Edits from ${e.name}` };
   }
-  for (const t of ['enhance', 'golden hour', 'b&w with grain', 'blur the background']) if (ideas.length < 4) ideas.push(t);
-  return ideas.slice(0, 4);
+  if (e === imgs[cur]) return { error: 'That’s this photo.' };
+  if (/\b(previous|prior|prev|last|before|next|photo|image|picture|pic|shot|#)\b|\d/.test(t)) return { error: 'I can’t find that photo in the filmstrip.' };
+  const c = batch.clipboard();
+  return c ? { clip: c, label: `Pasted ${batch.describeClip(c)}` } : { error: 'Nothing copied yet. Try “paste the edits from the previous photo”.' };
 }
 
-// `mount`: an element to live in permanently (the left panel), as a chat; without it, a ⌘K overlay.
+// Everything a request asks for, against `p`: pasted edits first, then the words on top.
+// → { next, labels } | { error } | null.
+export function understand(app, text, p) {
+  const words = [];
+  let next = p, labels = [];
+  for (const clause of text.split(/,|;|\band\b|\bthen\b/i)) {
+    const src = pasteSource(app, clause);
+    if (!src) { words.push(clause); continue; }
+    if (src.error) return { error: src.error };
+    next = batch.pasteEdits(next, src.clip, app.img?.aspect || 1.5);
+    labels.push(src.label);
+  }
+  const it = words.join(', ').trim() ? interpret(words.join(', '), next) : null;
+  if (it) { next = it.next; labels = labels.concat(it.labels); }
+  return labels.length ? { next, labels } : null;
+}
+
+// `mount`: an element to live in permanently (the left panel): the studio and its text box. Without
+// it, a ⌘K overlay.
 export function createCommandBar(app, mount = null) {
-  const input = el('input', { class: 'cmd-input', type: 'text', spellcheck: 'false', placeholder: 'Say what you want — “warmer and a bit brighter”, “moody”, “blur the background”…', 'aria-label': 'Edit by description or find a control' });
+  const input = mount
+    ? el('textarea', { class: 'cmd-input', rows: 1, spellcheck: 'false', enterkeyhint: 'send', 'aria-label': 'Tell Rembrandt what to change' })
+    : el('input', { class: 'cmd-input', type: 'text', spellcheck: 'false', placeholder: 'Say what you want — “warmer and a bit brighter”, “shadows +25”, “paste the edits from the previous photo”…', 'aria-label': 'Edit by description or find a control' });
   const list = el('div', { class: 'cmd-list', role: 'listbox' });
-  const box = el('div', { class: 'cmd-box' }, el('div', { class: 'cmd-field' }, icon('sparkle'), input, mount ? null : el('kbd', {}, 'esc')), list);
-  const send = el('button', { class: 'chat-send', type: 'button', 'aria-label': 'Apply' }, icon('send'));
-  const looks = el('div', { class: 'chat-looks' });
-  // In the left panel the conversation is the studio (studio.js): a small Rembrandt that does the edits.
+  // Under the words, what Rembrandt understood, live: "Exposure to −0.10 · Shadows to +25".
+  const reading = el('div', { class: 'chat-reading', 'aria-live': 'polite' });
+  const send = el('button', { class: 'chat-send', type: 'button', 'aria-label': 'Do it' }, icon('send'));
+  const box = mount
+    ? el('div', { class: 'cmd-box' }, el('div', { class: 'cmd-field' }, input, send), reading, list)
+    : el('div', { class: 'cmd-box' }, el('div', { class: 'cmd-field' }, icon('sparkle'), input, el('kbd', {}, 'esc')), list);
+  // In the left panel: the studio (studio.js), a small Rembrandt that does the edits, and the box.
   const studio = mount ? createStudio(app) : null;
-  const root = mount
-    ? el('div', { class: 'cmd inline' }, studio.el, el('div', { class: 'chat-sub' }, 'Looks'), looks, box)
-    : el('div', { class: 'cmd', hidden: true }, box);
+  const root = mount ? el('div', { class: 'cmd inline' }, studio.el, box) : el('div', { class: 'cmd', hidden: true }, box);
   (mount || document.body).append(root);
   let active = false;
+  const grow = () => { if (!mount) return; input.style.height = 'auto'; input.style.height = `${Math.min(input.scrollHeight, 110)}px`; };
   if (mount) {
-    box.querySelector('.cmd-field').append(send);
     send.addEventListener('pointerdown', (e) => e.preventDefault());
     send.addEventListener('click', () => run(sel));
-    // Example requests take turns in the empty field.
-    const EX = ['Say what you want…', 'down exposure by ten points', 'warmer and a bit brighter', 'shadows +25', 'recover the sky', 'set contrast to 20', 'golden hour', 'blue saturation −30', 'b&w with grain 20'];
+    // Example requests take turns in the empty box.
+    const EX = ['Tell me what to change…', 'exposure −0.3', 'paste from the last photo', 'shadows +25', 'set contrast to 20', 'same as photo 2', 'blue saturation −30', 'a bit warmer', 'golden hour'];
     let ex = 0;
     input.placeholder = EX[0];
     setInterval(() => { if (!active && !input.value) input.placeholder = EX[(ex = (ex + 1) % EX.length)]; }, 3200);
@@ -222,65 +248,22 @@ export function createCommandBar(app, mount = null) {
 
   // Words in the studio: Rembrandt thinks, then makes each change on the photo in turn.
   function ask(q) {
-    const it = interpret(q, app.params);
-    if (!it) { studio.record(q, 'I don’t know that one yet. Try “exposure +0.3” or “warmer”.', app.params, app.params); return; }
+    const it = understand(app, q, app.params);
+    if (!it || it.error) { studio.record(q, it?.error || 'I don’t know that one yet. Try “exposure +0.3”, “warmer” or “paste the edits from the previous photo”.', app.params, app.params); return; }
     studio.perform(q, it.next, () => {
       app.preview = null;
       app.commit();
-      app.refreshPanel();
+      app.rebuildPanel();
       app.aiEnsure();
     });
   }
-  studio?.el.addEventListener('ask', (e) => ask(e.detail));
-  const hello = () => studio.hello(suggest(app.small), ask);
 
-  // Looks: every preset as a thumbnail of this photo. Hover previews it, a click applies it.
-  let looksKey = '', looksJob = 0;
-  function paintLooks() {
-    if (!app.img || !app.engine?.L) return;
-    const key = `${app.images[app.cur]?.id}|${JSON.stringify(app.params.geometry)}|${allPresets().length}`;
-    if (key === looksKey) return;
-    looksKey = key;
-    const job = ++looksJob;
-    const tiles = allPresets().map((p) => {
-      const cv = el('canvas', { width: 1, height: 1 });
-      const t = el('button', { class: 'look', type: 'button', title: `${p.name} · ${p.group}` }, cv, el('span', {}, p.name));
-      t.addEventListener('mouseenter', () => app.previewSettings(p.settings));
-      t.addEventListener('mouseleave', () => { if (!active) app.previewSettings(null); });
-      t.addEventListener('click', () => {
-        const was = app.params;
-        app.previewSettings(null);
-        app.applySettings(p.settings);   // no toast: the chat says it
-        studio.record(p.name, `${p.name}, applied`, was, app.params);
-        t.classList.remove('hit'); void t.offsetWidth; t.classList.add('hit');
-      });
-      return { t, cv, p };
-    });
-    looks.replaceChildren(...tiles.map((x) => x.t));
-    // Rendered a few at a time so the editor stays responsive.
-    let k = 0;
-    const step = () => {
-      if (job !== looksJob || !app.img) return;
-      for (const { cv, p } of tiles.slice(k, k += 3)) {
-        const img = app.renderSmall(withSettings(app.params, p.settings, app.img.aspect), 96);
-        if (!img) continue;
-        cv.width = img.width; cv.height = img.height;
-        cv.getContext('2d').putImageData(img, 0, 0);
-      }
-      if (k < tiles.length) setTimeout(step, 30); else app.requestRender();
-    };
-    setTimeout(step, 60);
-  }
-  looks.addEventListener('wheel', (e) => { if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { looks.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false });
-
-  // Called after each edit settles: a new photo starts a new conversation and new looks.
+  // Called after each edit settles: a new photo, a new greeting.
   let photo = null;
   function refresh() {
     if (!mount || !app.img) return;
     const id = app.images[app.cur]?.id;
-    if (id !== photo) { photo = id; hello(); }
-    else if (studio.greeting) hello();
-    paintLooks();
+    if (id !== photo) { photo = id; studio.hello(); }
   }
 
   // Every slider and section, by name, from the Edit and AI panels (built once, off screen).
@@ -297,10 +280,14 @@ export function createCommandBar(app, mount = null) {
   };
   const score = (q, s) => { s = s.toLowerCase(); return s.startsWith(q) ? 3 : s.includes(q) ? 2 : 0; };
 
-  let rows = [], sel = 0, base = null;
+  let rows = [], sel = 0, base = null, picked = false;
   function paint() {
     const q = input.value.trim();
-    const it = q && base ? interpret(q, base) : null;
+    const it = q && base ? understand(app, q, base) : null;
+    if (mount) {
+      reading.textContent = it?.error || (it ? it.labels.join(' · ') : '');
+      reading.className = `chat-reading${it?.error ? ' err' : it ? ' ok' : ''}`;
+    }
     const found = [];
     const lq = q.toLowerCase();
     if (lq.length > 1) {
@@ -314,19 +301,20 @@ export function createCommandBar(app, mount = null) {
       }
     }
     found.sort((a, b) => b.score - a.score);
-    rows = [...(it ? [{ kind: 'do', title: it.labels.join(' · '), hint: 'Apply', run: () => apply(it.next), preview: it.next }] : []), ...found].slice(0, 8);
+    rows = [...(it && !it.error && !mount ? [{ kind: 'do', title: it.labels.join(' · '), hint: 'Apply', run: () => apply(it.next), preview: it.next }] : []), ...found].slice(0, 8);
     sel = Math.min(sel, Math.max(0, rows.length - 1));
     list.replaceChildren(...rows.map((r, i) => {
       const row = el('div', { class: `cmd-row is-${r.kind}${i === sel ? ' on' : ''}`, role: 'option' },
         icon(r.kind === 'do' ? 'wand' : r.kind === 'preset' ? 'presets' : 'sliders'), el('span', { class: 'cmd-title' }, r.title), el('span', { class: 'cmd-hint' }, r.hint));
       row.addEventListener('mousemove', () => { if (sel !== i) { sel = i; paint(); } });
-      row.addEventListener('click', () => run(i));
+      row.addEventListener('click', () => { picked = true; run(i); });
       return row;
     }));
-    if (!q) list.append(el('div', { class: 'cmd-empty' }, 'Try “brighter”, “recover the sky”, “golden hour”, “b&w with grain”, “less vignette”, or a control: “clarity”.'));
-    // Show what the selected edit or preset would do, on the photo.
+    if (!q && !mount) list.append(el('div', { class: 'cmd-empty' }, 'Try “brighter”, “shadows +25”, “golden hour”, “paste the edits from the previous photo”, or a control: “clarity”.'));
+    // Show what the request, or the selected preset, would do, on the photo.
     const r = rows[sel];
-    if (r?.settings) app.previewSettings(r.settings);
+    if (mount && it && !it.error && !(r?.kind === 'preset' && sel > 0)) { app.preview = it.next; app.requestRender(); }
+    else if (r?.settings) app.previewSettings(r.settings);
     else { app.preview = r?.preview || null; app.requestRender(); }
   }
   function apply(next) {
@@ -353,7 +341,9 @@ export function createCommandBar(app, mount = null) {
   function run(i) {
     const r = rows[i], q = input.value.trim(), was = app.params;
     close();
-    if (mount && (r?.kind === 'do' || (!r && q))) return ask(q);
+    // In the studio, words always go to Rembrandt; a list row is used only when picked from the list.
+    if (mount && q && (!r || !picked)) { picked = false; input.value = ''; grow(); root.classList.remove('typed'); return ask(q); }
+    picked = false;
     r?.run();
     if (mount && r?.kind === 'preset') studio.record(q, `${r.title}, applied`, was, app.params);
   }
@@ -371,7 +361,7 @@ export function createCommandBar(app, mount = null) {
   function close() {
     if (!active) return;
     active = false;
-    if (mount) { input.value = ''; list.textContent = ''; root.classList.remove('active', 'typed'); } else root.hidden = true;
+    if (mount) { list.textContent = ''; reading.textContent = ''; root.classList.toggle('typed', !!input.value); root.classList.remove('active'); } else root.hidden = true;
     input.blur();
     app.preview = null;
     app.requestRender();
@@ -381,12 +371,12 @@ export function createCommandBar(app, mount = null) {
     input.addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== input) close(); }, 120));
     list.addEventListener('pointerdown', (e) => e.preventDefault());   // keep focus while clicking a row
   }
-  input.addEventListener('input', () => { if (!active) open(); sel = 0; paint(); root.classList.toggle('typed', !!input.value); });
+  input.addEventListener('input', () => { if (!active) open(); sel = 0; picked = false; grow(); paint(); root.classList.toggle('typed', !!input.value); });
   input.addEventListener('keydown', (e) => {
     e.stopPropagation();
     if (e.key === 'Escape') close();
-    else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); sel = (sel + (e.key === 'ArrowDown' ? 1 : -1) + rows.length) % Math.max(1, rows.length); paint(); }
-    else if (e.key === 'Enter') { e.preventDefault(); run(sel); }
+    else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); sel = (sel + (e.key === 'ArrowDown' ? 1 : -1) + rows.length) % Math.max(1, rows.length); picked = mount && rows.length > 0; paint(); }
+    else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); run(sel); }
   });
   root.addEventListener('pointerdown', (e) => { if (e.target === root) close(); });
   return { open, close, refresh, get isOpen() { return active; } };

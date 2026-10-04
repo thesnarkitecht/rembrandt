@@ -165,6 +165,8 @@ const app = {
     const e = this.images[this.cur];
     if (e && this.params) copyEditsFrom(e.id, choose);
   },
+  // Another photo's whole edit and shape, for "paste the edits from …" (command.js).
+  editOfPhoto(e) { return { params: editOf(e), aspect: photoAspect(e) }; },
   pasteSettings() {
     const e = this.images[this.cur];
     if (e && this.params) pasteEditsTo([e.id]);

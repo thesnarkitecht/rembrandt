@@ -48,11 +48,9 @@ export function createStudio(app) {
   const say = el('p', { class: 'studio-say' });
   const state = el('span', { class: 'studio-state' });
   const work = el('div', { class: 'studio-work' });
-  const ideas = el('div', { class: 'studio-ideas' });
-  const past = el('div', { class: 'studio-past' });
   const root = el('div', { class: 'studio' },
     el('div', { class: 'studio-top' }, art, el('div', { class: 'studio-text' }, el('div', { class: 'studio-name' }, el('span', {}, 'Rembrandt'), state), say)),
-    work, ideas, past);
+    work);
 
   // ---- The portrait. mode: idle | think | paint | done; `p` is how far the painting has got.
   const P = { cells: null, mode: 'idle', p: 0, colour: 0, t0: 0, raf: 0 };
@@ -146,38 +144,44 @@ export function createStudio(app) {
       commit();
     };
     finishing = finish;
-    ideas.hidden = true;
     work.replaceChildren();
     mode('think', 'Thinking');
     speak(`“${q}”`, 'quote');
     await sleep(520);
     if (id !== job) return;
-    mode('paint', steps.length > 1 ? `Painting · ${steps.length} changes` : 'Painting');
-    const rows = steps.map((st) => { const r = row(st); work.append(r.el); return r; });
+    mode('paint', 'Painting');
+    const rows = steps.map((st, i) => { const r = row(st); if (i < 8) work.append(r.el); return r; });
+    if (steps.length > 8) work.append(el('div', { class: 'sw-more' }, `and ${steps.length - 8} more`));
     // What has no row (black & white, curves, grading) goes first, at once.
     let cur = clone(was);
     for (const r of rest) setPath(cur, r.path, clone(r.to));
     app.params = cur; app.requestRender(); app.refreshPanel();
-    for (let i = 0; i < steps.length; i++) {
-      const st = steps[i], r = rows[i];
-      r.el.classList.add('on');
-      const dur = reduced() ? 0 : clamp(260 + Math.abs(st.to - st.from) / (st.d[2] - st.d[1]) * 900, 280, 620);
+    // A few changes go one at a time; many (a pasted edit) move together.
+    const groups = steps.length > 5 ? [steps.map((_, i) => i)] : steps.map((_, i) => [i]);
+    for (let g = 0; g < groups.length; g++) {
+      const idx = groups[g];
+      for (const i of idx) rows[i].el.classList.add('on');
+      const span = Math.max(...idx.map((i) => Math.abs(steps[i].to - steps[i].from) / (steps[i].d[2] - steps[i].d[1])));
+      const dur = reduced() ? 0 : idx.length > 1 ? 900 : clamp(260 + span * 900, 280, 620);
       const t0 = performance.now();
       await new Promise((res) => {
         const f = (now) => {
           if (id !== job || done) return res();
           const k = dur ? ease(clamp((now - t0) / dur, 0, 1)) : 1;
-          const v = +(st.from + (st.to - st.from) * k).toFixed(st.d[3]);
-          cur = clone(cur); setPath(cur, st.path, v);
+          cur = clone(cur);
+          for (const i of idx) {
+            const st = steps[i], v = +(st.from + (st.to - st.from) * k).toFixed(st.d[3]);
+            setPath(cur, st.path, v);
+            rows[i].set(v);
+          }
           app.params = cur; app.requestRender(); app.refreshPanel();
-          r.set(v);
-          P.p = (i + k) / steps.length;
+          P.p = (g + k) / groups.length;
           if (k < 1) requestAnimationFrame(f); else res();
         };
         requestAnimationFrame(f);
       });
       if (id !== job || done) return;
-      r.el.classList.remove('on'); r.el.classList.add('set');
+      for (const i of idx) { rows[i].el.classList.remove('on'); rows[i].el.classList.add('set'); }
     }
     if (id !== job) return;
     finish();
@@ -188,17 +192,16 @@ export function createStudio(app) {
   function record(q, said, was, now) {
     finishing?.();
     ++job;
-    ideas.hidden = true;
     const { steps } = diff(was, now);
     work.replaceChildren(...steps.slice(0, 8).map((st) => { const r = row(st); r.set(st.to); r.el.classList.add('set'); return r.el; }));
     if (steps.length > 8) work.append(el('div', { class: 'sw-more' }, `and ${steps.length - 8} more`));
     speak(said);
-    mode('paint', 'Painting'); P.p = 1;
-    settle(q, 1);
+    mode('paint', 'Painting'); P.p = steps.length ? 1 : 0;
+    settle(q, steps.length);
   }
 
   function settle(q, n) {
-    mode('done', n ? 'Done' : 'Nothing to change');
+    mode('done', n ? 'Done' : '');
     const undo = el('button', { class: 'studio-undo', type: 'button' }, 'Undo');
     undo.addEventListener('click', () => {
       app.undo();
@@ -206,30 +209,19 @@ export function createStudio(app) {
       undo.remove();
       mode('idle', 'Undone');
     });
-    work.append(undo);
+    if (n) work.append(undo);
     work.classList.remove('undone');
-    const item = el('button', { class: 'studio-q', type: 'button', title: 'Ask again' }, q);
-    item.addEventListener('click', () => root.dispatchEvent(new CustomEvent('ask', { detail: q })));
-    past.prepend(item);
-    while (past.children.length > 4) past.lastChild.remove();
     setTimeout(() => { if (P.mode === 'done') mode('idle', state.textContent); }, 2200);
   }
 
-  // A new photo: a greeting, and ideas read from it.
-  function hello(list, pick) {
+  // A new photo: a fresh greeting.
+  function hello() {
     finishing?.();
     ++job;
     work.replaceChildren();
-    past.replaceChildren();
     mode('idle', '');
     speak('What should this photo feel like?', 'ask');
-    ideas.hidden = false;
-    ideas.replaceChildren(...list.map((t) => {
-      const b = el('button', { class: 'chat-idea', type: 'button' }, t);
-      b.addEventListener('click', () => pick(t));
-      return b;
-    }));
   }
 
-  return { el: root, perform, record, hello, get greeting() { return !ideas.hidden; } };
+  return { el: root, perform, record, hello };
 }
