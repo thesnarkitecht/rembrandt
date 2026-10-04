@@ -14,6 +14,16 @@ No account needed, no subscription, no “we’ve updated our terms” emails.</
 
 <table>
   <tr>
+    <td width="33%"><img src="docs/screenshots/looks.jpg" alt="Looks: every preset as a thumbnail of your photo, in the chat"></td>
+    <td width="33%"><img src="docs/screenshots/touch.jpg" alt="Dragging on the photo to change the tone under the pointer"></td>
+    <td width="33%"><img src="docs/screenshots/super-resolution.jpg" alt="Super Resolution: an ordinary 4x enlargement next to Super Resolution 4x"></td>
+  </tr>
+  <tr>
+    <td align="center"><sub><b>Ask</b>: “add some fog and sun rays”, or click a Look</sub></td>
+    <td align="center"><sub><b>Touch</b>: drag on the photo to change that tone or colour</sub></td>
+    <td align="center"><sub><b>Super Resolution</b>: 2× and 4× on your GPU</sub></td>
+  </tr>
+  <tr>
     <td width="33%"><img src="docs/screenshots/library.jpg" alt="The library"></td>
     <td width="33%"><img src="docs/screenshots/masks.jpg" alt="Masks, including AI subject, background, object and depth"></td>
     <td width="33%"><img src="docs/screenshots/compare.jpg" alt="Before and after, split view"></td>
@@ -55,12 +65,21 @@ checks it against the published SHA-256 sums, and restarts the server.
 
 ## Features
 
+- **Ask in words**: type “warmer and a bit brighter”, “recover the sky” or “b&w with grain”
+  (Ctrl/⌘ K). It previews on the photo, shows exactly which sliders it moved, and suggests ideas for
+  each photo. Every preset is a live thumbnail of the photo you're editing.
+- **Edit the photo itself**: drag up or down on any part of the picture to lighten or darken that
+  tone, left or right to change that colour; the sliders follow.
+- **AI looks**: Enhance, Relight, Sky, Atmosphere, Sunrays, Skin, Motion and Lens Blur with
+  aperture shapes, from on-device depth and subject maps.
+- **Super Resolution**: 2× and 4× with real detail, or Restore at the same size for soft photos;
+  runs on the GPU (Metal on Apple silicon).
 - **RAW** from 1,000+ cameras, developed on the GPU: tone, colour, curves, grading, dehaze, detail.
 - **Masks**: brush, gradients, colour and tone ranges, AI subject, background, object and depth.
 - **Remove**: heal and clone spots and strokes; Rembrandt picks a matching source for you.
 - **Lens corrections**: the camera's built-in profile from Fujifilm and Sony RAWs (distortion,
   vignetting, chromatic aberration), plus manual distortion and vignetting for any photo.
-- **On-device AI**: Refocus, Lens Blur, background replacement. Nothing is uploaded.
+- **On-device AI**: Refocus, background replacement. Nothing is uploaded.
 - **Library**: albums, ratings, flags, search, sorting, keyboard shortcuts, one-click delete with Undo.
 - **Batch**: copy and paste edits to hundreds of photos, presets, batch export.
 - **Bring your photos**: folders, Lightroom Classic and Lightroom, Google Photos, Google Drive,
