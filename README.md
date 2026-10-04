@@ -1,4 +1,4 @@
-<p align="center"><img src="brand/r-mark.svg" width="80" alt="Rembrandt"></p>
+<p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="brand/r-mark-halftone.svg"><img src="brand/r-mark-halftone-light.svg" width="96" alt="Rembrandt"></picture></p>
 <h1 align="center">Rembrandt</h1>
 <p align="center"><b>Stop paying for Adobe. Flush the incrapification.</b></p>
 <p align="center">A free photo editor for macOS, Windows and Linux.<br>

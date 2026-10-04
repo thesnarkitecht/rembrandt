@@ -110,7 +110,14 @@ def write(name, svg):
     print('wrote', name)
 
 VB = 'viewBox="-4 -4 108 108"'
-write('r-mark.svg', f'<svg xmlns="http://www.w3.org/2000/svg" {VB} role="img" aria-label="Rembrandt">\n  <!-- Flat bronze for small sizes. On light backgrounds use #8A5829. -->\n  {solid(BRONZE[1])}\n</svg>')
+
+# The R in bronze lit from the top right, like the halftone: for small sizes, where dots would blur.
+def lit(pal=BRONZE, gid='rlit'):
+    stops = ''.join(f'<stop offset="{o}" stop-color="{c}"/>' for o, c in zip(('0', '.5', '1'), (pal[2], pal[1], pal[0])))
+    paths = ''.join(f'<path fill="url(#{gid})" d="{d}"/>' for d in MARK)
+    return f'<defs><linearGradient id="{gid}" gradientUnits="userSpaceOnUse" x1="100" y1="0" x2="0" y2="100">{stops}</linearGradient></defs>{paths}'
+write('r-mark.svg', f'<svg xmlns="http://www.w3.org/2000/svg" {VB} role="img" aria-label="Rembrandt">\n  <!-- Lit bronze for small sizes (favicons, the app header). -->\n  {lit()}\n</svg>')
+write('r-mark-light.svg', f'<svg xmlns="http://www.w3.org/2000/svg" {VB} role="img" aria-label="Rembrandt">\n  <!-- Lit bronze for small sizes on light backgrounds. -->\n  {lit(BRONZE_LIGHT_BG)}\n</svg>')
 write('r-mark-halftone.svg', f'<svg xmlns="http://www.w3.org/2000/svg" {VB} role="img" aria-label="Rembrandt">\n  <!-- For dark backgrounds, 64 px and up. -->\n  {halftone()}\n</svg>')
 write('r-mark-halftone-light.svg', f'<svg xmlns="http://www.w3.org/2000/svg" {VB} role="img" aria-label="Rembrandt">\n  <!-- For light backgrounds, 64 px and up. -->\n  {halftone(palette=BRONZE_LIGHT_BG)}\n</svg>')
 
@@ -145,5 +152,5 @@ with open(os.path.join(APP_ART, 'r-mark-halftone.svg'), 'w') as fh:
 with open(os.path.join(APP_ART, 'topo.svg'), 'w') as fh:   # used as a CSS mask, so its colour comes from the theme
     fh.write(f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 1000" preserveAspectRatio="xMidYMid slice"><path fill="none" stroke="#000" stroke-width="1.4" d="{contours(1600, cell=16)}"/></svg>\n')
 print('wrote src/art/r-mark-halftone.svg, src/art/topo.svg')
-# Small sizes (64 px and below): the same tile with the flat R, which stays sharp where dots would blur.
-write('app-icon-small.svg', icon.split('  <g transform')[0] + f'  <g transform="translate(290 288) scale(4.45)">{solid(BRONZE[1])}</g>\n</svg>')
+# Small sizes (64 px and below): the same tile with the lit R, which stays sharp where dots would blur.
+write('app-icon-small.svg', icon.split('  <g transform')[0] + f'  <g transform="translate(290 288) scale(4.45)">{lit()}</g>\n</svg>')
