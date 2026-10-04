@@ -20,7 +20,7 @@ export function defaultParams(aspect = 1.5) {
     v: 1,
     exposure: 0, contrast: 0, highlights: 0, shadows: 0, whites: 0, blacks: 0,
     temp: 0, tint: 0, vibrance: 0, saturation: 0, bw: false,
-    texture: 0, clarity: 0, dehaze: 0,
+    texture: 0, clarity: 0, dehaze: 0, haze: 0,
     vignette: { amount: 0, midpoint: 50, roundness: 0, feather: 50 },
     grain: { amount: 0, size: 25, roughness: 50 },
     curve: { master: ident(), r: ident(), g: ident(), b: ident() },
@@ -60,7 +60,7 @@ export function defaultParams(aspect = 1.5) {
 export const GROUPS = {
   light: ['exposure', 'contrast', 'highlights', 'shadows', 'whites', 'blacks'],
   color: ['temp', 'tint', 'vibrance', 'saturation', 'bw'],
-  effects: ['texture', 'clarity', 'dehaze', 'vignette', 'grain'],
+  effects: ['texture', 'clarity', 'dehaze', 'haze', 'vignette', 'grain'],
   curve: ['curve'],
   mixer: ['hsl'],
   grading: ['grading'],

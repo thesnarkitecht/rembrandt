@@ -102,7 +102,7 @@ export function createCommandBar(app, mount = null) {
   const looks = el('div', { class: 'chat-looks' });
   const root = mount
     ? el('div', { class: 'cmd inline' },
-      el('div', { class: 'chat-head' }, el('img', { src: 'src/art/r-mark-halftone.svg', alt: '' }), el('span', {}, 'Rembrandt'), el('em', {}, 'on this device')),
+      el('div', { class: 'chat-head' }, el('img', { src: 'src/art/r-mark-halftone.svg', alt: '' }), el('span', {}, 'Rembrandt')),
       log, el('div', { class: 'chat-sub' }, 'Looks'), looks, box)
     : el('div', { class: 'cmd', hidden: true }, box);
   (mount || document.body).append(root);

@@ -2,7 +2,7 @@
 // Copyright © 2026 the Rembrandt contributors. Licensed under the GNU GPL v3 or later (see LICENSE).
 //
 // `p` is a plain settings object (see README): exposure (EV), contrast, highlights, shadows, whites,
-// blacks, temp, tint, vibrance, saturation, texture, clarity, dehaze (all −100…100), bw,
+// blacks, temp, tint, vibrance, saturation, texture, clarity, dehaze, haze (all −100…100), bw,
 // hsl {hue,sat,lum}[8], grading {shadows,midtones,highlights,global: {h,s,l}, blending, balance},
 // sharpen {amount,radius,masking}, nr {luma,chroma}, vignette {amount,midpoint,roundness,feather},
 // grain {amount,size,roughness}, curve {master,r,g,b: [[x,y],…]}.
@@ -14,15 +14,18 @@ export const INPUT_UNIFORMS = { uInC: REF_CONTRAST, uInK: toneK(REF_CONTRAST) };
 // ------------------------------------------------------------------ PRE / dehaze
 
 export function preUniforms(p, stats) {
-  const s = (p.dehaze || 0) / 100;
+  const h = (p.haze || 0) / 100, s = (p.dehaze || 0) / 100;
   const A = stats?.airlight || [1, 1, 1];
   return {
     uExposure: 2 ** (p.exposure || 0),
-    uHaze: s > 0 ? 1 : s < 0 ? 2 : 0,
+    uMap: h || s ? 1 : 0,   // both read one transmission map, estimated at full strength
     uA: A,
-    uHazeAdd: Math.max(0, -s) * 0.55,
-    // Strength controls how much of the haze the dark channel prior may remove (ω in He et al.).
-    omega: s > 0 ? 0.25 + 0.7 * s : 0.9,
+    // Haze (the first dehaze, kept for its look): ω in He et al. scaled from 0.25, or a veil added.
+    uHaze: h > 0 ? 1 : h < 0 ? 2 : 0,
+    uOmega: h > 0 ? 0.25 + 0.7 * h : 0.9,
+    uHazeAdd: Math.max(0, -h) * 0.55,
+    // Dehaze: removes the haze the model finds (most of it by +60), keeping the photo's brightness.
+    uDehaze: s,
   };
 }
 

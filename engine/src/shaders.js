@@ -230,24 +230,40 @@ void main() {
 // ---------------------------------------------------------------- PRE
 
 export const PRE = HEAD + LIB + INPUT + `
-uniform int uHaze;
+uniform int uHaze, uMap;
 uniform sampler2D uHazeAB;
 uniform vec3 uA;
-uniform float uExposure, uHazeAdd;
+uniform float uExposure, uOmega, uHazeAdd, uDehaze;
 in vec2 vUv; out vec4 o;
 void main() {
   vec3 I = sceneIn(vUv);
-  if (uHaze == 1) {
+  if (uMap == 1) {
+    // Transmission with all the haze the dark channel prior finds (ω = 1), refined by the guided filter.
     vec2 ab = textureLod(uHazeAB, vUv, 0.0).xy;
-    float t = clamp(ab.x * (lum(I) / lum(uA)) + ab.y, 0.1, 1.0);
-    I = max((I - uA) / t + uA, 0.0);
-  } else if (uHaze == 2) {
-    // Adding haze: blend toward the airlight, more in the distance (bright, low-contrast areas).
-    vec2 ab = textureLod(uHazeAB, vUv, 0.0).xy;
-    float t = clamp(ab.x * (lum(I) / lum(uA)) + ab.y, 0.0, 1.0);
-    // The veil colour is the airlight's chromaticity at a moderate level (a bright sky would wash out).
+    float t1 = clamp(ab.x * (lum(I) / lum(uA)) + ab.y, 0.0, 1.0);
+    // A veil in the airlight's colour at a moderate level (a bright sky would wash everything out).
     vec3 veil = uA * (min(lum(uA), 0.45) / lum(uA));
-    I = mix(I, veil, uHazeAdd * (1.0 - 0.6 * t));
+    if (uHaze == 1) {
+      float t = clamp(1.0 - uOmega * (1.0 - t1), 0.1, 1.0);
+      I = max((I - uA) / t + uA, 0.0);
+    } else if (uHaze == 2) {
+      float t = clamp(1.0 - 0.9 * (1.0 - t1), 0.0, 1.0);
+      I = mix(I, veil, uHazeAdd * (1.0 - 0.6 * t));
+    }
+    if (uDehaze > 0.0) {
+      // J = (I − A)/t + A, removing most of the haze by +60 (ω eases toward 0.95). The floor on t keeps
+      // dense haze from turning to noise and darks from crushing.
+      float w = 0.95 * (1.0 - (1.0 - uDehaze) * (1.0 - uDehaze));
+      float t = max(1.0 - w * (1.0 - t1), 0.3);
+      vec3 J = max((I - uA) / t + uA, 0.0);
+      // The haze also carried light: give part of it back where it was thick, so the photo doesn't sink.
+      float back = clamp(lum(I) / max(lum(J), 1e-5), 1.0, 3.0);
+      I = J * mix(1.0, back, 0.5 * (1.0 - t));
+    } else if (uDehaze < 0.0) {
+      // Adding haze: I·t + veil·(1 − t), everywhere a little and thicker in the distance.
+      float t = 1.0 - 0.8 * -uDehaze * (1.0 - 0.6 * t1);
+      I = I * t + veil * (1.0 - t);
+    }
   }
   o = vec4(I * uExposure, 1.0);
 }`;

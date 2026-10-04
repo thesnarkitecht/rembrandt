@@ -393,7 +393,7 @@ export class Engine {
     const d = this.tgt('hd'), dm = this.tgt('hm'), tmp = this.tgt('q3');
     this.draw(P.hazeDark, { ...this.inputUniforms(), uA: pu.uA, uSrcTexel: [1 / L.w, 1 / L.h] }, d);
     this.boxFilter(d, tmp, dm, L.hazeRadius, 1);
-    this.draw(P.hazeT, { uIn: dm.tex, uGuide: d.tex, uOmega: pu.omega }, tmp);
+    this.draw(P.hazeT, { uIn: dm.tex, uGuide: d.tex, uOmega: 1 }, tmp);
     const s1 = this.tgt('s1', this.statFmt), s2 = this.tgt('s2', this.statFmt);
     this.draw(P.gfStats, { uIn: tmp.tex, uMode: 1 }, s1);
     return this.guided(s1, s2, this.tgt('hab'), L.hazeSigma, 1e-3).tex;
@@ -425,7 +425,7 @@ export class Engine {
     const pu = preUniforms(p, this.stats);
     const pk = JSON.stringify(pu) + bk;
     if (K.pre !== pk) {
-      const hazeAB = pu.uHaze ? this.hazeMap(pu) : this.dummy;
+      const hazeAB = pu.uMap ? this.hazeMap(pu) : this.dummy;
       this.draw(P.pre, { ...this.inputUniforms(), ...pu, uHazeAB: hazeAB }, L.T.pre);
       K.pre = pk;
       K.guide = null;

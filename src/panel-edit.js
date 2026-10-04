@@ -89,11 +89,12 @@ export function buildEditPanel(app) {
   );
 
   // --- effects
-  const fx = sec('Effects', 'effects', { id: 'effects', open: false, onReset: resetPaths(['texture', 'clarity', 'dehaze', 'vignette', 'grain']) });
+  const fx = sec('Effects', 'effects', { id: 'effects', open: false, onReset: resetPaths(['texture', 'clarity', 'dehaze', 'haze', 'vignette', 'grain']) });
   fx.body.append(
     S('texture', 'Texture', -100, 100),
     S('clarity', 'Clarity', -100, 100),
     S('dehaze', 'Dehaze', -100, 100),
+    S('haze', 'Haze', -100, 100),
     el('div', { class: 'subhead' }, 'Vignette'),
     S('vignette.amount', 'Amount', -100, 100),
     S('vignette.midpoint', 'Midpoint', 0, 100),

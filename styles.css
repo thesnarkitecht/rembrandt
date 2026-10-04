@@ -1255,9 +1255,6 @@ body[data-mode="library"] .ask-btn, body[data-mode="account"] .ask-btn { display
 .chat-head { display: flex; align-items: center; gap: 7px; padding: 2px 2px 0; }
 .chat-head img { width: 15px; height: 15px; }
 .chat-head span { font: 600 12px/1 var(--display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--text); }
-.chat-head em { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; font: 500 8.5px var(--mono); font-style: normal; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); }
-.chat-head em::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); animation: chat-live 2.4s ease-in-out infinite; }
-@keyframes chat-live { 50% { opacity: 0.25; } }
 .chat-hello { padding: 6px 2px 2px; animation: chat-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 .chat-hello p { margin: 0 0 10px; font: italic 400 21px/1.08 'Instrument Serif', Georgia, serif; color: var(--text); }
 .chat-ideas { display: flex; flex-wrap: wrap; gap: 5px; }
@@ -1307,6 +1304,6 @@ body[data-mode="library"] .ask-btn, body[data-mode="account"] .ask-btn { display
   -webkit-background-clip: text; background-clip: text; color: transparent; animation: chat-shine 1.1s ease-out 1 both; }
 @keyframes chat-shine { from { background-position: 100% 0; } to { background-position: 0 0; } }
 @media (prefers-reduced-motion: reduce) {
-  .chat-you, .chat-me, .chat-hello, .chat-idea, .chat-diff span, .chat-me.done > .say, .look.hit canvas, .cmd.inline.active .cmd-box, .chat-head em::before { animation: none; }
+  .chat-you, .chat-me, .chat-hello, .chat-idea, .chat-diff span, .chat-me.done > .say, .look.hit canvas, .cmd.inline.active .cmd-box { animation: none; }
   .chat-me.done > .say { color: var(--text-2); background: none; }
 }
