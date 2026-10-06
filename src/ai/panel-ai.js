@@ -101,12 +101,13 @@ export function buildAIPanel(app) {
     const est = app.images[app.cur]?.ai?.blur;
     return A().refocus.radius > 0 ? 'Custom' : est ? 'Auto' : 'Auto';
   };
+  // Blur size is the control that matters for heavy defocus, so it sits next to Amount.
   refocus.body.append(
     S(() => A().refocus.amount, (v) => { A().refocus.amount = v; }, 'Amount', 0, 100, 0),
+    S(() => (A().refocus.radius > 0 ? A().refocus.radius : app.images[app.cur]?.ai?.blur?.radiusH || 0.004) * 1000, (v) => { A().refocus.radius = v / 1000; }, 'Blur size', 0.5, 40, 4,
+      { step: 0.1, format: (v) => (A().refocus.radius > 0 ? v.toFixed(1) : `${blurLabel()} · ${v.toFixed(1)}`) }),
     scope.el,
     disclosure('ai-refocus', 'More options',
-      S(() => (A().refocus.radius > 0 ? A().refocus.radius : app.images[app.cur]?.ai?.blur?.radiusH || 0.004) * 1000, (v) => { A().refocus.radius = v / 1000; }, 'Blur size', 0.5, 20, 4,
-        { step: 0.1, format: (v) => (A().refocus.radius > 0 ? v.toFixed(1) : `${blurLabel()} · ${v.toFixed(1)}`) }),
       S(() => A().refocus.protect, (v) => { A().refocus.protect = v; }, 'Noise protection', 0, 100, 30),
       el('div', { class: 'row-btns' }, button('Detect blur again', () => { A().refocus.radius = -1; app.commit(); app.requestRender(); refresh(); }, 'sm ghost', 'wand'))),
   );

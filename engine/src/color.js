@@ -89,6 +89,25 @@ export function hueToOkDir(deg) {
   return [A / n, B / n];
 }
 
+// ------------------------------------------------------------------ RAW base look
+
+// Camera RAWs are developed colorimetrically, which reads darker and colder than the camera's own
+// JPEG. The base look closes that gap, fitted against in-camera JPEGs (Sony, Canon): RAW_EV more
+// exposure than metering (applied as decode gain), and a hue twist that turns violet-leaning blues
+// toward cyan, as camera looks and profiles do (blue light otherwise renders purple).
+export const RAW_EV = 1.4;
+export const RAW_TWIST = { deg: 12, centre: -70, width: 40 };   // degrees of Oklab hue
+export function rawLook(rgb2020) {
+  const [L, a, b] = oklab(rgb2020.map((v) => Math.max(v, 0)));
+  const C = Math.hypot(a, b);
+  if (C < 0.01) return rgb2020;
+  const h = Math.atan2(b, a);
+  const d = Math.min(1, Math.max(-1, ((h * 180) / Math.PI - RAW_TWIST.centre) / RAW_TWIST.width));
+  let wc = Math.min(1, (C - 0.01) / 0.05); wc = wc * wc * (3 - 2 * wc);
+  const h2 = h - ((RAW_TWIST.deg * Math.PI) / 180) * (0.5 + 0.5 * Math.cos(d * Math.PI)) * wc;
+  return fromOklab([L, C * Math.cos(h2), C * Math.sin(h2)]).map((v) => Math.max(v, 0));
+}
+
 // ------------------------------------------------------------------ display transform (Hill curve)
 
 // y = x^c / (x^c + k), with k chosen so scene middle grey maps to display middle grey.

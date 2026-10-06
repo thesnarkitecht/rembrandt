@@ -1231,20 +1231,20 @@ body[data-mode="library"] .ask-btn, body[data-mode="account"] .ask-btn { display
 .nav-ask { flex: 1; min-height: 0; display: flex; flex-direction: column; border-top: 1px solid var(--line); padding: 8px; }
 .cmd.inline { position: static; flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: stretch; justify-content: flex-end; gap: 8px; padding: 0; animation: none; }
 /* The text box: grows with what you write, sends on Enter, and says under the words what it understood. */
-.cmd.inline .cmd-box { width: auto; display: flex; flex-direction: column; border-radius: 14px; background: var(--field); backdrop-filter: none; box-shadow: none; border-color: var(--line); }
+.cmd.inline .cmd-box { width: auto; display: flex; flex-direction: column; border-radius: 11px; background: var(--field); backdrop-filter: none; box-shadow: none; border-color: var(--line); }
 .cmd.inline .cmd-list { order: 0; }
-.cmd.inline .cmd-field { order: 1; height: auto; align-items: flex-end; gap: 8px; padding: 10px 8px 8px 13px; border-bottom: 0; }
+.cmd.inline .cmd-field { order: 1; height: auto; align-items: flex-end; gap: 8px; padding: 7px 6px 6px 12px; border-bottom: 0; }
 .cmd.inline .cmd-input { width: 0; min-height: 20px; max-height: 110px; padding: 2px 0 3px; resize: none; overflow-y: auto; scrollbar-width: none;
-  font: 400 14px/1.4 var(--font); letter-spacing: -0.005em; }
-.cmd.inline .cmd-input::placeholder { color: var(--dim); font-style: italic; font-family: 'Instrument Serif', Georgia, serif; font-size: 16px; }
-.chat-reading { order: 2; padding: 0 13px 9px; font: 500 9.5px/1.45 var(--mono); letter-spacing: 0.02em; color: var(--dim); }
+  font: 400 13px/1.45 var(--font); letter-spacing: -0.005em; }
+.cmd.inline .cmd-input::placeholder { color: var(--dim); font-style: italic; font-family: 'Instrument Serif', Georgia, serif; font-size: 15px; }
+.chat-reading { order: 2; padding: 0 12px 8px; font: 500 9.5px/1.45 var(--mono); letter-spacing: 0.02em; color: var(--dim); }
 .chat-reading:empty { display: none; }
 .chat-reading.ok { color: var(--accent); }
 .chat-reading.ok::before { content: "→ "; }
 .chat-reading.err { color: var(--muted); }
-.chat-send { width: 28px; height: 28px; flex: none; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--raised); color: var(--dim);
+.chat-send { width: 24px; height: 24px; flex: none; display: grid; place-items: center; border: 0; border-radius: 50%; background: var(--raised); color: var(--dim);
   cursor: pointer; transition: background 0.18s, color 0.18s, transform 0.18s cubic-bezier(0.3, 1.5, 0.5, 1); }
-.chat-send .i { width: 14px; height: 14px; }
+.chat-send .i { width: 13px; height: 13px; }
 .cmd.inline.typed .chat-send { background: var(--accent-bg); color: var(--on-accent); transform: scale(1.06); }
 .chat-send:active { transform: scale(0.94); }
 .cmd.inline.active .cmd-box { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
@@ -1260,19 +1260,17 @@ body[data-mode="library"] .ask-btn, body[data-mode="account"] .ask-btn { display
 @keyframes chat-spin { to { --chat-a: 360deg; } }
 @keyframes chat-in { from { opacity: 0; transform: translateY(8px) scale(0.97); filter: blur(4px); } }
 /* The studio: Rembrandt in dots thinks, then makes each change while its row counts to the value. */
-.studio { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: 10px; overflow-y: auto; scrollbar-width: none; padding: 2px 2px 0; }
-.studio-top { display: flex; align-items: flex-start; gap: 10px; }
-.studio-art { width: 60px; height: 75px; flex: none; border-radius: 3px; background: color-mix(in srgb, var(--text) 4%, transparent);
-  box-shadow: inset 0 0 0 1px var(--line); transition: box-shadow 0.4s; }
-.studio[data-mode="think"] .studio-art, .studio[data-mode="paint"] .studio-art { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 60%, var(--line)), 0 0 18px -4px color-mix(in srgb, var(--accent) 45%, transparent); }
-.studio-text { min-width: 0; flex: 1; display: flex; flex-direction: column; gap: 5px; }
-.studio-name { display: flex; align-items: baseline; gap: 8px; }
-.studio-name span:first-child { font: 600 12px/1 var(--display); letter-spacing: 0.12em; text-transform: uppercase; color: var(--text); }
+.studio { flex: 1; min-height: 0; display: flex; flex-direction: column; justify-content: flex-end; gap: 8px; padding: 4px 2px 0; }
+.studio-frame { position: relative; flex: 1 1 auto; min-height: 90px; max-height: 320px; border-radius: 6px; overflow: hidden;
+  background: radial-gradient(90% 75% at 50% 35%, #1d1a16, #0b0a09 75%); box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.06); }
+.studio-art { position: absolute; inset: 0; width: 100%; height: 100%; }
+.studio-name { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 0 4px; }
+.studio-name span:first-child { font: 600 11px/1 var(--display); letter-spacing: 0.16em; text-transform: uppercase; color: var(--text-2); }
 .studio-state { font: 500 8.5px var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
 .studio[data-mode="think"] .studio-state::after { content: "…"; animation: studio-dots 1s steps(4) infinite; display: inline-block; width: 1.4em; overflow: hidden; vertical-align: bottom; }
 @keyframes studio-dots { from { width: 0; } to { width: 1.4em; } }
-.studio-say { margin: 0; font: italic 400 15px/1.2 'Instrument Serif', Georgia, serif; color: var(--text-2); overflow-wrap: anywhere; }
-.studio-say.ask { font-size: 20px; line-height: 1.05; color: var(--text); }
+.studio-say { margin: 0; padding: 0 4px; font: italic 400 16px/1.2 'Instrument Serif', Georgia, serif; color: var(--text-2); overflow-wrap: anywhere; }
+.studio-say.ask { font-size: 22px; line-height: 1.05; color: var(--text); }
 .studio-say.quote { color: var(--text); }
 .studio-work { display: flex; flex-direction: column; gap: 3px; }
 .studio-work:empty { display: none; }

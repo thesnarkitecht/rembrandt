@@ -2,7 +2,7 @@
 // Output: full-resolution linear RGBA half-floats for the GPU, plus a small display-referred
 // 8-bit preview for thumbnails, picking and statistics.
 import createModule from './vendor/libraw/lumen-raw.js';
-import { toneFwd, SRGB_TO_REC2020 as A, REC2020_TO_SRGB as B } from '../engine/src/color.js';
+import { toneFwd, rawLook, RAW_EV, SRGB_TO_REC2020 as A, REC2020_TO_SRGB as B } from '../engine/src/color.js';
 
 let modPromise = null;
 let halfLUT = null;
@@ -31,7 +31,7 @@ function lut() {
 }
 
 // Display preview with the same transform as the GPU pipeline at default settings:
-// sRGB-linear * gain -> Rec.2020 -> display curve (hue-preserving below white, per channel near it) -> sRGB.
+// sRGB-linear * gain -> Rec.2020 -> RAW base look -> display curve (hue-preserving below white, per channel near it) -> sRGB.
 const enc = (c) => (c <= 0.0031308 ? c * 12.92 : 1.055 * Math.pow(Math.min(c, 1), 1 / 2.4) - 0.055);
 const TONE_MAX = 16;
 const tone = new Float32Array(8192);
@@ -57,7 +57,7 @@ function preview(src, w, h, gain, long = 1024) {
       }
       const k = gain / (taps * taps * 65535);
       const R = r * k, G = g * k, Bb = b * k;
-      const s = [A[0][0] * R + A[0][1] * G + A[0][2] * Bb, A[1][0] * R + A[1][1] * G + A[1][2] * Bb, A[2][0] * R + A[2][1] * G + A[2][2] * Bb].map((v) => Math.max(v, 0));
+      const s = rawLook([A[0][0] * R + A[0][1] * G + A[0][2] * Bb, A[1][0] * R + A[1][1] * G + A[1][2] * Bb, A[2][0] * R + A[2][1] * G + A[2][2] * Bb].map((v) => Math.max(v, 0)));
       const pc = s.map(toneAt);
       const m = Math.max(s[0], s[1], s[2]);
       let q = pc;
@@ -94,7 +94,7 @@ self.onmessage = async ({ data: msg }) => {
     const src = new Uint16Array(M.HEAPU8.buffer, dp, w * h * 3);
     // Default brightening of +0.7 EV plus the camera's DNG baseline exposure.
     if (!(meta.baselineExposure > -20 && meta.baselineExposure < 20)) meta.baselineExposure = 0;
-    const gain = 2 ** (0.7 + meta.baselineExposure);
+    const gain = 2 ** (RAW_EV + meta.baselineExposure);
     const pv = preview(src, w, h, gain);
     const L = lut();
     const out = new Uint16Array(w * h * 4);

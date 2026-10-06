@@ -14,12 +14,12 @@ No account needed, no subscription, no “we’ve updated our terms” emails.</
 
 <table>
   <tr>
-    <td width="33%"><img src="docs/screenshots/looks.jpg" alt="Looks: every preset as a thumbnail of your photo, in the chat"></td>
+    <td width="33%"><img src="docs/screenshots/studio.jpg" alt="Rembrandt, in dots, making the edits you asked for while the sliders move"></td>
     <td width="33%"><img src="docs/screenshots/touch.jpg" alt="Dragging on the photo to change the tone under the pointer"></td>
     <td width="33%"><img src="docs/screenshots/super-resolution.jpg" alt="Super Resolution: an ordinary 4x enlargement next to Super Resolution 4x"></td>
   </tr>
   <tr>
-    <td align="center"><sub><b>Ask</b>: “add some fog and sun rays”, or click a Look</sub></td>
+    <td align="center"><sub><b>Ask</b>: “golden hour, shadows +25”, and watch Rembrandt paint it</sub></td>
     <td align="center"><sub><b>Touch</b>: drag on the photo to change that tone or colour</sub></td>
     <td align="center"><sub><b>Super Resolution</b>: 2× and 4× on your GPU</sub></td>
   </tr>
@@ -65,13 +65,16 @@ checks it against the published SHA-256 sums, and restarts the server.
 
 ## Features
 
-- **Ask in words**: type “warmer and a bit brighter”, “recover the sky” or “b&w with grain”
-  (Ctrl/⌘ K). It previews on the photo, shows exactly which sliders it moved, and suggests ideas for
-  each photo. Every preset is a live thumbnail of the photo you're editing.
+- **Ask in words**: type “warmer and a bit brighter”, “down exposure by ten points”, “shadows +25”
+  or “paste the edits from the previous photo” (Ctrl/⌘ K). A small Rembrandt in dots thinks it over,
+  then makes each change while you watch the sliders move. It runs on your device: a vocabulary, not
+  a language model.
 - **Edit the photo itself**: drag up or down on any part of the picture to lighten or darken that
   tone, left or right to change that colour; the sliders follow.
 - **AI looks**: Enhance, Relight, Sky, Atmosphere, Sunrays, Skin, Motion and Lens Blur with
   aperture shapes, from on-device depth and subject maps.
+- **Refocus**: brings back detail in out-of-focus photos, even heavy defocus (regularised
+  deconvolution on the GPU), on the subject or the whole picture.
 - **Super Resolution**: 2× and 4× with real detail, or Restore at the same size for soft photos;
   runs on the GPU (Metal on Apple silicon).
 - **RAW** from 1,000+ cameras, developed on the GPU: tone, colour, curves, grading, dehaze, detail.

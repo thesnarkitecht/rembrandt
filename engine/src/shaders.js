@@ -13,7 +13,7 @@
 //           OkLCh, curves, vignette, grain
 // Textures keep image row 0 at v = 0; only FINAL knows screen/crop geometry (3x3 matrices).
 
-import { OK_M1, OK_M1_INV, OK_M2, OK_M2_INV, REC2020_TO_SRGB, SRGB_TO_REC2020, REC2020_LUMA, MIDDLE_GREY } from './color.js';
+import { OK_M1, OK_M1_INV, OK_M2, OK_M2_INV, REC2020_TO_SRGB, SRGB_TO_REC2020, REC2020_LUMA, MIDDLE_GREY, RAW_TWIST } from './color.js';
 
 // Emit a JS row-major matrix as a GLSL mat3 applied as `M * v`.
 const glmat = (m) => `mat3(${[0, 1, 2].map((c) => [0, 1, 2].map((r) => m[r][c].toFixed(9)).join(', ')).join(', ')})`;
@@ -72,9 +72,20 @@ const INPUT = `
 uniform sampler2D uSrc;
 uniform int uSrcLinear;
 uniform float uSrcGain, uInC, uInK;
+// RAW base look (see rawLook in color.js): violet-leaning blues turn toward cyan.
+vec3 rawLook(vec3 rgb) {
+  vec3 lab = oklab(max(rgb, 0.0));
+  float C = length(lab.yz);
+  if (C < 0.01) return rgb;
+  float h = atan(lab.z, lab.y);
+  float d = clamp((degrees(h) - ${RAW_TWIST.centre.toFixed(1)}) / ${RAW_TWIST.width.toFixed(1)}, -1.0, 1.0);
+  float wc = smoothstep(0.0, 1.0, clamp((C - 0.01) / 0.05, 0.0, 1.0));
+  h -= radians(${RAW_TWIST.deg.toFixed(1)}) * (0.5 + 0.5 * cos(d * PI)) * wc;
+  return max(unOklab(vec3(lab.x, C * cos(h), C * sin(h))), 0.0);
+}
 vec3 sceneIn(vec2 uv) {
   vec3 c = textureLod(uSrc, uv, 0.0).rgb;
-  if (uSrcLinear == 1) return FROM_SRGB * (c * uSrcGain);
+  if (uSrcLinear == 1) return rawLook(FROM_SRGB * (c * uSrcGain));
   c = FROM_SRGB * c;
   return vec3(hillInv(c.r, uInC, uInK), hillInv(c.g, uInC, uInK), hillInv(c.b, uInC, uInK));
 }

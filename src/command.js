@@ -23,6 +23,7 @@ const INTENTS = [
   [/\bfog|\bmist|\bhaz(e|y)\b(?! remov)|\batmospher/, 'Atmosphere', ai('atmos', 'amount', 40)],
   [/\bsun ?rays|\blight rays|\bgod rays/, 'Sunrays', ai('rays', 'amount', 55)],
   [/\bsmooth skin|\bskin\b|\bretouch/, 'Skin', ai('skin', 'amount', 45)],
+  [/\brefocus|\bout of focus|\bblurry|\bunblur|\bdeblur|\b(fix|sharpen) (the )?focus|\bin focus/, 'Refocus', ai('refocus', 'amount', 70)],
   [/\benhance|\bauto\b|\bfix\b|\bimprove|\bbetter\b/, 'Enhance', ai('enhance', 'amount', 45)],
   [/\bgolden( hour)?|\bsunset/, 'Golden hour', (p, k) => ({ temp: c100(p.temp + 14 * k), ai: { sky: { warmth: clamp(Math.round(p.ai.sky.warmth + 45 * k), -100, 100) } } })],
   [/\bbright|\blight(er|en)?\b|\bexpos/, 'Exposure', add('exposure', 0.3, -5, 5)],
@@ -71,6 +72,7 @@ const CONTROLS = [
   [/\batmosphere\b|\bfog\b/, 'ai.atmos.amount', 'Atmosphere', 0, 100],
   [/\bsun ?rays\b/, 'ai.rays.amount', 'Sunrays', 0, 100],
   [/\bskin\b/, 'ai.skin.amount', 'Skin', 0, 100],
+  [/\brefocus\b/, 'ai.refocus.amount', 'Refocus', 0, 100],
 ];
 const HUES = [/\breds?\b/, /\boranges?\b/, /\byellows?\b/, /\bgreens?\b/, /\b(cyans?|aquas?)\b/, /\bblues?\b/, /\b(lavenders?|purples?)\b/, /\bmagentas?\b/];
 const HSL_PART = [[/\bhue\b/, 'hue', 'hue'], [/\bsat(uration)?\b/, 'sat', 'saturation'], [/\b(lum(inance)?|brightness)\b/, 'lum', 'luminance']];

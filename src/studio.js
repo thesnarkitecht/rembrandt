@@ -7,7 +7,7 @@ import { el, clamp, clone, getPath, setPath } from './util.js';
 import { HSL_NAMES } from './params.js';
 import { loadArt } from './portrait-progress.js';
 
-const COLS = 24, ROWS = 30;
+const COLS = 44, ROWS = 55;
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 const sleep = (ms) => new Promise((r) => setTimeout(r, reduced() ? 0 : ms));
 const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
@@ -18,7 +18,7 @@ const KNOWN = {
   temp: ['Temperature'], tint: ['Tint'], vibrance: ['Vibrance'], saturation: ['Saturation'], texture: ['Texture'], clarity: ['Clarity'],
   dehaze: ['Dehaze'], haze: ['Haze'], 'vignette.amount': ['Vignette'], 'grain.amount': ['Grain', 0, 100], 'sharpen.amount': ['Sharpen', 0, 150],
   'nr.luma': ['Noise reduction', 0, 100], 'nr.chroma': ['Color noise', 0, 100], 'ai.enhance.amount': ['Enhance', 0, 100], 'ai.blur.amount': ['Lens blur', 0, 100],
-  'ai.atmos.amount': ['Atmosphere', 0, 100], 'ai.rays.amount': ['Sunrays', 0, 100], 'ai.skin.amount': ['Skin', 0, 100], 'ai.sky.warmth': ['Golden sky'],
+  'ai.atmos.amount': ['Atmosphere', 0, 100], 'ai.rays.amount': ['Sunrays', 0, 100], 'ai.skin.amount': ['Skin', 0, 100], 'ai.refocus.amount': ['Refocus', 0, 100], 'ai.sky.warmth': ['Golden sky'],
 };
 const HSL_PART = { hue: 'hue', sat: 'saturation', lum: 'luminance' };
 function describe(path) {
@@ -48,13 +48,15 @@ export function createStudio(app) {
   const say = el('p', { class: 'studio-say' });
   const state = el('span', { class: 'studio-state' });
   const work = el('div', { class: 'studio-work' });
+  // The portrait fills the free space like a small painting; it gives way as edit rows appear.
   const root = el('div', { class: 'studio' },
-    el('div', { class: 'studio-top' }, art, el('div', { class: 'studio-text' }, el('div', { class: 'studio-name' }, el('span', {}, 'Rembrandt'), state), say)),
-    work);
+    el('div', { class: 'studio-frame' }, art),
+    el('div', { class: 'studio-name' }, el('span', {}, 'Rembrandt'), state),
+    say, work);
 
   // ---- The portrait. mode: idle | think | paint | done; `p` is how far the painting has got.
   const P = { cells: null, mode: 'idle', p: 0, colour: 0, t0: 0, raf: 0 };
-  loadArt(COLS, ROWS).then((cells) => { P.cells = cells; draw(); });
+  loadArt(COLS, ROWS, 1.7).then((cells) => { P.cells = cells; draw(); });
   function draw() {
     P.raf = 0;
     if (!P.cells || !art.isConnected) return;
@@ -64,16 +66,19 @@ export function createStudio(app) {
     const x = art.getContext('2d');
     x.setTransform(d, 0, 0, d, 0, 0);
     x.clearRect(0, 0, W, H);
-    const light = getComputedStyle(document.documentElement).colorScheme.trim() === 'light';
-    const t = (performance.now() - P.t0) / 1000, cw = W / COLS, ch = H / ROWS;
+    // The portrait's grid covers the frame, centred (sides crop in a tall frame).
+    const cell = Math.max(W / COLS, H / ROWS), cw = cell, ch = cell;
+    const ox = (W - cell * COLS) / 2, oy = (H - cell * ROWS) / 2;
+    const t = (performance.now() - P.t0) / 1000;
     // Colour: follows the painting while it runs, holds when done, then drains back to grey.
     const target = P.mode === 'paint' ? P.p : P.mode === 'done' ? 1 : 0;
     P.colour += (target - P.colour) * (P.mode === 'idle' ? 0.05 : 0.18);
     let busy = P.mode !== 'idle' || P.colour > 0.01;
     for (const s of P.cells) {
       const k = clamp((P.colour * 1.25 - s.at) / 0.25, 0, 1);
-      const v = light ? 1 - s.L : s.L;
-      let r = 0.16 + v * 0.86;
+      // Bright paint, big dots; the dark ground almost disappears (the frame is dark in both themes).
+      const v = s.L * s.L;
+      let r = 0.08 + v * 0.98;
       if (P.mode === 'think') {
         // Ripples out from the face, like a thought going round.
         const dist = Math.hypot(s.i - COLS * 0.5, (s.j - ROWS * 0.36) * 1.1);
@@ -82,11 +87,11 @@ export function createStudio(app) {
       if (k > 0 && k < 1) r += Math.sin(k * Math.PI) * 0.35;
       r = Math.min(cw, ch) * 0.5 * Math.min(1.15, r);
       if (r < 0.3) continue;
-      const g = light ? Math.round(120 - v * 100) : Math.round(70 + v * 180);
-      const c = (ch2) => Math.round(g + (Math.min(255, ch2 * (light ? 0.9 : 1.25)) - g) * k);
+      const g = Math.round(110 + s.L * 145);
+      const c = (ch2) => Math.round(g + (Math.min(255, ch2 * 1.35) - g) * k);
       x.fillStyle = `rgb(${c(s.r)},${c(s.g)},${c(s.b)})`;
       x.beginPath();
-      x.arc((s.i + 0.5 + (s.j & 1 ? 0.25 : -0.25)) * cw, (s.j + 0.5) * ch, r, 0, Math.PI * 2);
+      x.arc(ox + (s.i + 0.5 + (s.j & 1 ? 0.25 : -0.25)) * cw, oy + (s.j + 0.5) * ch, r, 0, Math.PI * 2);
       x.fill();
     }
     if (busy && !reduced()) P.raf = requestAnimationFrame(draw);

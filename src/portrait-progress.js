@@ -8,8 +8,9 @@ const COLS = 46, ROWS = 57;
 const arts = new Map();
 // The portrait as a grid of cells (luminance, colour, and when each cell takes colour). Also used,
 // smaller, by the studio in the left panel (command.js).
-export function loadArt(COLS = 46, ROWS = 57) {
-  const key = `${COLS}x${ROWS}`;
+// `zoom` > 1 crops in on the face.
+export function loadArt(COLS = 46, ROWS = 57, zoom = 1) {
+  const key = `${COLS}x${ROWS}x${zoom}`;
   if (!arts.has(key)) arts.set(key, new Promise((resolve) => {
     const img = new Image();
     img.onload = () => {
@@ -17,9 +18,9 @@ export function loadArt(COLS = 46, ROWS = 57) {
       c.width = COLS; c.height = ROWS;
       const x = c.getContext('2d', { willReadFrequently: true });
       // Cover-fit, keeping the face (upper middle) in frame.
-      const s = Math.max(COLS / img.width, ROWS / img.height);
+      const s = Math.max(COLS / img.width, ROWS / img.height) * zoom;
       const w = img.width * s, h = img.height * s;
-      x.drawImage(img, (COLS - w) / 2, (ROWS - h) * 0.3, w, h);
+      x.drawImage(img, (COLS - w) * (zoom > 1 ? 0.56 : 0.5), (ROWS - h) * (zoom > 1 ? 0.2 : 0.3), w, h);
       const d = x.getImageData(0, 0, COLS, ROWS).data;
       const cells = [];
       let lo = 1, hi = 0;
