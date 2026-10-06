@@ -1,6 +1,6 @@
 [package]
 name = "rembrandt-server"
-version = "0.3.3"
+version = "0.3.4"
 edition = "2021"
 description = "Serves Rembrandt and a folder of photos to your browser"
 license = "GPL-3.0-or-later"
