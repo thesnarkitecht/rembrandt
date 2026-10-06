@@ -551,7 +551,10 @@ export class Engine {
     const k = Math.min(1, this.maxTex / Math.max(w, h));
     w = Math.max(1, Math.round(w * k));
     h = Math.max(1, Math.round(h * k));
-    const px = this.readPixels(p, w, h, { ...mats(w, h), scale: h / cropH, cropTest: true });
+    // Host passes that spread their work over frames (Refocus) finish it in one go for an export.
+    this.exporting = true;
+    let px;
+    try { px = this.readPixels(p, w, h, { ...mats(w, h), scale: h / cropH, cropTest: true }); } finally { this.exporting = false; }
     if (prevKind !== kind) await this.useLevel(prevKind);
     return { pixels: px, w, h };
   }

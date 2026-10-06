@@ -11,12 +11,6 @@
 # Signing (optional; unsigned builds work but macOS and Windows warn on first open):
 #   macOS    APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD, APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID
 #   Windows  WINDOWS_CERTIFICATE (base64 .pfx), WINDOWS_CERTIFICATE_PASSWORD
-#
-# In-app updates (the app downloads, verifies and installs new versions itself) need an update
-# signing key: `npx @tauri-apps/cli signer generate -w rembrandt.key`, then
-#   secrets    TAURI_SIGNING_PRIVATE_KEY (the contents of rembrandt.key), TAURI_SIGNING_PRIVATE_KEY_PASSWORD
-#   variable   TAURI_UPDATER_PUBKEY (the contents of rembrandt.key.pub; public)
-# Keep rembrandt.key safe: apps that trust its public key only take updates signed with it.
 name: Release
 permissions:
   contents: read
@@ -37,8 +31,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: macOS Apple silicon, os: macos-latest, target: aarch64-apple-darwin, args: '--target aarch64-apple-darwin --bundles app,dmg', server: macos-aarch64 }
-          - { name: macOS Intel, os: macos-latest, target: x86_64-apple-darwin, args: '--target x86_64-apple-darwin --bundles app,dmg', server: macos-x86_64 }
+          - { name: macOS Apple silicon, os: macos-latest, target: aarch64-apple-darwin, args: '--target aarch64-apple-darwin --bundles dmg', server: macos-aarch64 }
+          - { name: macOS Intel, os: macos-latest, target: x86_64-apple-darwin, args: '--target x86_64-apple-darwin --bundles dmg', server: macos-x86_64 }
           - { name: Windows x64, os: windows-latest, target: x86_64-pc-windows-msvc, args: '--target x86_64-pc-windows-msvc --bundles nsis,msi', server: windows-x86_64 }
           - { name: Windows ARM64, os: windows-latest, target: aarch64-pc-windows-msvc, args: '--target aarch64-pc-windows-msvc --bundles nsis', server: windows-aarch64 }
           - { name: Linux x86_64, os: ubuntu-22.04, target: x86_64-unknown-linux-gnu, args: '--target x86_64-unknown-linux-gnu --bundles deb,rpm,appimage', server: linux-x86_64, musl: x86_64-unknown-linux-musl }
@@ -83,23 +77,6 @@ jobs:
           cd dl
           DEB_SHA=$(sha256sum Rembrandt-linux-amd64.deb | cut -d' ' -f1)
           sed -e "s/@VERSION@/$VERSION/" -e "s/@SHA256@/$DEB_SHA/" ../packaging/arch/PKGBUILD.in > PKGBUILD
-          # latest.json: what the installed apps read to update themselves (only signed builds).
-          VERSION="$VERSION" BASE="https://github.com/$GITHUB_REPOSITORY/releases/download/v$VERSION" python3 - <<'PY'
-          import json, os, datetime
-          files = {
-              'darwin-aarch64': 'Rembrandt-macos-arm64.app.tar.gz', 'darwin-x86_64': 'Rembrandt-macos-x64.app.tar.gz',
-              'windows-x86_64': 'Rembrandt-windows-x64-setup.exe', 'windows-aarch64': 'Rembrandt-windows-arm64-setup.exe',
-              'linux-x86_64': 'Rembrandt-linux-x86_64.AppImage', 'linux-aarch64': 'Rembrandt-linux-aarch64.AppImage',
-          }
-          plat = {k: {'signature': open(f + '.sig').read().strip(), 'url': f"{os.environ['BASE']}/{f}"} for k, f in files.items() if os.path.exists(f + '.sig')}
-          if plat:
-              json.dump({'version': os.environ['VERSION'], 'notes': f"Rembrandt {os.environ['VERSION']}",
-                         'pub_date': datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'), 'platforms': plat},
-                        open('latest.json', 'w'), indent=1)
-              print('latest.json:', ', '.join(plat))
-          else:
-              print('No signed builds: no latest.json (in-app updates need TAURI_SIGNING_PRIVATE_KEY)')
-          PY
           sha256sum * > SHA256SUMS
           cat SHA256SUMS
       - name: Publish the release

@@ -2131,6 +2131,7 @@ function boot() {
   try {
     app.engine = new AppEngine(canvas);
     app.engine.hostPasses = chain(refocusPass, localAdjustments, studioPass, lensPass, motionPass);
+    refocusPass.wake = () => app.requestRender();
     // Test hook: ?debug exposes the app to automated checks.
     if (new URLSearchParams(location.search).has('debug')) window.__rembrandt = app;
     app.engine.sourcePasses = retouchPasses;

@@ -51,23 +51,11 @@ jobs:
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          UPDATER_PUBKEY: ${{ vars.TAURI_UPDATER_PUBKEY }}
         run: |
           # Empty secrets must be unset, or the bundler tries to use a blank certificate.
-          for v in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID LUMEN_CONFIG_JS TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD UPDATER_PUBKEY; do
+          for v in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID LUMEN_CONFIG_JS; do
             [ -n "${!v:-}" ] || unset "$v"
           done
-          # In-app updates: with the signing key and its public key set, the bundler signs the
-          # installers and the app trusts updates signed with that key.
-          upd=()
-          if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}" ] && [ -n "${UPDATER_PUBKEY:-}" ]; then
-            upd=(--config "{\"bundle\":{\"createUpdaterArtifacts\":true},\"plugins\":{\"updater\":{\"pubkey\":\"$UPDATER_PUBKEY\"}}}")
-          else
-            unset TAURI_SIGNING_PRIVATE_KEY TAURI_SIGNING_PRIVATE_KEY_PASSWORD
-            echo "::warning::No updater signing key: this build can't update itself in the app."
-          fi
           sign=()
           if [ -n "${WINDOWS_THUMBPRINT:-}" ]; then
             sign=(--config "{\"bundle\":{\"windows\":{\"certificateThumbprint\":\"$WINDOWS_THUMBPRINT\",\"digestAlgorithm\":\"sha256\",\"timestampUrl\":\"http://timestamp.digicert.com\"}}}")
@@ -78,7 +66,7 @@ jobs:
           if [ "$RUNNER_OS" = macOS ] && [ -z "${APPLE_SIGNING_IDENTITY:-}" ]; then
             sign=(--config '{"bundle":{"macOS":{"signingIdentity":"-"}}}')
           fi
-          npx tauri build ${{ inputs.args }} "${sign[@]}" "${upd[@]}"
+          npx tauri build ${{ inputs.args }} "${sign[@]}"
       - name: Check the Mac app's signature
         if: runner.os == 'macOS'
         shell: bash
@@ -119,16 +107,6 @@ jobs:
             windows-aarch64) pick "$b/nsis/*-setup.exe" Rembrandt-windows-arm64-setup.exe ;;
             linux-x86_64)    pick "$b/appimage/*.AppImage" Rembrandt-linux-x86_64.AppImage; pick "$b/deb/*.deb" Rembrandt-linux-amd64.deb; pick "$b/rpm/*.rpm" Rembrandt-linux-x86_64.rpm ;;
             linux-aarch64)   pick "$b/appimage/*.AppImage" Rembrandt-linux-aarch64.AppImage; pick "$b/deb/*.deb" Rembrandt-linux-arm64.deb; pick "$b/rpm/*.rpm" Rembrandt-linux-aarch64.rpm ;;
-          esac
-          # In-app update files: the signatures, and on macOS the app as a .tar.gz (the updater
-          # replaces the app itself; the .dmg is only for first installs).
-          case '${{ inputs.server }}' in
-            macos-aarch64)   pick "$b/macos/*.app.tar.gz" Rembrandt-macos-arm64.app.tar.gz; pick "$b/macos/*.app.tar.gz.sig" Rembrandt-macos-arm64.app.tar.gz.sig ;;
-            macos-x86_64)    pick "$b/macos/*.app.tar.gz" Rembrandt-macos-x64.app.tar.gz; pick "$b/macos/*.app.tar.gz.sig" Rembrandt-macos-x64.app.tar.gz.sig ;;
-            windows-x86_64)  pick "$b/nsis/*-setup.exe.sig" Rembrandt-windows-x64-setup.exe.sig ;;
-            windows-aarch64) pick "$b/nsis/*-setup.exe.sig" Rembrandt-windows-arm64-setup.exe.sig ;;
-            linux-x86_64)    pick "$b/appimage/*.AppImage.sig" Rembrandt-linux-x86_64.AppImage.sig ;;
-            linux-aarch64)   pick "$b/appimage/*.AppImage.sig" Rembrandt-linux-aarch64.AppImage.sig ;;
           esac
           s='rembrandt-server-${{ inputs.server }}'
           if [ "$RUNNER_OS" = Windows ]; then (cd pkg && 7z a -tzip "../out/$s.zip" . >/dev/null); echo "$s.zip"

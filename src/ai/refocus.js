@@ -4,13 +4,15 @@
 // ratio, Zhuo & Sim 2011), measured inside the subject when one is found, and can be set by hand.
 // The photo is deconvolved on the GPU with Richardson–Lucy iterations regularised by total variation
 // (RL-TV, Dey et al. 2006): the TV term keeps edges sharp and flat areas flat, so many iterations
-// can run without the noise and ringing plain RL builds up. The work is done at a scale where the
-// blur is at most MAX_R pixels across (a heavily defocused photo has no finer detail to recover), on
-// scene-linear luminance, and applied to the photo as a luminance gain so colours don't fringe.
+// can run without the noise and ringing plain RL builds up; each step is over-relaxed (correction
+// raised to a power), which roughly halves the iterations needed. The work is done on scene-linear
+// luminance at a reduced scale (the blur at most MAX_R pixels across, and a pixel budget: detail
+// finer than the blur isn't recoverable anyway), and applied as a luminance gain so colours don't
+// fringe. In the editor it runs a few iterations per frame, so the app stays responsive while the
+// photo sharpens; an export runs them all at once.
 // Copyright © 2026 the Rembrandt contributors. Licensed under the GNU GPL v3 or later (see LICENSE).
 import { LIB } from '../../engine/src/shaders.js';
 import { ai } from './ai.js';
-import { quality } from './lens.js';
 
 const HEAD = `#version 300 es
 precision highp float;
@@ -18,8 +20,11 @@ precision highp int;
 precision highp sampler2D;
 ` + LIB;
 
-const MAX_R = 12;   // largest blur radius deconvolved directly, in working pixels
-const TAPS = 64;
+const MAX_R = 6;          // largest blur radius deconvolved directly, in working pixels
+const TAPS = 32;
+const BUDGET = { view: 0.8e6, export: 4e6 };   // most pixels deconvolved
+const PER_FRAME = 4;      // iterations per frame in the editor
+const RELAX = 1.4;        // over-relaxation exponent on the RL correction (< 2 stays stable)
 
 // Uniform disc of radius uR texels, on a golden-angle spiral (equal-area rings).
 const DISC = `
@@ -68,7 +73,7 @@ void main() {
 // estimate *= (ratio ⊗ disc) / (1 − λ·div(∇e / |∇e|)), the RL-TV update.
 const UPDATE = HEAD + DISC + `
 uniform sampler2D uEst, uRatio;
-uniform float uLambda;
+uniform float uLambda, uRelax;
 in vec2 vUv; out vec4 o;
 float E(vec2 d) { return textureLod(uEst, vUv + d * uTexel, 0.0).r; }
 vec2 nrm(vec2 g, float e) { return g / sqrt(dot(g, g) + (0.002 + 0.03 * e) * (0.002 + 0.03 * e)); }
@@ -79,7 +84,7 @@ void main() {
   vec2 nL = nrm(vec2(c - l, lu - l), l);
   vec2 nD = nrm(vec2(rd - d, c - d), d);
   float div = (nC.x - nL.x) + (nC.y - nD.y);
-  float e = c * discAvg(uRatio, vUv) / max(1.0 - uLambda * div, 0.3);
+  float e = c * pow(max(discAvg(uRatio, vUv), 1e-3), uRelax) / max(1.0 - uLambda * div, 0.3);
   o = vec4(clamp(e, 1e-5, 64.0), 0.0, 0.0, 1.0);
 }`;
 
@@ -122,19 +127,21 @@ export function refocusRadius(p, entry) {
 }
 
 // The deconvolution is the expensive part. It runs on the photo before tone edits (scene-linear
-// luminance after white balance and dehaze) and is cached, so Light and Color sliders only re-run the
+// luminance after white balance and dehaze) and is kept, so Light and Color sliders only re-run the
 // cheap composite. Its result is a luminance gain, which doesn't depend on exposure. More amount
-// means more iterations: heavy defocus needs many.
-const iterations = (rf) => (quality.draft ? 6 : Math.round(12 + 48 * Math.min(1, rf.amount / 100)));
+// means more iterations, continued from where the last ones stopped.
+const iterations = (rf) => Math.round(8 + 22 * Math.min(1, rf.amount / 100));
 function deconvKey(engine, p) {
   const rf = p.ai.refocus;
-  return JSON.stringify([engine.token, engine.L.w, engine.L.h, refocusRadius(p, ai.entry), iterations(rf), rf.protect, p.temp, p.tint, p.dehaze]);
+  return JSON.stringify([engine.token, engine.L.w, engine.L.h, refocusRadius(p, ai.entry), rf.protect, p.temp, p.tint, p.dehaze]);
 }
+let tick = 0;   // bumps while iterations are still to run, so the engine renders again
 
 export const refocusPass = {
+  wake: null,   // set by the app: asks for another render
   key(p) {
     if (!refocusActive(p)) return '';
-    return JSON.stringify([p.ai.refocus, refocusRadius(p, ai.entry), quality.draft, ai.version, !!ai.tex.subject]);
+    return JSON.stringify([p.ai.refocus, refocusRadius(p, ai.entry), ai.version, !!ai.tex.subject, tick]);
   },
   run(engine, p, ctx, input) {
     if (!refocusActive(p)) return input;
@@ -146,8 +153,10 @@ export const refocusPass = {
     const L = engine.L, gl = engine.gl;
     const rFull = refocusRadius(p, ai.entry) * L.h;
     if (rFull < 0.6) return input;
-    // Deconvolve at 1/k scale so the blur is at most MAX_R pixels there.
-    const k = 2 ** Math.max(0, Math.ceil(Math.log2(rFull / MAX_R)));
+    // Deconvolve at 1/k scale: the blur at most MAX_R pixels there, and within the pixel budget.
+    const budget = engine.exporting ? BUDGET.export : BUDGET.view;
+    const kBlur = rFull / MAX_R, kSize = Math.sqrt((L.w * L.h) / budget);
+    const k = 2 ** Math.max(0, Math.ceil(Math.log2(Math.max(kBlur, kSize))));
     const r = rFull / k, dw = Math.max(1, Math.round(L.w / k)), dh = Math.max(1, Math.round(L.h / k));
     const T = L.T;
     const mk = (n) => { if (!T[n] || T[n].w !== dw || T[n].h !== dh) { engine.free(T[n]); T[n] = engine.target(dw, dh, { fmt: gl.RGBA16F }); } return T[n]; };
@@ -155,26 +164,30 @@ export const refocusPass = {
     if (!T.rfOut || T.rfOut.mip !== input.mip) { engine.free(T.rfOut); T.rfOut = engine.target(L.w, L.h, { mip: input.mip }); }
     const rf = p.ai.refocus;
     const texel = [1 / dw, 1 / dh];
-    const key = deconvKey(engine, p);
-    if (L.rfKey !== key || !L.rfEst) {
+    const key = deconvKey(engine, p) + `|${k}`;
+    const want = iterations(rf);
+    let st = L.rf;
+    if (!st || st.key !== key || st.done > want) {
+      // Start over: new photo, size, blur or noise setting (or fewer iterations than already run).
       const lu = { uIn: T.pre.tex, uInTexel: [1 / L.w, 1 / L.h], uK: k };
       engine.draw(P.luma, lu, obs);
       engine.draw(P.luma, lu, e1);
-      const protect = (rf.protect ?? 30) / 100;
-      const noise = 0.003 + protect * 0.03;
-      const lambda = 0.001 + protect * 0.01;
-      let cur = e1, nxt = e2;
-      for (let i = 0, n = iterations(rf); i < n; i++) {
-        engine.draw(P.ratio, { uObs: obs.tex, uEst: cur.tex, uR: r, uTexel: texel, uNoise: noise }, q);
-        engine.draw(P.update, { uEst: cur.tex, uRatio: q.tex, uR: r, uTexel: texel, uLambda: lambda }, nxt);
-        [cur, nxt] = [nxt, cur];
-      }
-      L.rfEst = cur;
-      L.rfKey = key;
+      st = L.rf = { key, cur: e1, nxt: e2, done: 0 };
     }
+    const protect = (rf.protect ?? 30) / 100;
+    const noise = 0.003 + protect * 0.03;
+    const lambda = 0.001 + protect * 0.01;
+    const n = engine.exporting ? want - st.done : Math.min(PER_FRAME, want - st.done);
+    for (let i = 0; i < n; i++) {
+      engine.draw(P.ratio, { uObs: obs.tex, uEst: st.cur.tex, uR: r, uTexel: texel, uNoise: noise }, q);
+      engine.draw(P.update, { uEst: st.cur.tex, uRatio: q.tex, uR: r, uTexel: texel, uLambda: lambda, uRelax: RELAX }, st.nxt);
+      [st.cur, st.nxt] = [st.nxt, st.cur];
+    }
+    st.done += n;
+    if (st.done < want) { tick++; requestAnimationFrame(() => refocusPass.wake?.()); }
     const scope = { all: 0, subject: 1, background: 2 }[rf.scope] ?? 1;
     engine.draw(P.apply, {
-      uIn: input.tex, uObs: obs.tex, uEst: L.rfEst.tex, uSubj: ai.tex.subject || engine.dummy,
+      uIn: input.tex, uObs: obs.tex, uEst: st.cur.tex, uSubj: ai.tex.subject || engine.dummy,
       uTexel: texel, uR: r, uAmount: Math.min(1, 0.35 + rf.amount / 100), uScope: ai.tex.subject ? scope : 0,
     }, T.rfOut);
     return T.rfOut;
