@@ -310,28 +310,72 @@ fn urlencoding_decode(s: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
-// ---- In-app updates (desktop). The app checks the latest release's latest.json, downloads the
-// installer for this platform, checks its signature against the public key built into the app,
-// installs it and restarts. Progress is polled by the web side.
+// ---- In-app updates (desktop), never needing an administrator password: Windows installs per user
+// (NSIS currentUser), macOS replaces the app's contents in place, Linux replaces the AppImage. Asks GitHub for the latest release of this repository, downloads
+// the installer for this platform over HTTPS, checks it against the release's SHA256SUMS (a broken
+// or partial download is never installed), installs it and restarts. Progress is polled by the
+// web side. Phones update from their stores.
+
+const REPO: &str = "thesnarkitecht/rembrandt";
 
 #[derive(Default)]
 struct UpdateState {
-    #[cfg(desktop)]
-    pending: Mutex<Option<tauri_plugin_updater::Update>>,
+    /// The release found by `update_check`: version, installer URL and name, SHA256SUMS URL.
+    pending: Mutex<Option<(String, String, String, String)>>,
     /// Bytes downloaded, and the total if the server said.
     progress: Mutex<(u64, Option<u64>)>,
 }
 
-/// Looks for a newer version. Resolves its version number, or null when this is the latest.
+/// The installer this copy of the app updates from, as named in the release.
+#[cfg(desktop)]
+fn update_asset() -> Result<String, String> {
+    let arch = if cfg!(target_arch = "aarch64") { "arm64" } else { "x64" };
+    if cfg!(windows) {
+        Ok(format!("Rembrandt-windows-{arch}-setup.exe"))
+    } else if cfg!(target_os = "macos") {
+        Ok(format!("Rembrandt-macos-{arch}.dmg"))
+    } else if std::env::var_os("APPIMAGE").is_some() {
+        Ok(format!("Rembrandt-linux-{}.AppImage", if cfg!(target_arch = "aarch64") { "aarch64" } else { "x86_64" }))
+    } else {
+        // Installed from a .deb/.rpm or the install script: the package manager or the script updates it.
+        Err("Update this copy the way you installed it".into())
+    }
+}
+
+fn newer(a: &str, b: &str) -> bool {
+    let p = |v: &str| v.split(|c| c == '.' || c == '-').take(3).map(|x| x.parse::<u64>().unwrap_or(0)).collect::<Vec<_>>();
+    p(a) > p(b)
+}
+
+#[cfg(desktop)]
+fn http() -> Result<reqwest::Client, String> {
+    reqwest::Client::builder().user_agent("Rembrandt-updater").build().map_err(|e| e.to_string())
+}
+
+/// Looks for a newer release. Resolves its version number, or null when this is the latest.
 #[tauri::command]
 async fn update_check(app: tauri::AppHandle, state: State<'_, UpdateState>) -> Result<Option<String>, String> {
     #[cfg(desktop)]
     {
-        use tauri_plugin_updater::UpdaterExt;
-        let update = app.updater().map_err(|e| e.to_string())?.check().await.map_err(|e| e.to_string())?;
-        let version = update.as_ref().map(|u| u.version.clone());
-        *state.pending.lock().unwrap() = update;
-        Ok(version)
+        let asset = update_asset()?;
+        let rel: serde_json::Value = http()?
+            .get(format!("https://api.github.com/repos/{REPO}/releases/latest"))
+            .header("Accept", "application/vnd.github+json")
+            .send().await.map_err(|e| e.to_string())?
+            .error_for_status().map_err(|e| e.to_string())?
+            .json().await.map_err(|e| e.to_string())?;
+        let version = rel["tag_name"].as_str().unwrap_or("").trim_start_matches('v').to_string();
+        let url_of = |name: &str| {
+            rel["assets"].as_array().and_then(|a| a.iter().find(|x| x["name"] == name)).and_then(|x| x["browser_download_url"].as_str()).map(String::from)
+        };
+        let current = app.package_info().version.to_string();
+        match (url_of(&asset), url_of("SHA256SUMS")) {
+            (Some(url), Some(sums)) if newer(&version, &current) => {
+                *state.pending.lock().unwrap() = Some((version.clone(), url, asset, sums));
+                Ok(Some(version))
+            }
+            _ => Ok(None),
+        }
     }
     #[cfg(mobile)]
     {
@@ -340,33 +384,106 @@ async fn update_check(app: tauri::AppHandle, state: State<'_, UpdateState>) -> R
     }
 }
 
-/// Downloads and installs the update found by `update_check`, then restarts into it.
+/// Downloads and installs the release found by `update_check`, then restarts into it.
 #[tauri::command]
 async fn update_install(app: tauri::AppHandle, state: State<'_, UpdateState>) -> Result<(), String> {
     #[cfg(desktop)]
     {
-        let update = state.pending.lock().unwrap().take().ok_or("Check for updates first")?;
+        use sha2::{Digest, Sha256};
+        let (_version, url, name, sums_url) = state.pending.lock().unwrap().clone().ok_or("Check for updates first")?;
+        let client = http()?;
+        let sums = client.get(&sums_url).send().await.map_err(|e| e.to_string())?.error_for_status().map_err(|e| e.to_string())?
+            .text().await.map_err(|e| e.to_string())?;
+        let expected = sums.lines().find_map(|l| {
+            let mut it = l.split_whitespace();
+            let (h, f) = (it.next()?, it.next()?);
+            (f.trim_start_matches('*') == name).then(|| h.to_lowercase())
+        }).ok_or("The release has no checksum for this installer")?;
+
         *state.progress.lock().unwrap() = (0, None);
-        let h = app.clone();
-        update
-            .download_and_install(
-                move |chunk, total| {
-                    let s = h.state::<UpdateState>();
-                    let mut p = s.progress.lock().unwrap();
-                    p.0 += chunk as u64;
-                    p.1 = total;
-                },
-                || {},
-            )
-            .await
-            .map_err(|e| e.to_string())?;
-        app.restart();
+        let mut resp = client.get(&url).send().await.map_err(|e| e.to_string())?.error_for_status().map_err(|e| e.to_string())?;
+        state.progress.lock().unwrap().1 = resp.content_length();
+        let dir = std::env::temp_dir().join("rembrandt-update");
+        std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+        let file = dir.join(&name);
+        let mut out = std::fs::File::create(&file).map_err(|e| e.to_string())?;
+        let mut hasher = Sha256::new();
+        while let Some(chunk) = resp.chunk().await.map_err(|e| e.to_string())? {
+            use std::io::Write;
+            out.write_all(&chunk).map_err(|e| e.to_string())?;
+            hasher.update(&chunk);
+            state.progress.lock().unwrap().0 += chunk.len() as u64;
+        }
+        drop(out);
+        let got: String = hasher.finalize().iter().map(|b| format!("{b:02x}")).collect();
+        if got != expected {
+            let _ = std::fs::remove_file(&file);
+            return Err("The download was damaged (checksum mismatch). Try again.".into());
+        }
+        install_and_restart(&app, &file)
     }
     #[cfg(mobile)]
     {
         let _ = (app, state);
         Err("Updates come from the app store".into())
     }
+}
+
+// Hands over to the installer and quits; the new version starts when it's done.
+#[cfg(windows)]
+fn install_and_restart(app: &tauri::AppHandle, setup: &Path) -> Result<(), String> {
+    use std::os::windows::process::CommandExt;
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let q = |p: &Path| p.to_string_lossy().replace('\'', "''");
+    // Passive install (a progress bar, no questions), then open the app again.
+    let script = format!(
+        "Start-Process -Wait -FilePath '{}' -ArgumentList '/P','/UPDATE'; Start-Process -FilePath '{}'",
+        q(setup), q(exe.as_path())
+    );
+    std::process::Command::new("powershell")
+        .args(["-NoProfile", "-WindowStyle", "Hidden", "-Command", &script])
+        .creation_flags(0x0800_0000) // CREATE_NO_WINDOW
+        .spawn()
+        .map_err(|e| e.to_string())?;
+    app.exit(0);
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn install_and_restart(app: &tauri::AppHandle, dmg: &Path) -> Result<(), String> {
+    // The running app's bundle: …/Rembrandt.app/Contents/MacOS/rembrandt.
+    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
+    let bundle = exe.ancestors().nth(3).ok_or("Can't find the app")?.to_path_buf();
+    let mnt = std::env::temp_dir().join("rembrandt-update-mnt");
+    let q = |p: &Path| format!("'{}'", p.to_string_lossy().replace('\'', r"'\''"));
+    // After this app quits: replace what's inside the app with the new version, then open it.
+    // Only the contents change (they belong to the person who installed it), so no administrator
+    // password is needed, even in /Applications.
+    let script = format!(
+        "sleep 1; hdiutil attach -nobrowse -readonly -mountpoint {m} {d} >/dev/null && \
+         src=$(ls -d {m}/*.app | head -1) && [ -d \"$src/Contents\" ] && \
+         rm -rf {b}/Contents.old && mv {b}/Contents {b}/Contents.old && ditto \"$src/Contents\" {b}/Contents && rm -rf {b}/Contents.old; \
+         [ -d {b}/Contents ] || mv {b}/Contents.old {b}/Contents; \
+         hdiutil detach {m} -quiet; xattr -dr com.apple.quarantine {b} 2>/dev/null; touch {b}; open {b}",
+        m = q(mnt.as_path()), d = q(dmg), b = q(bundle.as_path())
+    );
+    std::process::Command::new("/bin/sh").args(["-c", &script]).spawn().map_err(|e| e.to_string())?;
+    app.exit(0);
+    Ok(())
+}
+
+#[cfg(all(desktop, not(windows), not(target_os = "macos")))]
+fn install_and_restart(app: &tauri::AppHandle, image: &Path) -> Result<(), String> {
+    use std::os::unix::fs::PermissionsExt;
+    // AppImage: replace the file in place (a running AppImage can be replaced), then start it.
+    let target = PathBuf::from(std::env::var_os("APPIMAGE").ok_or("Not running as an AppImage")?);
+    let tmp = target.with_extension("AppImage.new");
+    std::fs::copy(image, &tmp).map_err(|e| e.to_string())?;
+    std::fs::set_permissions(&tmp, std::fs::Permissions::from_mode(0o755)).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp, &target).map_err(|e| e.to_string())?;
+    std::process::Command::new(&target).spawn().map_err(|e| e.to_string())?;
+    app.exit(0);
+    Ok(())
 }
 
 #[tauri::command]
@@ -384,7 +501,6 @@ pub fn run() {
             let urls: Vec<String> = argv.into_iter().filter(|a| a.starts_with("rembrandt://")).collect();
             handle_urls(app, &urls);
         }));
-        builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
     }
     builder
         .plugin(tauri_plugin_deep_link::init())
