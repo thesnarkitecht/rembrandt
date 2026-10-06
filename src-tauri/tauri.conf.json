@@ -123,6 +123,15 @@
         ]
       },
       "mobile": []
+    },
+    "updater": {
+      "pubkey": "",
+      "endpoints": [
+        "https://github.com/thesnarkitecht/rembrandt/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
     }
   },
   "mainBinaryName": "rembrandt"

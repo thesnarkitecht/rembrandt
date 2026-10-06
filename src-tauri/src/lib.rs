@@ -310,6 +310,70 @@ fn urlencoding_decode(s: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
+// ---- In-app updates (desktop). The app checks the latest release's latest.json, downloads the
+// installer for this platform, checks its signature against the public key built into the app,
+// installs it and restarts. Progress is polled by the web side.
+
+#[derive(Default)]
+struct UpdateState {
+    #[cfg(desktop)]
+    pending: Mutex<Option<tauri_plugin_updater::Update>>,
+    /// Bytes downloaded, and the total if the server said.
+    progress: Mutex<(u64, Option<u64>)>,
+}
+
+/// Looks for a newer version. Resolves its version number, or null when this is the latest.
+#[tauri::command]
+async fn update_check(app: tauri::AppHandle, state: State<'_, UpdateState>) -> Result<Option<String>, String> {
+    #[cfg(desktop)]
+    {
+        use tauri_plugin_updater::UpdaterExt;
+        let update = app.updater().map_err(|e| e.to_string())?.check().await.map_err(|e| e.to_string())?;
+        let version = update.as_ref().map(|u| u.version.clone());
+        *state.pending.lock().unwrap() = update;
+        Ok(version)
+    }
+    #[cfg(mobile)]
+    {
+        let _ = (app, state);
+        Err("Updates come from the app store".into())
+    }
+}
+
+/// Downloads and installs the update found by `update_check`, then restarts into it.
+#[tauri::command]
+async fn update_install(app: tauri::AppHandle, state: State<'_, UpdateState>) -> Result<(), String> {
+    #[cfg(desktop)]
+    {
+        let update = state.pending.lock().unwrap().take().ok_or("Check for updates first")?;
+        *state.progress.lock().unwrap() = (0, None);
+        let h = app.clone();
+        update
+            .download_and_install(
+                move |chunk, total| {
+                    let s = h.state::<UpdateState>();
+                    let mut p = s.progress.lock().unwrap();
+                    p.0 += chunk as u64;
+                    p.1 = total;
+                },
+                || {},
+            )
+            .await
+            .map_err(|e| e.to_string())?;
+        app.restart();
+    }
+    #[cfg(mobile)]
+    {
+        let _ = (app, state);
+        Err("Updates come from the app store".into())
+    }
+}
+
+#[tauri::command]
+fn update_progress(state: State<'_, UpdateState>) -> (u64, Option<u64>) {
+    *state.progress.lock().unwrap()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let mut builder = tauri::Builder::default();
@@ -320,12 +384,14 @@ pub fn run() {
             let urls: Vec<String> = argv.into_iter().filter(|a| a.starts_with("rembrandt://")).collect();
             handle_urls(app, &urls);
         }));
+        builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
     }
     builder
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState::default())
+        .manage(UpdateState::default())
         .setup(|app| {
             #[cfg(any(windows, target_os = "linux"))]
             {
@@ -340,7 +406,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             app_info, take_auth_code, pick_folder, restore_folders, forget_folder, list_photos, read_file, read_text, write_sidecar,
-            write_export, stage_export, open_in_photos
+            write_export, stage_export, open_in_photos, update_check, update_install, update_progress
         ])
         .run(tauri::generate_context!())
         .expect("error while running the app");

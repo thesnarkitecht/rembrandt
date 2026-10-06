@@ -1,5 +1,7 @@
 // Updates, on every platform. Nothing installs itself; people update when they want to.
-//   Desktop app:      compare with the latest GitHub release; Update opens the release page.
+//   Desktop app:      asks the native updater (latest.json on the latest GitHub release); Update
+//                     downloads the new version, checks its signature, installs it and restarts, with
+//                     progress in the button. Builds without an update key open the release page.
 //   rembrandt-server: compare the server's version with the latest release; Update asks the server
 //                     to update itself (installer builds), then reloads once it's back.
 //   Web (hosted):     compare the build this page loaded with the deployed version.json; Update reloads.
@@ -32,7 +34,7 @@ const openUrl = (url) => (isTauri ? window.__TAURI_INTERNALS__.invoke('plugin:op
 
 // The build this page was loaded with (web): stamped by the deploy, or the first version.json seen.
 let loadedBuild = window.LUMEN_BUILD?.build || null;
-const state = { current: window.LUMEN_BUILD?.version || '', latest: '', available: false, canInstall: false, checkedAt: 0, error: '', updating: false };
+const state = { current: window.LUMEN_BUILD?.version || '', latest: '', available: false, canInstall: false, checkedAt: 0, error: '', updating: false, progress: 0 };
 const listeners = new Set();
 export const updateState = () => state;
 export const onUpdateChange = (f) => { listeners.add(f); return () => listeners.delete(f); };
@@ -52,9 +54,38 @@ const latestRelease = (force) => cached('release', force, async () => {
   return String(m.tag_name || '').replace(/^v/, '');
 });
 
+const native = (cmd, args) => window.__TAURI_INTERNALS__.invoke(cmd, args);
 async function checkDesktop(force) {
-  const latest = await latestRelease(force);
-  return { latest, available: !!(latest && state.current && newer(latest, state.current)) };
+  try {
+    // The native updater asks every time (it also keeps the update ready to install).
+    const v = await native('update_check');
+    return { latest: v || state.current, available: !!v, canInstall: true };
+  } catch {
+    // No update key in this build, or no signed release yet: compare versions, offer the download page.
+    const latest = await latestRelease(force);
+    return { latest, available: !!(latest && state.current && newer(latest, state.current)), canInstall: false };
+  }
+}
+
+// Downloads and installs in the app, then restarts into the new version.
+async function updateDesktop() {
+  if (!confirm(`Install Rembrandt ${state.latest} and restart? Your edits are saved.`)) return;
+  state.updating = true; state.progress = 0; state.error = ''; changed();
+  const poll = setInterval(async () => {
+    try {
+      const [got, total] = await native('update_progress');
+      if (total) { state.progress = got / total; changed(); }
+    } catch { /* ignore */ }
+  }, 300);
+  try {
+    await native('update_install');   // restarts the app when done
+  } catch (e) {
+    clearInterval(poll);
+    state.updating = false;
+    state.error = `The update didn’t install: ${e?.message || e}. You can download it instead.`;
+    state.canInstall = false;
+    changed();
+  }
 }
 
 async function checkPhone(force) {
@@ -122,13 +153,14 @@ async function updateServer() {
 // Desktop: the release page. Server: update itself. Phones: the store. Web: load the new version.
 export function applyUpdate() {
   if (isMobileApp) return openUrl(storeUrl());
-  if (isTauri) return openUrl(releases());
+  if (isTauri) return state.canInstall ? updateDesktop() : openUrl(releases());
   if (onServer()) return state.canInstall ? updateServer() : openUrl(releases());
   location.reload();
 }
-export const updateActionLabel = () => (state.updating ? 'Updating…'
+const pct = () => (state.progress > 0 && state.progress < 1 ? ` ${Math.round(state.progress * 100)}%` : '');
+export const updateActionLabel = () => (state.updating ? `Updating…${pct()}`
   : isMobileApp ? `Update in the ${isIOS ? 'App Store' : 'Play Store'}`
-  : isTauri ? 'Download update'
+  : isTauri ? (state.canInstall ? `Update to ${state.latest}` : 'Download update')
   : onServer() ? (state.canInstall ? `Update to ${state.latest}` : 'Download update')
   : 'Reload to update');
 
@@ -141,7 +173,7 @@ function renderTopButton() {
     bar?.prepend(btn);
   }
   btn.disabled = state.updating;
-  btn.lastChild.textContent = state.updating ? 'Updating…' : 'Update';
+  btn.lastChild.textContent = state.updating ? `Updating…${pct()}` : 'Update';
   btn.title = state.latest && state.current && state.latest !== state.current
     ? `Version ${state.latest} is available (you have ${state.current})` : 'A new version of Rembrandt is available';
 }
@@ -166,7 +198,7 @@ export function updateRow() {
   const render = () => {
     btn.textContent = '';
     if (state.available) {
-      status.textContent = state.error || (state.updating ? 'Installing and restarting…'
+      status.textContent = state.error || (state.updating ? (state.progress > 0 && state.progress < 1 ? `Downloading… ${Math.round(state.progress * 100)}%` : 'Installing and restarting…')
         : state.latest && state.latest !== state.current ? `Version ${state.latest} is available${state.current ? ` (you have ${state.current})` : ''}.` : 'A new version is available.');
       btn.className = 'btn sm primary';
       btn.append(icon('download'), el('span', {}, updateActionLabel()));
