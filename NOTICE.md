@@ -42,6 +42,14 @@ BT.2020, CIE CAT16 (Li et al. 2017), Krystek's Planckian locus approximation (19
 (B. Ottosson 2020, public domain), the dark channel prior (He, Sun & Tang 2009), the guided filter
 (He, Sun & Tang 2010; He & Sun 2015) and Fritsch–Carlson monotone cubic interpolation (1980).
 
+## Lensfun lens database (CC BY-SA 3.0)
+`src/vendor/lensfun/lensfun.json` is converted from the Lensfun database (`data/db/*.xml`),
+https://lensfun.github.io, © the Lensfun contributors, licensed under the Creative Commons
+Attribution-ShareAlike 3.0 licence (https://creativecommons.org/licenses/by-sa/3.0/). The conversion
+keeps the lens names, sensor sizes and the distortion, chromatic aberration and vignetting
+calibrations, unchanged in value. The converted file is shared under the same licence. Only the
+data is used; `src/lensfun.js` is our own code.
+
 ## RAWmakase (MIT)
 Lens corrections (the built-in Fujifilm and Sony tables in `src/lens.js`, the radial model in
 `engine/src/pipeline.js`) and spot removal (the Heal membrane, Clone and automatic source search in

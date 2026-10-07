@@ -4,6 +4,7 @@ import { BRAND } from './brand.js';
 import { planName, isPaid } from './pricing.js';
 import { gated, updateGate } from './hosted-gate.js';
 import { readLensProfile } from './lens.js';
+import { lensfunProfile } from './lensfun.js';
 import { isMobileApp, isTouch } from './platform.js';
 import { refreshUnlock, isUnlocked } from './unlock.js';
 import { syncStoreSubscriptions } from './subscriptions.js';
@@ -1292,8 +1293,17 @@ async function applySource(e) {
   if (e.raw && e.lensProfile === undefined) {
     e.lensProfile = null;
     originalFile(e).then(readLensProfile).then((prof) => {
-      e.lensProfile = prof;
+      e.lensProfile = prof || e.lensProfile;
       if (prof && app.images[app.cur] === e) { app.engine.setLensProfile(prof); app.requestRender(); app.refreshPanel(); }
+    }).catch(() => {});
+  }
+  // No built-in correction: look the lens up in Lensfun once its name is known (after the RAW decode).
+  if (e.raw && e.meta?.lens && !e.lensProfile && !e.lensfunTried) {
+    e.lensfunTried = true;
+    lensfunProfile(e.meta).then((prof) => {
+      if (!prof || e.lensProfile) return;
+      e.lensProfile = prof;
+      if (app.images[app.cur] === e) { app.engine.setLensProfile(prof); app.requestRender(); app.refreshPanel(); }
     }).catch(() => {});
   }
   ai.bind(app.engine, e);
@@ -1942,6 +1952,7 @@ async function renderPhotoForExport(id, opts) {
   engineDirty = true;
   await app.engine.setImage(lin ? { kind: 'linear', data: lin.data, w, h, gain: lin.gain } : { kind: 'display', bitmap: d.bitmap }, computeStats(sample));
   if (d.raw && e.lensProfile === undefined) e.lensProfile = await readLensProfile(file);
+  if (d.raw && !e.lensProfile && lin?.meta?.lens) e.lensProfile = await lensfunProfile(lin.meta).catch(() => null);
   app.engine.setLensProfile(e.lensProfile);
   const tmp = { bitmap: d.bitmap, linear: lin, sample, ai: e.ai };
   ai.bind(app.engine, tmp);

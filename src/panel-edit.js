@@ -144,7 +144,8 @@ export function buildEditPanel(app) {
   const profileBox = el('div', {}, useProfile.el, S('optics.distortion', 'Distortion', 0, 200), S('optics.vignetting', 'Vignetting', 0, 200), useCa.el);
   reg.push({ refresh: () => {
     const prof = app.lensProfile?.();
-    profileNote.textContent = prof ? `${prof.source} correction found in this photo.` : 'This photo has no built-in lens data (Fujifilm and Sony RAW files do). Use the manual corrections below.';
+    profileNote.textContent = prof ? (prof.source.startsWith('Lensfun') ? `Profile for ${prof.source.slice(9)}, from the Lensfun database.` : `${prof.source} correction found in this photo.`)
+      : 'No profile for this lens: neither built into the file nor in the Lensfun database. Use the manual corrections below.';
     profileBox.hidden = !prof;
     useProfile.refresh(); useCa.refresh();
   } });
