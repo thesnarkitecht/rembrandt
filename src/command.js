@@ -10,6 +10,7 @@ import { allPresets } from './panel-presets.js';
 import { buildEditPanel } from './panel-edit.js';
 import { buildAIPanel } from './ai/panel-ai.js';
 import { createStudio } from './studio.js';
+import { measureTilt, straightened } from './tool-crop.js';
 
 const c100 = (v) => clamp(Math.round(v), -100, 100);
 const add = (key, d, lo = -100, hi = 100) => (p, k) => ({ [key]: clamp(Math.round((p[key] + d * k) * 100) / 100, lo, hi) });
@@ -202,12 +203,24 @@ export function pasteSource(app, clause) {
   return c ? { clip: c, label: `Pasted ${batch.describeClip(c)}` } : { error: 'Nothing copied yet. Try “paste the edits from the previous photo”.' };
 }
 
+let tiltMemo = { key: '', t: null };   // the tilt measurement is slowish; once per photo and framing
+
 // Everything a request asks for, against `p`: pasted edits first, then the words on top.
 // → { next, labels } | { error } | null.
 export function understand(app, text, p) {
   const words = [];
   let next = p, labels = [];
   for (const clause of text.split(/,|;|\band\b|\bthen\b/i)) {
+    // "straighten", "level the horizon", "it's crooked": measured from the photo's lines.
+    if (/\bstraighten|\blevel\b|\bcrooked|\btilt(ed)?\b|\bhorizon\b/i.test(clause) && app.img) {
+      const g = app.params.geometry, k = `${app.images[app.cur]?.id}|${g.rot90}|${g.flipH}|${g.flipV}`;
+      if (tiltMemo.key !== k) tiltMemo = { key: k, t: measureTilt(app) };
+      const t = tiltMemo.t;
+      if (!t) return { error: 'I can’t find a horizon or straight lines to level this by.' };
+      next = { ...next, geometry: straightened(app, next.geometry, t.angle) };
+      labels.push(`Straighten ${t.angle > 0 ? '+' : ''}${t.angle.toFixed(1)}°`);
+      continue;
+    }
     const src = pasteSource(app, clause);
     if (!src) { words.push(clause); continue; }
     if (src.error) return { error: src.error };

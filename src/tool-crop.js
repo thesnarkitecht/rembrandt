@@ -1,14 +1,46 @@
 // Crop & straighten tool: panel + on-canvas overlay.
 import { el, svgEl, clamp } from './util.js';
 import { slider, section, iconButton, button } from './ui.js';
+import { icon } from './icons.js';
 import { A, maxCrop, fitCrop, constrainCrop, cropValid } from './geometry.js';
 import { aspectRatioOf } from './params.js';
+import { detectTilt } from './straighten.js';
+
+// The tilt of the photo as framed now, measured with no straightening applied. null: no clear lines.
+export function measureTilt(app) {
+  if (!app.img) return null;
+  const G = app.params.geometry;
+  const geo = { ...G, angle: 0, aspect: 'original', cropAuto: true };
+  geo.crop = maxCrop(app.img.aspect, geo, aspectRatioOf(geo, app.img.aspect), 0, 0);
+  const img = app.renderSmall({ ...app.params, geometry: geo }, 800);
+  return img ? detectTilt(img) : null;
+}
+
+// Levels the photo: sets Straighten from the detected tilt and refits the crop. Returns the result.
+export function autoStraighten(app) {
+  const t = measureTilt(app);
+  if (!t) return null;
+  const G = app.params.geometry;
+  G.angle = clamp(t.angle, -45, 45);
+  refitCrop(app);
+  app.requestRender();
+  app.commit();
+  return t;
+}
 
 const ASPECTS = [
   ['original', 'Original'], ['free', 'Free'], ['1:1', '1 : 1'], ['4:5', '4 : 5'],
   ['3:2', '3 : 2'], ['16:9', '16 : 9'], ['5:7', '5 : 7'], ['2:3', '2 : 3'],
 ];
 const MIN = 0.03;
+
+// A copy of `geometry` straightened to `angle`, with its crop refitted inside the rotated photo.
+export function straightened(app, geometry, angle) {
+  const g = { ...geometry, angle: clamp(angle, -45, 45) }, a = app.img.aspect;
+  const ratio = aspectRatioOf(g, a) ?? g.crop.w / g.crop.h;
+  g.crop = g.cropAuto ? maxCrop(a, g, ratio, 0, 0) : fitCrop(g.crop, a, g);
+  return g;
+}
 
 export function refitCrop(app, recentre = false) {
   const g = app.params.geometry, a = app.img.aspect;
@@ -75,11 +107,30 @@ export function buildCropPanel(app) {
   };
   const flip = (k) => () => { g()[k] = !g()[k]; app.requestRender(); app.commit(); refresh(); };
 
+  // Auto: levels the horizon or verticals. A suggestion appears when the photo looks tilted.
+  const tip = el('div', { class: 'tilt-tip', hidden: true });
+  const auto = () => {
+    const t = autoStraighten(app);
+    tip.hidden = true;
+    app.toast(t ? (Math.abs(t.angle) < 0.05 ? 'Already level' : `Straightened by ${Math.abs(t.angle).toFixed(1)}°`) : 'No clear horizon or straight lines to level by');
+    refresh();
+  };
+  setTimeout(() => {
+    if (Math.abs(g().angle) > 1e-6 || !app.img) return;
+    const t = measureTilt(app);
+    if (!t || Math.abs(t.angle) < 0.3) return;
+    tip.textContent = '';
+    tip.append(icon('wand'), el('span', {}, `Looks tilted ${Math.abs(t.angle).toFixed(1)}°`), button('Straighten', auto, 'sm'));
+    tip.hidden = false;
+  }, 60);
+
   const sec = section('Crop & Straighten', { id: 'crop', badge: { icon: 'crop', color: 'linear-gradient(135deg,#ffd166,#f59e0b)' } });
   sec.body.append(
     el('div', { class: 'subhead' }, el('span', {}, 'Aspect ratio'), iconButton('swap', 'Swap orientation (X)', swap, 'sm')),
     chips,
+    tip,
     angle.el,
+    el('div', { class: 'row-btns' }, button('Auto straighten', auto, 'sm ghost', 'wand')),
     el('div', { class: 'row-btns' },
       iconButton('rotL', 'Rotate left ([)', rot(-1)),
       iconButton('rotR', 'Rotate right (])', rot(1)),
