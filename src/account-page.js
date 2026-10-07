@@ -18,6 +18,7 @@ import { updateRow } from './update-check.js';
 import { PLANS, TIERS, planName, isPaid, hasCloudStorage } from './pricing.js';
 import { ring, fmtBytes } from './ring.js';
 import { BRAND } from './brand.js';
+import { MODES } from './jobs.js';
 import { isMobileApp, isTauri, isIOS } from './platform.js';
 import { unlockPanel, isUnlocked, freeSavesLeft, unlockPrice, onUnlockChange } from './unlock.js';
 import { buySubscription, syncStoreSubscriptions, manageStoreSubscription, loadStorePrices, storePrice, storeName, storePlatform, sellerName } from './subscriptions.js';
@@ -337,6 +338,14 @@ export function buildAccountPage(app, hooks) {
     const prevQ = segmented([{ value: 1920, label: 'Fast' }, { value: 2560, label: 'Balanced' }, { value: 4096, label: 'Sharp' }], prefs.previewLong, (v) => { prefs.previewLong = v; savePrefs(); hooks.previewChanged(v); });
     const fmt = segmented([{ value: 'jpeg', label: 'JPEG' }, { value: 'png', label: 'PNG' }, { value: 'webp', label: 'WebP' }], exportDefaults.format, (v) => { exportDefaults.format = v; saveExportDefaults(); });
     const q = slider({ label: 'Export quality', min: 40, max: 100, def: 92, get: () => exportDefaults.quality, set: (v) => { exportDefaults.quality = v; }, commit: saveExportDefaults });
+    const perfSeg = segmented(Object.entries(MODES).map(([value, m]) => ({ value, label: m.label })), prefs.perf || 'balanced', (v) => { prefs.perf = v; savePrefs(); });
+    const whenSeg = segmented([{ value: 'now', label: 'Right away' }, { value: 'away', label: 'When I’m away' }, { value: 'tonight', label: 'Tonight' }], prefs.aiWhen || 'now', (v) => { prefs.aiWhen = v; savePrefs(); });
+    const hourSel = (key, def) => {
+      const s = el('select', { class: 'text-input narrow', 'aria-label': key === 'nightFrom' ? 'Night starts' : 'Night ends' },
+        ...Array.from({ length: 24 }, (_, h) => el('option', { value: h, selected: (prefs[key] ?? def) === h }, `${h}:00`)));
+      s.addEventListener('change', () => { prefs[key] = +s.value; savePrefs(); });
+      return s;
+    };
     const field = (label, ctl, hint) => el('div', { class: 'field' }, el('span', {}, label), ctl, hint ? el('span', { class: 'hint' }, hint) : null);
     const ver = window.LUMEN_BUILD?.version;
     // Since you switched: what the Adobe plan would have cost since Rembrandt's first launch.
@@ -359,6 +368,12 @@ export function buildAccountPage(app, hooks) {
       card('Appearance', field('Theme', look.el), toggle('Opening animation', () => prefs.splash !== false, (v) => { prefs.splash = v; savePrefs(); }).el),
       card('Editing', field('RAW development', rawQ.el, 'Detailed is slower but resolves fine texture better.'), field('Preview resolution', prevQ.el, 'Sharp uses more graphics memory.'),
         field('Keyboard shortcuts', keys.el, 'Lightroom: P, X and U flag in Edit too, V black & white, K masks, Shift+P presets, ⌘K keywords, ⌘U auto, ⌘⇧R reset, ⌘⇧E export, ⌘⇧I import.')),
+      card('Performance',
+        field('While you edit', perfSeg.el, 'How much of the graphics card background work may use while you work. Smooth editing gives it the smallest slices.'),
+        field('Heavy AI work runs', whenSeg.el, 'AI Denoise, Super Resolution and merges. Away means no input for a minute, or Rembrandt in the background; it then runs at full speed.'),
+        field('Night window', el('div', { class: 'row' }, hourSel('nightFrom', 1), el('span', { class: 'hint' }, 'to'), hourSel('nightTo', 6))),
+        toggle('Keep the screen awake while working at night', () => prefs.keepAwake !== false, (v) => { prefs.keepAwake = v; savePrefs(); }).el,
+        el('p', { class: 'hint' }, 'Leave Rembrandt open and your computer plugged in. Queued work is remembered if you close it.')),
       card('Storage', toggle('Keep linked photos on this device', () => !!prefs.keepLinked, (v) => { prefs.keepLinked = v; savePrefs(); }).el,
         el('p', { class: 'hint' }, 'Off: photos linked from Google Photos, Drive, Dropbox or OneDrive use no space here or in Rembrandt storage. Only a small preview and your edits are kept, and after you close Rembrandt you pick a photo again to keep editing it. On: they open instantly, but use space on this device.')),
       card('Export', field('Default format', fmt.el), q.el),

@@ -13,6 +13,8 @@
 // Copyright © 2026 the Rembrandt contributors. Licensed under the GNU GPL v3 or later (see LICENSE).
 import { LIB } from '../../engine/src/shaders.js';
 import { ai } from './ai.js';
+import { userEditing } from '../jobs.js';
+import { prefs } from '../account.js';
 
 const HEAD = `#version 300 es
 precision highp float;
@@ -154,7 +156,8 @@ export const refocusPass = {
     const rFull = refocusRadius(p, ai.entry) * L.h;
     if (rFull < 0.6) return input;
     // Deconvolve at 1/k scale: the blur at most MAX_R pixels there, and within the pixel budget.
-    const budget = engine.exporting ? BUDGET.export : BUDGET.view;
+    // Preview size follows Settings › Performance; exports always use the full budget.
+    const budget = engine.exporting ? BUDGET.export : BUDGET.view * ({ smooth: 0.6, fast: 1.6 }[prefs.perf] || 1);
     const kBlur = rFull / MAX_R, kSize = Math.sqrt((L.w * L.h) / budget);
     const k = 2 ** Math.max(0, Math.ceil(Math.log2(Math.max(kBlur, kSize))));
     const r = rFull / k, dw = Math.max(1, Math.round(L.w / k)), dh = Math.max(1, Math.round(L.h / k));
@@ -177,7 +180,9 @@ export const refocusPass = {
     const protect = (rf.protect ?? 30) / 100;
     const noise = 0.003 + protect * 0.03;
     const lambda = 0.001 + protect * 0.01;
-    const n = engine.exporting ? want - st.done : Math.min(PER_FRAME, want - st.done);
+    // While you drag or type, one iteration a frame keeps the editor fluid; more when you pause.
+    const per = userEditing() || prefs.perf === 'smooth' ? 1 : PER_FRAME;
+    const n = engine.exporting ? want - st.done : Math.min(per, want - st.done);
     for (let i = 0; i < n; i++) {
       engine.draw(P.ratio, { uObs: obs.tex, uEst: st.cur.tex, uR: r, uTexel: texel, uNoise: noise }, q);
       engine.draw(P.update, { uEst: st.cur.tex, uRatio: q.tex, uR: r, uTexel: texel, uLambda: lambda, uRelax: RELAX }, st.nxt);

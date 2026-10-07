@@ -1310,3 +1310,22 @@ body[data-mode="library"] .ask-btn, body[data-mode="account"] .ask-btn { display
 .tilt-tip { display: flex; align-items: center; gap: 8px; margin: 8px 0 2px; padding: 7px 8px 7px 10px; border-radius: 6px; background: var(--accent-soft); font-size: 12px; color: var(--text); }
 .tilt-tip > span:not(.i) { flex: 1; }
 .tilt-tip .i { width: 14px; height: 14px; color: var(--accent); }
+
+/* Background work (jobs-ui.js) */
+.jobs-btn { position: relative; width: 30px; }
+.jobs-btn[hidden] { display: none; }
+.jobs-ring { width: 18px; height: 18px; border-radius: 50%; background: conic-gradient(var(--accent) var(--p, 0%), var(--line, rgba(127,127,127,.25)) 0); -webkit-mask: radial-gradient(circle, transparent 5px, #000 5.5px); mask: radial-gradient(circle, transparent 5px, #000 5.5px); }
+.jobs-btn.waiting .jobs-ring { background: var(--line, rgba(127,127,127,.35)); }
+.jobs-count { position: absolute; right: -2px; top: -2px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 7px; background: var(--accent); color: #fff; font-size: 9.5px; line-height: 14px; font-weight: 650; }
+.jobs-count:empty { display: none; }
+.jobs-panel { position: fixed; z-index: 60; width: min(360px, calc(100vw - 16px)); max-height: 60vh; overflow: auto; padding: 12px; border-radius: 10px; background: var(--panel, var(--bg)); border: 1px solid var(--line, rgba(127,127,127,.25)); box-shadow: 0 10px 34px rgba(0,0,0,.28); }
+.jobs-panel[hidden] { display: none; }
+.jobs-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-size: 13px; }
+.job-row { display: flex; gap: 8px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line, rgba(127,127,127,.18)); }
+.job-main { flex: 1; min-width: 0; }
+.job-title { font-size: 12.5px; font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.job-status { font-size: 11.5px; color: var(--muted); }
+.job-row.is-failed .job-status { color: #e5484d; }
+.job-acts { display: flex; gap: 2px; }
+.progress.thin { height: 3px; margin-top: 5px; }
+.jobs-foot { margin: 8px 0 0; font-size: 11.5px; }

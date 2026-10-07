@@ -23,6 +23,8 @@ export const SMART = [
   { id: 'picks', name: 'Picks', icon: 'check', test: (e) => e.flag === 1 },
   { id: 'edited', name: 'Edited', icon: 'edit', test: (e) => !!e.edited },
   { id: 'raw', name: 'RAW', icon: 'raw', test: (e) => !!e.raw },
+  // Noisy shots, to select together and AI Denoise (tonight, say).
+  { id: 'highiso', name: 'High ISO', icon: 'sparkle', test: (e) => (e.meta?.iso || 0) >= 3200 },
   { id: 'rejected', name: 'Rejected', icon: 'x', test: (e) => e.flag === -1 },
   { id: 'local', name: 'On this device only', icon: 'laptop', test: localOnly },
 ];
@@ -231,6 +233,7 @@ export function buildLibrary(app, api) {
           { label: 'Keywords…', icon: 'pencil', onClick: () => api.editKeywords(ids()) },
           n === 1 ? { label: 'Make a virtual copy (⌘ \')', icon: 'copy', onClick: () => api.makeVirtualCopy(ids()[0]) } : null,
           n === 1 ? { label: 'Find similar', icon: 'search', onClick: () => api.findSimilar(ids()[0]) } : null,
+          { label: n > 1 ? `AI Denoise ${n} photos` : 'AI Denoise', icon: 'sparkle', onClick: () => { api.denoisePhotos(ids()); app.toast(`AI Denoise: ${n === 1 ? 'added' : `${n} photos added`} to background work`); } },
           n > 1 ? { sep: true } : null,
           n > 1 ? { head: 'Merge' } : null,
           n > 1 ? { label: 'HDR (bracketed exposures)', icon: 'sun', onClick: () => api.mergePhotos(ids(), 'hdr') } : null,

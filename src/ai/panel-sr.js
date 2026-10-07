@@ -96,34 +96,15 @@ export function buildSRSection(app) {
   }
   const schedulePreview = debounce(() => { if (previewOn) runPreview(); }, 250);
 
-  const bar = el('div', { class: 'progress', hidden: true }, el('span'));
   const timing = el('div', { class: 'sr-gpu' });
   const gpu = el('div', { class: 'sr-gpu' });
   gpuLabel().then((t) => { gpu.textContent = t ? `Runs on this device · ${t}` : 'This device has no GPU support for Super Resolution'; });
 
-  let ctrl = null;
   const go = button('Create enhanced copy', async () => {
-    if (ctrl) { ctrl.abort(); return; }
-    ctrl = new AbortController();
-    go.querySelector('span').textContent = 'Cancel';
-    go.classList.remove('primary');
-    bar.hidden = false;
-    bar.firstChild.style.width = '0%';
-    const t0 = performance.now();
     try {
-      const { w, h } = await app.superResolution({
-        scale: prefs.scale, denoise: prefs.noise / 100, signal: ctrl.signal,
-        onProgress: (f) => { bar.firstChild.style.width = `${Math.round(f * 100)}%`; },
-      });
-      app.toast(`Added a ${w} × ${h} copy in ${((performance.now() - t0) / 1000).toFixed(1)} s`);
-    } catch (err) {
-      if (err?.name !== 'AbortError') app.toast(err?.message || 'Super Resolution failed');
-    } finally {
-      ctrl = null;
-      bar.hidden = true;
-      go.querySelector('span').textContent = 'Create enhanced copy';
-      go.classList.add('primary');
-    }
+      await app.superResolution({ scale: prefs.scale, denoise: prefs.noise / 100 });
+      app.toast('Added to background work: it pauses while you edit, and the copy appears in the library');
+    } catch (err) { app.toast(err?.message || 'Super Resolution failed'); }
   }, 'primary sr-go', 'enlarge');
 
   function paint() {
@@ -138,7 +119,7 @@ export function buildSRSection(app) {
 
   sec.body.append(
     el('p', { class: 'ai-lede' }, 'Real detail at a larger size, or a soft photo restored at its own.'),
-    scale.el, dims, noise.el, view, el('div', { class: 'sr-actions' }, go), bar, timing, gpu,
+    scale.el, dims, noise.el, view, el('div', { class: 'sr-actions' }, go), timing, gpu,
   );
   return {
     el: sec.el,
@@ -157,22 +138,17 @@ export function buildSRSection(app) {
 export function buildDenoiseSection(app) {
   const sec = section('AI Denoise', { id: 'ai-denoise', open: false, badge: { icon: 'sparkle' } });
   const strength = slider({ label: 'Strength', min: 0, max: 100, def: 50, get: () => prefs.dn ?? 50, set: (v) => { prefs.dn = v; }, commit: save });
-  const bar = el('div', { class: 'progress', hidden: true }, el('span'));
-  let busy = false;
-  const go = button('Create denoised copy', async () => {
-    if (busy) return;
-    busy = true; go.disabled = true; bar.hidden = false; bar.firstChild.style.width = '0%';
-    const t0 = performance.now();
+  const go = button('Create denoised copy', () => {
     try {
-      const { w, h } = await app.denoise({ strength: (prefs.dn ?? 50) / 100, onProgress: (f) => { bar.firstChild.style.width = `${Math.round(f * 100)}%`; } });
-      app.toast(`Added a denoised ${w} × ${h} DNG in ${((performance.now() - t0) / 1000).toFixed(1)} s`);
-    } catch (err) {
-      console.error(err);
-      app.toast(err?.message || 'AI Denoise failed');
-    } finally { busy = false; go.disabled = false; bar.hidden = true; }
+      app.denoise({ strength: denoiseStrength() });
+      app.toast('Added to background work: it pauses while you edit, and the DNG appears in the library');
+    } catch (err) { app.toast(err?.message || 'AI Denoise failed'); }
   }, 'primary sr-go', 'sparkle');
   sec.body.append(
     el('p', { class: 'ai-lede' }, 'Clean, detailed high-ISO shots. Makes a new DNG beside the original with the same edits; best on RAW.'),
-    strength.el, el('div', { class: 'sr-actions' }, go), bar);
+    strength.el, el('div', { class: 'sr-actions' }, go));
   return { el: sec.el, refresh() { strength.refresh(); } };
 }
+
+// The Strength last chosen in the AI Denoise section (also used for batches from the library).
+export const denoiseStrength = () => (prefs.dn ?? 50) / 100;

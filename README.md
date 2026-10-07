@@ -78,6 +78,9 @@ checks it against the published SHA-256 sums, and restarts the server.
 - **Super Resolution**: 2× and 4× with real detail, or Restore at the same size for soft photos;
   runs on the GPU (Metal on Apple silicon).
 - **AI Denoise**: clean high-ISO shots into a new DNG with the same edits, on the GPU.
+- **Background work that stays out of the way**: AI Denoise, Super Resolution and merges run in small
+  GPU slices that pause while you edit, or when you're away, or overnight in a night window you set
+  (Settings › Performance). The queue survives restarts.
 - **Merge**: HDR from brackets, panoramas and focus stacks, each to a RAW-like DNG.
 - **RAW** from 1,000+ cameras, developed on the GPU: tone, colour, curves, grading, dehaze, detail.
 - **Masks**: brush, gradients, colour and tone ranges, AI subject, background, object and depth.

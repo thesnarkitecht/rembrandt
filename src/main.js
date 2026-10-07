@@ -60,6 +60,9 @@ import { sliderHooks, closeMenu, popMenu, button } from './ui.js';
 import { displayToScene, solveWhiteBalance, RAW_EV } from '../engine/src/color.js';
 import { toneBase, adapt } from './adapt.js';
 import { writeDNG } from './merge.js';
+import { addJob, breathe, whenQuiet, registerKind, restoreJobs, trackActivity } from './jobs.js';
+import { mountJobs } from './jobs-ui.js';
+import { denoiseStrength } from './ai/panel-sr.js';
 import { signature, similarity, THRESHOLD as SIMILAR_THRESHOLD, MAX_RESULTS as SIMILAR_MAX } from './similar.js';
 import { estimateAirlight } from '../engine/src/pipeline.js';
 
@@ -247,59 +250,35 @@ const app = {
   srLimit: () => (isMobileApp ? 16_777_216 : 120_000_000),
   srMaxScale(image) { return maxScale(image.width, image.height, this.srLimit()); },
   // ...enlarged or restored, and added to the library as a new photo next to the original.
-  async superResolution({ scale, denoise, onProgress, signal }) {
+  // Rendered now (one quick pass), enhanced as a background job (jobs.js) so editing stays smooth.
+  async superResolution({ scale, denoise, when }) {
     const cur = this.images[this.cur];
     const image = await this.srSource();
     if (scale > this.srMaxScale(image)) throw new Error('This photo is too large to enlarge that much on this device');
-    let finish;
-    this.developFX?.play({ hold: new Promise((r) => { finish = r; }) });
-    try {
-      return await this._superResolution(cur, image, { scale, denoise, onProgress, signal });
-    } finally { finish(); }
+    const what = scale === 1 ? 'Restore' : `Super Resolution ${scale}×`;
+    return addJob({
+      kind: 'superres', title: `${what} · ${cur.name}`, when,
+      run: (job) => this._superResolution(cur, image, { scale, denoise, job, onProgress: (f) => job.setProgress(f) }),
+    });
   },
-  async _superResolution(cur, image, { scale, denoise, onProgress, signal }) {
-    const out = await upscale(image, { scale, denoise, onProgress, signal });
+  async _superResolution(cur, image, { scale, denoise, onProgress, signal, job }) {
+    const out = await upscale(image, { scale, denoise, onProgress, signal, job });
     const c = el('canvas', { width: out.width, height: out.height });
     c.getContext('2d').putImageData(out, 0, 0);
     const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.95));
     if (!blob) throw new Error('The enlarged photo could not be saved');
     const base = cur.name.replace(/\.[^.]+$/, '');
     const file = new File([blob], `${base}-${scale === 1 ? 'restored' : `${scale}x`}.jpg`, { type: 'image/jpeg', lastModified: Date.now() });
-    await openFiles([file]);
+    const [made] = (await importItems([{ file }], { open: false })) || [];
+    if (job && made) job.open = () => openInEditor(made.id);
+    app.toast(`${scale === 1 ? 'Restored' : 'Enlarged'} copy of “${cur.name}” is ready`, made ? { action: { label: 'Open', onClick: () => openInEditor(made.id) } } : {});
     return { w: out.width, h: out.height };
   },
-  // AI Denoise (ai/denoise.js): a denoised linear DNG beside the original, with the same edits.
-  async denoise({ strength = 0.5, onProgress } = {}) {
-    const e = this.images[this.cur];
-    if (!e) throw new Error('Open a photo first');
-    const file = await originalFile(e);
-    if (!file) throw new Error('The original of this photo isn’t available');
-    let frame, gain = 1;
-    if (e.raw) {
-      const lin = e.linear || await decodeRawLinear(file, { quality: prefs.rawQuality });
-      frame = { w: lin.w, h: lin.h, data: lin.data };
-      gain = lin.gain;
-    } else {
-      const d = await decodeFile(file);
-      frame = frameFromBitmap(d.bitmap, 0);
-      d.bitmap.close?.();
-    }
-    let finish;
-    this.developFX?.play({ hold: new Promise((r) => { finish = r; }) });
-    try {
-      const { denoiseFrame } = await import('./ai/denoise.js');
-      const r = await denoiseFrame(frame, { gain, strength, onProgress });
-      const dng = writeDNG({ w: frame.w, h: frame.h, data: r.data, baseline: Math.log2(r.scale) - RAW_EV, model: 'Denoise' });
-      const base = e.name.replace(/\.[^.]+$/, '');
-      const out = new File([dng], `${base}-Denoise.dng`, { type: 'image/x-adobe-dng', lastModified: e.lastModified || Date.now() });
-      const params = clone(editOf(e)), edited = e.edited;
-      const [made] = (await openFiles([out])) || [];
-      if (made && edited) {
-        touch(made, { params, edited: true, rating: e.rating, flag: e.flag });
-        if (this.images[this.cur] === made && this.img) { this.params = deepMerge(defaultParams(this.img.aspect), params); this.history.reset(this.params); this.rebuildPanel(); this.requestRender(); }
-      }
-      return { w: frame.w, h: frame.h };
-    } finally { finish(); }
+  // AI Denoise (ai/denoise.js): queued; a denoised linear DNG appears beside each original.
+  denoise({ strength = 0.5, ids, when } = {}) {
+    const list = ids || [this.images[this.cur]?.id].filter(Boolean);
+    if (!list.length) throw new Error('Open a photo first');
+    return list.map((id) => queueDenoise(id, strength, when));
   },
   aiFailed(err) {
     console.error(err);
@@ -1667,6 +1646,7 @@ async function applyPresetTo(ids, preset, { quiet } = {}) {
     const todo = app.images.filter((e) => ids.includes(e.id) && !toneBaseOf(e));
     if (todo.length > 3 && !quiet) app.toast(`Fitting “${preset.name}” to ${plural(todo.length)}…`);
     for (const e of todo) {
+      await whenQuiet();
       try {
         const f = e.file || (await catalog.getFile(e.id)) || (e.src ? await folders.fileFor(e.src, { ask: false }) : null);
         if (!f) continue;
@@ -1719,6 +1699,7 @@ function refreshThumbs(list) {
 async function runThumbs() {
   thumbBusy = true;
   while (thumbQueue.length) {
+    await whenQuiet();
     const e = thumbQueue.shift();
     try {
       const f = e.file || (await catalog.getFile(e.id)) || (e.src ? await folders.fileFor(e.src, { ask: false }) : null);
@@ -1758,6 +1739,43 @@ function presetMenu(ids, anchor) {
   for (const p of allPresets()) (groups[p.group || 'Your presets'] ||= []).push(p);
   popMenu(anchor, Object.entries(groups).flatMap(([g, list], i) => [i ? { sep: true } : null, { head: g }, ...list.map((p) => ({ label: p.name, onClick: () => applyPresetTo(ids, p) }))]));
 }
+// AI Denoise as a background job: decode, denoise in GPU-sized tiles, write the DNG, import it with
+// the original's edits.
+function queueDenoise(id, strength, when) {
+  const e = app.images.find((x) => x.id === id);
+  if (!e) return null;
+  return addJob({ kind: 'denoise', title: `AI Denoise · ${e.name}`, when, desc: { id, strength }, run: (job) => denoisePhoto(id, strength, job) });
+}
+async function denoisePhoto(id, strength, job) {
+  const e = app.images.find((x) => x.id === id);
+  if (!e) throw new Error('That photo is no longer in the library');
+  job.setProgress(0, 'Reading the original…');
+  const file = await originalFile(e);
+  if (!file) throw new Error(`The original of “${e.name}” isn’t available`);
+  let frame, gain = 1;
+  if (e.raw) {
+    const lin = e.linear || await decodeRawLinear(file, { quality: prefs.rawQuality });
+    frame = { w: lin.w, h: lin.h, data: lin.data };
+    gain = lin.gain;
+  } else {
+    const d = await decodeFile(file);
+    frame = frameFromBitmap(d.bitmap, 0);
+    d.bitmap.close?.();
+  }
+  await breathe(job);
+  const { denoiseFrame } = await import('./ai/denoise.js');
+  const r = await denoiseFrame(frame, { gain, strength, job, onProgress: (f) => job.setProgress(f * 0.97, `${Math.round(f * 100)}%`) });
+  job.setProgress(0.98, 'Saving…');
+  const dng = writeDNG({ w: frame.w, h: frame.h, data: r.data, baseline: Math.log2(r.scale) - RAW_EV, model: 'Denoise' });
+  const base = e.name.replace(/\.[^.]+$/, '');
+  const out = new File([dng], `${base}-Denoise.dng`, { type: 'image/x-adobe-dng', lastModified: e.lastModified || Date.now() });
+  const [made] = (await importItems([{ file: out }], { open: false })) || [];
+  if (made && e.edited) touch(made, { params: clone(editOf(e)), edited: true, rating: e.rating, flag: e.flag });
+  if (made) { job.open = () => openInEditor(made.id); refreshThumbs([made]); }
+  app.toast(`Denoised copy of “${e.name}” is ready`, made ? { action: { label: 'Open', onClick: () => openInEditor(made.id) } } : {});
+  return { w: frame.w, h: frame.h };
+}
+
 // Merge (merge.js): HDR from brackets, focus stacks, panoramas. Frames are decoded here one at a
 // time and handed to a worker, which returns a linear DNG that is then imported like any RAW.
 const MERGES = {
@@ -1786,19 +1804,25 @@ function frameFromBitmap(bitmap, long) {
   for (let i = 0; i < px.length; i += 4) { data[i] = halfOf8[px[i]]; data[i + 1] = halfOf8[px[i + 1]]; data[i + 2] = halfOf8[px[i + 2]]; data[i + 3] = 0x3c00; }
   return { w, h, data };
 }
-async function mergePhotos(ids, kind) {
+function mergePhotos(ids, kind, when) {
+  const M = MERGES[kind];
+  if (ids.length < M.min) { app.toast(`Select at least ${M.min} photos`); return null; }
+  const first = app.images.find((e) => ids.includes(e.id));
+  app.toast(`${M.name}: added to background work`);
+  return addJob({ kind: 'merge', title: `${M.name} · ${plural(ids.length)}${first ? ` from ${first.name}` : ''}`, when, desc: { ids, kind }, run: (job) => runMerge(ids, kind, job) });
+}
+async function runMerge(ids, kind, job) {
   const M = MERGES[kind];
   const takenAt = (e) => (e.meta?.timestamp ? e.meta.timestamp * 1000 : e.lastModified || 0);
   const list = app.images.filter((e) => ids.includes(e.id)).sort((a, b) => takenAt(a) - takenAt(b) || a.name.localeCompare(b.name, undefined, { numeric: true }));
-  if (list.length < M.min) { app.toast(`Select at least ${M.min} photos`); return; }
+  if (list.length < M.min) throw new Error(`${M.name} needs at least ${M.min} photos`);
   const worker = new Worker(new URL('./merge-worker.js', import.meta.url), { type: 'module' });
   let seq = 0;
-  const job = beginProgress(`${M.name}: reading photos`);
   const call = (msg, transfer = []) => new Promise((resolve, reject) => {
     const id = ++seq;
     const on = ({ data }) => {
       if (data.id !== id) return;
-      if (data.progress) { job.update(list.length, list.length + 1, `${M.name}: ${data.progress}`); return; }
+      if (data.progress) { job.setProgress(list.length / (list.length + 1), data.progress); return; }
       worker.removeEventListener('message', on);
       data.ok ? resolve(data) : reject(new Error(data.error));
     };
@@ -1809,7 +1833,8 @@ async function mergePhotos(ids, kind) {
     await call({ op: 'begin', kind });
     for (let i = 0; i < list.length; i++) {
       const e = list[i];
-      job.update(i, list.length + 1, `${M.name}: reading ${e.name}`);
+      job.setProgress(i / (list.length + 1), `Reading ${e.name}`);
+      await breathe(job);
       const file = await originalFile(e);
       if (!file) throw new Error(`The original of “${e.name}” isn’t available`);
       let frame, meta = {};
@@ -1825,17 +1850,17 @@ async function mergePhotos(ids, kind) {
       }
       await call({ op: 'add', frame, meta }, [frame.data.buffer]);
     }
-    job.update(list.length, list.length + 1, `${M.name}: merging`);
+    job.setProgress(list.length / (list.length + 1), 'Merging…');
     const r = await call({ op: 'finish' });
     const base = list[0].name.replace(/\.[^.]+$/, '');
     const file = new File([r.dng], `${base}-${M.suffix}.dng`, { type: 'image/x-adobe-dng', lastModified: takenAt(list[0]) || Date.now() });
-    job.finish(`${M.name} ready`);
-    await openFiles([file], { open: true });
-    app.toast(`${M.name} made from ${plural(list.length)} · ${r.w} × ${r.h}`);
+    const [made] = (await importItems([{ file }], { open: false })) || [];
+    if (made) job.open = () => openInEditor(made.id);
+    app.toast(`${M.name} made from ${plural(list.length)} · ${r.w} × ${r.h}`, made ? { action: { label: 'Open', onClick: () => openInEditor(made.id) } } : {});
+    return { w: r.w, h: r.h };
   } catch (err) {
-    job.finish(`${M.name} failed`);
-    console.error(err);
     app.toast(err.message, { ms: 8000 });
+    throw err;
   } finally {
     worker.terminate();
   }
@@ -2531,7 +2556,7 @@ function boot() {
   app.updateUndo();
   app.buildPanel();
   library = buildLibrary(app, {
-    openInEditor, removePhotos, deletePhotos, keepOnDevice, syncAnyway, syncOn: () => cloud.cloud.available, setRating, setFlag, setLabel, editKeywords, makeVirtualCopy, findSimilar, mergePhotos, syncSettings, exportPhotos,
+    openInEditor, removePhotos, deletePhotos, keepOnDevice, syncAnyway, syncOn: () => cloud.cloud.available, setRating, setFlag, setLabel, editKeywords, makeVirtualCopy, findSimilar, mergePhotos, denoisePhotos: (ids) => app.denoise({ ids, strength: denoiseStrength() }), syncSettings, exportPhotos,
     copyEdits: copyEditsFrom, pasteEdits: pasteEditsTo, resetEdits, photoMenu, presetMenu, pointAnchor, clipboard: batch.clipboard, describeClip: batch.describeClip,
     importFiles: () => openImporter(),
     syncFolder: (f) => (f ? syncFolder(f) : addSyncedFolder()),
@@ -2545,6 +2570,8 @@ function boot() {
     paintStorage,
   });
   $('library').replaceWith(library.el);
+  trackActivity();
+  mountJobs($('btnAccount'));
   accountPage = buildAccountPage(app, accountHooks);
   $('accountPage').replaceWith(accountPage.el);
   app.cloudState = () => cloud.cloud;
@@ -2555,6 +2582,10 @@ function boot() {
   window.lumen = app; // handy for debugging from the console
   albums.loadAlbums().then(loadCatalog).then(() => folders.loadFolders().catch((e) => console.warn(e))).then(() => {
     refreshLibrary();
+    // Background work: kinds that can come back after a restart, then last session's queue.
+    registerKind('denoise', (d, job) => denoisePhoto(d.id, d.strength, job));
+    registerKind('merge', (d, job) => runMerge(d.ids, d.kind, job));
+    restoreJobs();
     sweepFolders(true);
     setInterval(() => sweepFolders(false), 60000);
     setInterval(sweepWatched, 8000);

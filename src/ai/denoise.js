@@ -14,6 +14,7 @@
 // Copyright © 2026 the Rembrandt contributors. Licensed under the GNU GPL v3 or later (see LICENSE).
 import { webgpu, packMats, convWGSL, convGLSL, VS, TX, TH } from './upscale.js';
 import { H2F } from '../merge.js';
+import { breathe, chunker, pacer, glFinished } from '../jobs.js';
 
 const SIZES = [[13, 96], ...Array(10).fill([96, 96]), [96, 12]];
 const T = 192, PAD = 14;   // tile and overlap, in half-size pixels
@@ -79,15 +80,18 @@ class GPUNet {
     this.I = device.createBuffer({ size: n * 4 * 16, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST });
     this.cap = n;
   }
-  async run(input, w, h) {
+  async run(input, w, h, job) {
     const { device, f16 } = this.g, n = w * h;
+    const step = job ? pacer(job, () => device.queue.onSubmittedWorkDone()) : null;
     this.ensure(n);
     device.queue.writeBuffer(this.I, 0, input);
     const dims = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     device.queue.writeBuffer(dims, 0, new Uint32Array([w, h, 0, 0]));
-    const enc = device.createCommandEncoder();
+    let enc = device.createCommandEncoder();
     let src = this.I, dst = this.A;
     for (const L of this.layers) {
+      // Queued work goes one layer at a time, so the editor's frames get the GPU in between.
+      if (step && L !== this.layers[0]) { device.queue.submit([enc.finish()]); await step(); enc = device.createCommandEncoder(); }
       const pass = enc.beginComputePass();
       pass.setPipeline(L.pipe);
       pass.setBindGroup(0, device.createBindGroup({ layout: L.pipe.getBindGroupLayout(0), entries: [
@@ -152,12 +156,15 @@ class GLNet {
     gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     return t;
   }
-  async run(input, w, h) {
+  async run(input, w, h, job) {
     const gl = this.gl;
-    if (this.size[0] !== w || this.size[1] !== h) {
+    const step = job ? pacer(job, () => glFinished(gl)) : null;
+    // Textures only grow: tiles change size as the work adapts to the GPU.
+    if (this.size[0] < w || this.size[1] < h) {
+      const W = Math.max(w, this.size[0]), H = Math.max(h, this.size[1]);
       for (const t of [this.A, this.B, this.I]) if (t) gl.deleteTexture(t);
-      this.A = this.arr(w, h, 24, gl.RGBA16F); this.B = this.arr(w, h, 24, gl.RGBA16F); this.I = this.arr(w, h, 4, gl.RGBA32F);
-      this.size = [w, h];
+      this.A = this.arr(W, H, 24, gl.RGBA16F); this.B = this.arr(W, H, 24, gl.RGBA16F); this.I = this.arr(W, H, 4, gl.RGBA32F);
+      this.size = [W, H];
     }
     gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.I);
     gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, 0, w, h, 4, gl.RGBA, gl.FLOAT, input);
@@ -181,6 +188,12 @@ class GLNet {
         gl.drawArrays(gl.TRIANGLES, 0, 3);
       }
       src = dst; dst = dst === this.A ? this.B : this.A;
+      if (step) {
+        await step();
+        // The editor may have drawn in between: our framebuffer, VAO and viewport are per context, so
+        // they are still ours; rebind to be safe.
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.fb); gl.bindVertexArray(this.vao); gl.viewport(0, 0, w, h);
+      }
     }
     for (let k = 1; k < 4; k++) gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + k, null, 0, 0);
     const out = new Float32Array(w * h * 16), plane = new Float32Array(w * h * 4);
@@ -225,7 +238,7 @@ function noiseLevel(Y, w, h) {
 // `frame`: { w, h, data (RGBA half floats, linear) }. `gain`: brightness of the photo as displayed
 // (2^(RAW_EV + baseline) for RAW). Resolves { data: Uint16Array RGB, scale } where the DNG's display
 // brightness is data / 65535 · scale.
-export async function denoiseFrame(frame, { gain = 1, strength = 0.5, onProgress, force } = {}) {
+export async function denoiseFrame(frame, { gain = 1, strength = 0.5, onProgress, force, job } = {}) {
   const { w: W0, h: H0, data } = frame;
   // Even size for the 2× unshuffle (the last row / column repeats).
   const W = W0 + (W0 & 1), H = H0 + (H0 & 1);
@@ -243,46 +256,58 @@ export async function denoiseFrame(frame, { gain = 1, strength = 0.5, onProgress
   const net = g ? new GPUNet(g, L) : new GLNet(L);
   const w2 = W / 2, h2 = H / 2;
   const out = new Uint16Array(W0 * H0 * 3);
-  const tilesX = Math.ceil(w2 / T), tilesY = Math.ceil(h2 / T);
-  let done = 0;
+  async function tile(x0, y0, x1, y1) {
+    const sx0 = Math.max(0, x0 - PAD), sy0 = Math.max(0, y0 - PAD), sx1 = Math.min(w2, x1 + PAD), sy1 = Math.min(h2, y1 + PAD);
+    const w = sx1 - sx0, h = sy1 - sy0, n = w * h;
+    // Input: 12 unshuffled channels (channel c·4 + dy·2 + dx) and the noise map, as 4 planes of vec4.
+    const inp = new Float32Array(n * 16);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const p = y * w + x;
+      let lum = 0;
+      for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
+        const X = 2 * (sx0 + x) + dx, Yy = 2 * (sy0 + y) + dy;
+        for (let c = 0; c < 3; c++) {
+          const k = c * 4 + dy * 2 + dx;
+          inp[((k >> 2) * n + p) * 4 + (k & 3)] = Y(X, Yy, c);
+        }
+        lum += Y(X, Yy, 1);
+      }
+      lum /= 4;
+      inp[(3 * n + p) * 4] = sigma0 * (1 + 0.5 * (1 - lum) ** 3);
+    }
+    const res = await net.run(inp, w, h, job);
+    for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
+      const p = (y - sy0) * w + (x - sx0);
+      for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
+        const X = 2 * x + dx, Yy = 2 * y + dy;
+        if (X >= W0 || Yy >= H0) continue;
+        const o = (Yy * W0 + X) * 3;
+        for (let c = 0; c < 3; c++) {
+          const k = c * 4 + dy * 2 + dx;
+          const v = res[((k >> 2) * n + p) * 4 + (k & 3)];
+          out[o + c] = Math.round(dec(Math.min(1, Math.max(0, v))) * 65535);
+        }
+      }
+    }
+  }
+  // Tiles sized so each GPU step fits the time budget (jobs.js); between tiles the editor gets the
+  // GPU back, and waits while you work.
+  const sizer = chunker(job ? 96 : T, 32, 256);
+  let doneArea = 0;
   try {
-    for (let ty = 0; ty < tilesY; ty++) for (let tx = 0; tx < tilesX; tx++) {
-      const x0 = tx * T, y0 = ty * T, x1 = Math.min(w2, x0 + T), y1 = Math.min(h2, y0 + T);
-      const sx0 = Math.max(0, x0 - PAD), sy0 = Math.max(0, y0 - PAD), sx1 = Math.min(w2, x1 + PAD), sy1 = Math.min(h2, y1 + PAD);
-      const w = sx1 - sx0, h = sy1 - sy0, n = w * h;
-      // Input: 12 unshuffled channels (channel c·4 + dy·2 + dx) and the noise map, as 4 planes of vec4.
-      const inp = new Float32Array(n * 16);
-      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
-        const p = y * w + x;
-        let lum = 0;
-        for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
-          const X = 2 * (sx0 + x) + dx, Yy = 2 * (sy0 + y) + dy;
-          for (let c = 0; c < 3; c++) {
-            const k = c * 4 + dy * 2 + dx;
-            inp[((k >> 2) * n + p) * 4 + (k & 3)] = Y(X, Yy, c);
-          }
-          lum += Y(X, Yy, 1);
-        }
-        lum /= 4;
-        inp[(3 * n + p) * 4] = sigma0 * (1 + 0.5 * (1 - lum) ** 3);
+    for (let y0 = 0; y0 < h2;) {
+      const y1 = Math.min(h2, y0 + sizer.size);
+      for (let x0 = 0; x0 < w2;) {
+        const x1 = Math.min(w2, x0 + sizer.size);
+        const t0 = performance.now();
+        await tile(x0, y0, x1, y1);
+        sizer.report(performance.now() - t0);
+        doneArea += (x1 - x0) * (y1 - y0);
+        onProgress?.(doneArea / (w2 * h2));
+        x0 = x1;
+        await (job ? breathe(job) : new Promise((r) => setTimeout(r, 0)));
       }
-      const res = await net.run(inp, w, h);
-      for (let y = y0; y < y1; y++) for (let x = x0; x < x1; x++) {
-        const p = (y - sy0) * w + (x - sx0);
-        for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) {
-          const X = 2 * x + dx, Yy = 2 * y + dy;
-          if (X >= W0 || Yy >= H0) continue;
-          const o = (Yy * W0 + X) * 3;
-          for (let c = 0; c < 3; c++) {
-            const k = c * 4 + dy * 2 + dx;
-            const v = res[((k >> 2) * n + p) * 4 + (k & 3)];
-            out[o + c] = Math.round(dec(Math.min(1, Math.max(0, v))) * 65535);
-          }
-        }
-      }
-      done++;
-      onProgress?.(done / (tilesX * tilesY));
-      await new Promise((r) => setTimeout(r, 0));
+      y0 = y1;
     }
   } finally {
     net.destroy();

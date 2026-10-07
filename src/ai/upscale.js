@@ -16,6 +16,8 @@
 // The image is processed in overlapping tiles so memory stays bounded at any size.
 // Copyright © 2026 the Rembrandt contributors. Licensed under the GNU GPL v3 or later (see LICENSE).
 
+import { breathe, chunker, pacer, glFinished } from '../jobs.js';
+
 const LAYERS = Array.from({ length: 34 }, (_, l) => ({ oc: l === 33 ? 48 : 64, ic: l === 0 ? 3 : 64, prelu: l < 33 }));
 const PAD = 24;          // tile overlap, in input pixels
 const MAX_OUT = 16384;   // longest output edge
@@ -225,8 +227,9 @@ class GPURunner {
     this.cap = n;
   }
   // `rgb`: Float32Array of vec4 for a w×h tile. Returns RGBA8 pixels of the valid region at `scale`.
-  async run(rgb, w, h, vx, vy, vw, vh, scale) {
+  async run(rgb, w, h, vx, vy, vw, vh, scale, job) {
     const { device } = this.g;
+    const step = job ? pacer(job, () => device.queue.onSubmittedWorkDone()) : null;
     this.ensure(w, h);
     device.queue.writeBuffer(this.I, 0, rgb);
     const f = 4 / scale, ow = vw * scale, oh = vh * scale;
@@ -234,9 +237,11 @@ class GPURunner {
     const read = device.createBuffer({ size: ow * oh * 4, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
     const dims = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     device.queue.writeBuffer(dims, 0, new Uint32Array([w, h, 0, 0]));
-    const enc = device.createCommandEncoder();
+    let enc = device.createCommandEncoder();
     let src = this.I, dst = this.A;
-    this.layers.forEach((L) => {
+    for (const L of this.layers) {
+      // Queued work goes a layer at a time, so the editor's frames get the GPU in between.
+      if (step && L !== this.layers[0]) { device.queue.submit([enc.finish()]); await step(); enc = device.createCommandEncoder(); }
       const pass = enc.beginComputePass();
       pass.setPipeline(L.pipe);
       pass.setBindGroup(0, device.createBindGroup({ layout: L.pipe.getBindGroupLayout(0), entries: [
@@ -245,7 +250,7 @@ class GPURunner {
       pass.dispatchWorkgroups(Math.ceil(w / TX), Math.ceil(h / TH), L.OGT / 4);
       pass.end();
       src = dst; dst = dst === this.A ? this.B : this.A;
-    });
+    }
     const qb = device.createBuffer({ size: 32, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST });
     device.queue.writeBuffer(qb, 0, new Uint32Array([w, h, vx, vy, ow, oh, f, 0]));
     const pass = enc.beginComputePass();
@@ -376,8 +381,9 @@ class GLRunner {
     gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MIN_FILTER, gl.NEAREST); gl.texParameteri(gl.TEXTURE_2D_ARRAY, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     this.size = [w, h];
   }
-  async run(rgb, w, h, vx, vy, vw, vh, scale) {
+  async run(rgb, w, h, vx, vy, vw, vh, scale, job) {
     const gl = this.gl;
+    const step = job ? pacer(job, () => glFinished(gl)) : null;
     this.ensure(w, h);
     gl.bindTexture(gl.TEXTURE_2D_ARRAY, this.I);
     gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, 0, w, h, 1, gl.RGBA, gl.FLOAT, rgb);
@@ -401,6 +407,7 @@ class GLRunner {
         gl.drawArrays(gl.TRIANGLES, 0, 3);
       }
       src = dst; dst = dst === this.A ? this.B : this.A;
+      if (step) { await step(); gl.bindFramebuffer(gl.FRAMEBUFFER, this.fb); gl.bindVertexArray(this.vao); gl.viewport(0, 0, w, h); }
     }
     for (let k = 1; k < 4; k++) gl.framebufferTextureLayer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0 + k, null, 0, 0);
     const f = 4 / scale, ow = vw * scale, oh = vh * scale;
@@ -461,7 +468,7 @@ export async function gpuLabel() {
 
 // Enlarges (scale 2 or 4) or restores (scale 1) `source` (an ImageBitmap, canvas or ImageData, sRGB).
 // Resolves an ImageData of the result. `onProgress(fraction)`; `signal` (AbortSignal) cancels.
-export async function upscale(source, { scale = 2, denoise = 0.5, tile = 0, onProgress, signal, force } = {}) {
+export async function upscale(source, { scale = 2, denoise = 0.5, tile = 0, onProgress, signal, force, job } = {}) {
   if (![1, 2, 4].includes(scale)) throw new Error('Scale must be 1, 2 or 4');
   let img = source;
   if (!(img instanceof ImageData)) {
@@ -475,17 +482,20 @@ export async function upscale(source, { scale = 2, denoise = 0.5, tile = 0, onPr
   const layers = blendedLayers(await loadRaw(), denoise);
   const g = force === 'webgl' ? null : await webgpu();
   const runner = g ? new GPURunner(g, layers) : new GLRunner(layers);
-  const T = tile || (g ? 256 : 192);
+  // Tiles sized so each GPU step fits the time budget (jobs.js), so the editor stays smooth.
+  const MAXT = 384;
+  const sizer = chunker(tile || (job ? 96 : g ? 256 : 192), 48, tile || MAXT);
   const out = new ImageData(W * scale, H * scale);
-  const tilesX = Math.ceil(W / T), tilesY = Math.ceil(H / T), total = tilesX * tilesY;
-  const buf = new Float32Array((T + 2 * PAD) ** 2 * 4);
-  let done = 0, alpha = false;
+  const buf = new Float32Array((MAXT + 2 * PAD) ** 2 * 4);
+  let doneArea = 0, alpha = false;
   for (let i = 3; i < img.data.length; i += 4) if (img.data[i] !== 255) { alpha = true; break; }
   try {
-    for (let ty = 0; ty < tilesY; ty++) {
-      for (let tx = 0; tx < tilesX; tx++) {
+    for (let y0 = 0; y0 < H;) {
+      const y1 = Math.min(H, y0 + sizer.size);
+      for (let x0 = 0; x0 < W;) {
         if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError');
-        const x0 = tx * T, y0 = ty * T, x1 = Math.min(W, x0 + T), y1 = Math.min(H, y0 + T);
+        const x1 = Math.min(W, x0 + sizer.size);
+        const t0 = performance.now();
         const sx0 = Math.max(0, x0 - PAD), sy0 = Math.max(0, y0 - PAD), sx1 = Math.min(W, x1 + PAD), sy1 = Math.min(H, y1 + PAD);
         const w = sx1 - sx0, h = sy1 - sy0;
         const rgb = buf.subarray(0, w * h * 4);
@@ -494,7 +504,7 @@ export async function upscale(source, { scale = 2, denoise = 0.5, tile = 0, onPr
           for (let x = 0; x < w; x++, s += 4, d += 4) { rgb[d] = img.data[s] / 255; rgb[d + 1] = img.data[s + 1] / 255; rgb[d + 2] = img.data[s + 2] / 255; rgb[d + 3] = 0; }
         }
         const vw = x1 - x0, vh = y1 - y0;
-        const px = await runner.run(rgb, w, h, x0 - sx0, y0 - sy0, vw, vh, scale);
+        const px = await runner.run(rgb, w, h, x0 - sx0, y0 - sy0, vw, vh, scale, job);
         const ow = vw * scale;
         for (let y = 0; y < vh * scale; y++) {
           const d = ((y0 * scale + y) * W * scale + x0 * scale) * 4;
@@ -506,11 +516,14 @@ export async function upscale(source, { scale = 2, denoise = 0.5, tile = 0, onPr
             out.data[((y0 * scale + y) * W * scale + x0 * scale + x) * 4 + 3] = img.data[((y0 + Math.floor(y / scale)) * W + x0 + Math.floor(x / scale)) * 4 + 3];
           }
         }
-        done++;
-        onProgress?.(done / total);
-        // Let the page breathe between tiles.
-        await new Promise((r) => setTimeout(r, 0));
+        sizer.report(performance.now() - t0);
+        doneArea += vw * vh;
+        onProgress?.(doneArea / (W * H));
+        x0 = x1;
+        // Let the editor have the GPU between tiles (and wait while you work, for queued jobs).
+        await (job ? breathe(job) : new Promise((r) => setTimeout(r, 0)));
       }
+      y0 = y1;
     }
   } finally {
     runner.destroy();
