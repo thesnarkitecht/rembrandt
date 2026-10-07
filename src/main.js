@@ -1714,6 +1714,89 @@ function presetMenu(ids, anchor) {
   for (const p of allPresets()) (groups[p.group || 'Your presets'] ||= []).push(p);
   popMenu(anchor, Object.entries(groups).flatMap(([g, list], i) => [i ? { sep: true } : null, { head: g }, ...list.map((p) => ({ label: p.name, onClick: () => applyPresetTo(ids, p) }))]));
 }
+// Merge (merge.js): HDR from brackets, focus stacks, panoramas. Frames are decoded here one at a
+// time and handed to a worker, which returns a linear DNG that is then imported like any RAW.
+const MERGES = {
+  hdr: { name: 'HDR', label: 'Merge to HDR', suffix: 'HDR', min: 2 },
+  focus: { name: 'Focus stack', label: 'Focus stack', suffix: 'Stack', min: 2 },
+  pano: { name: 'Panorama', label: 'Panorama', suffix: 'Pano', min: 2 },
+};
+let halfOf8 = null;
+function frameFromBitmap(bitmap, long) {
+  const s = long ? Math.min(1, long / Math.max(bitmap.width, bitmap.height)) : 1;
+  const w = Math.round(bitmap.width * s), h = Math.round(bitmap.height * s);
+  const c = el('canvas', { width: w, height: h });
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  const px = ctx.getImageData(0, 0, w, h).data;
+  if (!halfOf8) {
+    // sRGB byte → linear → half float.
+    const f = new Float32Array(1), u = new Uint32Array(f.buffer);
+    halfOf8 = new Uint16Array(256).map((_, v) => {
+      f[0] = srgbToLinear(v / 255);
+      const x = u[0], e = ((x >>> 23) & 0xff) - 112, m = x & 0x7fffff;
+      return e <= 0 ? (e < -10 ? 0 : ((m | 0x800000) >> (1 - e)) >> 13) : (e << 10) | (m >> 13);
+    });
+  }
+  const data = new Uint16Array(w * h * 4);
+  for (let i = 0; i < px.length; i += 4) { data[i] = halfOf8[px[i]]; data[i + 1] = halfOf8[px[i + 1]]; data[i + 2] = halfOf8[px[i + 2]]; data[i + 3] = 0x3c00; }
+  return { w, h, data };
+}
+async function mergePhotos(ids, kind) {
+  const M = MERGES[kind];
+  const takenAt = (e) => (e.meta?.timestamp ? e.meta.timestamp * 1000 : e.lastModified || 0);
+  const list = app.images.filter((e) => ids.includes(e.id)).sort((a, b) => takenAt(a) - takenAt(b) || a.name.localeCompare(b.name, undefined, { numeric: true }));
+  if (list.length < M.min) { app.toast(`Select at least ${M.min} photos`); return; }
+  const worker = new Worker(new URL('./merge-worker.js', import.meta.url), { type: 'module' });
+  let seq = 0;
+  const job = beginProgress(`${M.name}: reading photos`);
+  const call = (msg, transfer = []) => new Promise((resolve, reject) => {
+    const id = ++seq;
+    const on = ({ data }) => {
+      if (data.id !== id) return;
+      if (data.progress) { job.update(list.length, list.length + 1, `${M.name}: ${data.progress}`); return; }
+      worker.removeEventListener('message', on);
+      data.ok ? resolve(data) : reject(new Error(data.error));
+    };
+    worker.addEventListener('message', on);
+    worker.postMessage({ ...msg, id }, transfer);
+  });
+  try {
+    await call({ op: 'begin', kind });
+    for (let i = 0; i < list.length; i++) {
+      const e = list[i];
+      job.update(i, list.length + 1, `${M.name}: reading ${e.name}`);
+      const file = await originalFile(e);
+      if (!file) throw new Error(`The original of “${e.name}” isn’t available`);
+      let frame, meta = {};
+      if (e.raw || RAW_EXT.has(file.name.split(".").pop().toLowerCase())) {
+        const lin = await decodeRawLinear(file, { quality: prefs.rawQuality, half: kind === 'pano' ? 1 : 0 });
+        frame = { w: lin.w, h: lin.h, data: lin.data };
+        meta = lin.meta || {};
+      } else {
+        const d = await decodeFile(file);
+        frame = frameFromBitmap(d.bitmap, kind === 'pano' ? 3600 : 0);
+        d.bitmap.close?.();
+        meta = e.meta || {};
+      }
+      await call({ op: 'add', frame, meta }, [frame.data.buffer]);
+    }
+    job.update(list.length, list.length + 1, `${M.name}: merging`);
+    const r = await call({ op: 'finish' });
+    const base = list[0].name.replace(/\.[^.]+$/, '');
+    const file = new File([r.dng], `${base}-${M.suffix}.dng`, { type: 'image/x-adobe-dng', lastModified: takenAt(list[0]) || Date.now() });
+    job.finish(`${M.name} ready`);
+    await openFiles([file], { open: true });
+    app.toast(`${M.name} made from ${plural(list.length)} · ${r.w} × ${r.h}`);
+  } catch (err) {
+    job.finish(`${M.name} failed`);
+    console.error(err);
+    app.toast(err.message, { ms: 8000 });
+  } finally {
+    worker.terminate();
+  }
+}
+
 // Find similar (similar.js): fingerprints come from the thumbnails, made once per thumbnail.
 const sigs = new Map();
 async function signatureOf(e) {
@@ -2380,7 +2463,7 @@ function boot() {
     app.engine.hostPasses = chain(refocusPass, localAdjustments, studioPass, lensPass, motionPass);
     refocusPass.wake = () => app.requestRender();
     // Test hook: ?debug exposes the app to automated checks.
-    if (new URLSearchParams(location.search).has('debug')) { window.__rembrandt = app; app._import = importApi; app._open = openInEditor; app._similar = findSimilar; app._watch = applyWatch; }
+    if (new URLSearchParams(location.search).has('debug')) { window.__rembrandt = app; app._import = importApi; app._open = openInEditor; app._similar = findSimilar; app._merge = mergePhotos; app._watch = applyWatch; }
     if (!prefs.since) { prefs.since = Date.now(); savePrefs(); }   // for "Since you switched" in Settings
     app.engine.sourcePasses = retouchPasses;
     ai.onChange(() => { if (app.state.tool === 'ai' || app.state.tool === 'masks') app.refreshPanel(); app.requestRender(); });
@@ -2403,7 +2486,7 @@ function boot() {
   app.updateUndo();
   app.buildPanel();
   library = buildLibrary(app, {
-    openInEditor, removePhotos, deletePhotos, keepOnDevice, syncAnyway, syncOn: () => cloud.cloud.available, setRating, setFlag, setLabel, editKeywords, makeVirtualCopy, findSimilar, syncSettings, exportPhotos,
+    openInEditor, removePhotos, deletePhotos, keepOnDevice, syncAnyway, syncOn: () => cloud.cloud.available, setRating, setFlag, setLabel, editKeywords, makeVirtualCopy, findSimilar, mergePhotos, syncSettings, exportPhotos,
     copyEdits: copyEditsFrom, pasteEdits: pasteEditsTo, resetEdits, photoMenu, presetMenu, pointAnchor, clipboard: batch.clipboard, describeClip: batch.describeClip,
     importFiles: () => openImporter(),
     syncFolder: (f) => (f ? syncFolder(f) : addSyncedFolder()),
