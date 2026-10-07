@@ -226,6 +226,7 @@ export function buildLibrary(app, api) {
           { head: 'Label' },
           ...LABEL_KEYS.map(([lab, key]) => ({ label: `${lab[0].toUpperCase()}${lab.slice(1)}${key ? ` (${key})` : ''}`, dot: lab, onClick: () => api.setLabel(ids(), lab) })),
           { label: 'Keywords…', icon: 'pencil', onClick: () => api.editKeywords(ids()) },
+          n === 1 ? { label: 'Make a virtual copy (⌘ \')', icon: 'copy', onClick: () => api.makeVirtualCopy(ids()[0]) } : null,
           { sep: true },
           n === 1 ? { label: 'Choose what to copy…', icon: 'copy', onClick: () => api.copyEdits(ids()[0], true) } : null,
           { label: 'Apply preset…', icon: 'presets', onClick: () => api.presetMenu(ids(), header.querySelector('[aria-label="More"]') || header) },

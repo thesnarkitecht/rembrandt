@@ -333,15 +333,32 @@ export function buildAccountPage(app, hooks) {
   function preferences() {
     const look = segmented([{ value: 'system', label: 'System' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }], getAppearance(), (v) => setAppearance(v));
     const rawQ = segmented([{ value: 0, label: 'Fast' }, { value: 3, label: 'Standard' }, { value: 4, label: 'Detailed' }], prefs.rawQuality, (v) => { prefs.rawQuality = v; savePrefs(); });
+    const keys = segmented([{ value: 'rembrandt', label: 'Rembrandt' }, { value: 'lightroom', label: 'Lightroom' }], prefs.shortcuts || 'rembrandt', (v) => { prefs.shortcuts = v; savePrefs(); });
     const prevQ = segmented([{ value: 1920, label: 'Fast' }, { value: 2560, label: 'Balanced' }, { value: 4096, label: 'Sharp' }], prefs.previewLong, (v) => { prefs.previewLong = v; savePrefs(); hooks.previewChanged(v); });
     const fmt = segmented([{ value: 'jpeg', label: 'JPEG' }, { value: 'png', label: 'PNG' }, { value: 'webp', label: 'WebP' }], exportDefaults.format, (v) => { exportDefaults.format = v; saveExportDefaults(); });
     const q = slider({ label: 'Export quality', min: 40, max: 100, def: 92, get: () => exportDefaults.quality, set: (v) => { exportDefaults.quality = v; }, commit: saveExportDefaults });
     const field = (label, ctl, hint) => el('div', { class: 'field' }, el('span', {}, label), ctl, hint ? el('span', { class: 'hint' }, hint) : null);
     const ver = window.LUMEN_BUILD?.version;
+    // Since you switched: what the Adobe plan would have cost since Rembrandt's first launch.
+    const PLANS_ADOBE = [{ value: 'none', label: 'None', price: 0 }, { value: 'lr', label: 'Lightroom', price: 11.99 }, { value: 'ph20', label: 'Photography 20 GB', price: 14.99 }, { value: 'ph1tb', label: 'Photography 1 TB', price: 19.99 }];
+    const savedText = el('div', { class: 'savings' });
+    const paintSaved = () => {
+      const plan = PLANS_ADOBE.find((x) => x.value === (prefs.adobePlan || 'ph20'));
+      const since = prefs.since || Date.now();
+      const months = Math.max(0, (Date.now() - since) / (30.44 * 864e5));
+      savedText.textContent = '';
+      if (!plan.price) { savedText.append(el('span', { class: 'hint' }, 'Pick the plan you had to see what you’ve kept.')); return; }
+      const saved = Math.max(plan.price, Math.ceil(months) * plan.price);
+      savedText.append(el('b', {}, `$${saved.toFixed(2)}`), el('span', { class: 'hint' }, `kept since ${new Date(since).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })} · ${plan.label} at $${plan.price}/month (US price)`));
+    };
+    const planSeg = segmented(PLANS_ADOBE.map(({ value, label }) => ({ value, label })), prefs.adobePlan || 'ph20', (v) => { prefs.adobePlan = v; savePrefs(); paintSaved(); });
+    paintSaved();
     return [
       card('Updates', el('p', { class: 'lead' }, `You're using ${BRAND.name}${ver ? ` ${ver}` : ''}.`), updateRow()),
+      card('Since you switched', savedText, field('Adobe plan you had', planSeg.el)),
       card('Appearance', field('Theme', look.el), toggle('Opening animation', () => prefs.splash !== false, (v) => { prefs.splash = v; savePrefs(); }).el),
-      card('Editing', field('RAW development', rawQ.el, 'Detailed is slower but resolves fine texture better.'), field('Preview resolution', prevQ.el, 'Sharp uses more graphics memory.')),
+      card('Editing', field('RAW development', rawQ.el, 'Detailed is slower but resolves fine texture better.'), field('Preview resolution', prevQ.el, 'Sharp uses more graphics memory.'),
+        field('Keyboard shortcuts', keys.el, 'Lightroom: P, X and U flag in Edit too, V black & white, K masks, Shift+P presets, ⌘K keywords, ⌘U auto, ⌘⇧R reset, ⌘⇧E export, ⌘⇧I import.')),
       card('Storage', toggle('Keep linked photos on this device', () => !!prefs.keepLinked, (v) => { prefs.keepLinked = v; savePrefs(); }).el,
         el('p', { class: 'hint' }, 'Off: photos linked from Google Photos, Drive, Dropbox or OneDrive use no space here or in Rembrandt storage. Only a small preview and your edits are kept, and after you close Rembrandt you pick a photo again to keep editing it. On: they open instantly, but use space on this device.')),
       card('Export', field('Default format', fmt.el), q.el),

@@ -30,7 +30,7 @@ import * as catalog from './catalog.js';
 import { buildLibrary } from './library.js';
 import { ring, fmtBytes } from './ring.js';
 import { openShare } from './share.js';
-import { paintAvatar, prefs } from './account.js';
+import { paintAvatar, prefs, savePrefs } from './account.js';
 import { buildAccountPage } from './account-page.js';
 import { listOnlineOriginals } from './backend/account-api.js';
 import * as cloud from './cloud.js';
@@ -973,11 +973,11 @@ async function addVirtualCopy(master, c, file, bitmap) {
   const e = newEntry({
     id: uid(), key, name: master.name, copyName: c.name, size: master.size, type: master.type, lastModified: master.lastModified,
     addedAt: Date.now(), rating: c.rating || 0, flag: c.flag || 0, label: c.label || '', keywords: c.keywords || [],
-    params: c.crs ? crsToParams(c.crs, aspect) : null, edited: !!c.crs, src: master.src || null, linked: master.linked || null,
+    params: c.params || (c.crs ? crsToParams(c.crs, aspect) : null), edited: !!(c.params || c.crs), src: master.src || null, linked: master.linked || null,
     kind: master.kind, raw: master.raw, w: master.w, h: master.h, meta: master.meta || null,
   });
   e.updatedAt = Date.now();
-  const stored = master.src || master.linked ? false : await catalog.storeFile(e.id, file);
+  const stored = master.src || master.linked || !file ? false : await catalog.storeFile(e.id, file);
   await catalog.putPhoto({
     id: e.id, key, name: e.name, copyName: e.copyName, size: e.size, type: e.type, lastModified: e.lastModified, addedAt: e.addedAt, updatedAt: e.updatedAt,
     rating: e.rating, flag: e.flag, label: e.label, keywords: e.keywords, params: e.params, edited: e.edited, kind: e.kind, raw: e.raw, w: e.w, h: e.h,
@@ -988,6 +988,24 @@ async function addVirtualCopy(master, c, file, bitmap) {
   if (tb) { thumbURL(e, tb); catalog.putThumb(e.id, tb); }
   cloud.pushPhoto(e);
   return e;
+}
+
+// A new version of a photo (Lightroom's virtual copy): its own edit, starting from this one.
+async function makeVirtualCopy(id) {
+  const e = app.images.find((x) => x.id === id);
+  if (!e) return;
+  const file = e.src || e.linked ? (e.file || null) : (e.file || (await catalog.getFile(e.id)));
+  if (!e.src && !e.linked && !file) { app.toast('This photo’s original isn’t on this device'); return; }
+  const base = e.key.split('#')[0];
+  const n = app.images.filter((x) => x.key.startsWith(`${base}#`)).length + 1;
+  const vc = await addVirtualCopy({ ...e, key: base }, {
+    name: `Copy ${n}`, rating: e.rating || 0, flag: 0, label: e.label || '', keywords: [...(e.keywords || [])],
+    params: e.params ? clone(e.params) : null, collections: [],
+  }, file, e.bitmap);
+  if (!vc) return;
+  refreshLibrary();
+  renderStrip();
+  app.toast(`Made “${vc.copyName}”: a separate version with its own edit`);
 }
 
 // After a Lightroom Classic import: what came over, and what Rembrandt doesn't translate.
@@ -1008,6 +1026,7 @@ function showMigrationReport(cat, imported) {
       el('p', { class: 'hint' }, 'Brought over:'), el('ul', { class: 'report-list' }, got.map((t) => el('li', {}, t))),
       missed.length ? el('p', { class: 'hint' }, 'Not brought over (the rest of each photo’s edit still is):') : el('p', { class: 'hint' }, 'Everything in the catalog came over.'),
       missed.length ? el('ul', { class: 'report-list muted' }, missed.map((t) => el('li', {}, t))) : null,
+      prefs.shortcuts === 'lightroom' ? null : el('p', { class: 'hint' }, 'Used to Lightroom’s keys? ', el('button', { class: 'linkish', type: 'button', onclick: (ev) => { prefs.shortcuts = 'lightroom'; savePrefs(); ev.target.replaceWith('Lightroom shortcuts are on (Settings › Editing).'); } }, 'Use Lightroom shortcuts')),
       el('p', { class: 'hint' }, 'Your catalog wasn’t changed. You can import it again at any time.')),
     el('div', { class: 'dlg-foot' }, button('Done', () => { dlg.close(); dlg.remove(); }, 'primary')));
   document.body.append(dlg);
@@ -2107,6 +2126,15 @@ window.addEventListener('keydown', (e) => {
   if (mod && k.toLowerCase() === 'y') { e.preventDefault(); app.redo(); return; }
   if (mod && k.toLowerCase() === 'o') { e.preventDefault(); $('fileInput').click(); return; }
   if (mod && k.toLowerCase() === 'e') { e.preventDefault(); $('btnExport').click(); return; }
+  // Lightroom shortcuts (Settings › Editing): the keys that mean something else in Rembrandt.
+  const lr = prefs.shortcuts === 'lightroom';
+  const current = () => (app.view.mode === 'library' ? library.selection() : app.images[app.cur] ? [app.images[app.cur].id] : []);
+  if (mod && k === "'") { e.preventDefault(); const id = current()[0]; if (id) makeVirtualCopy(id); return; }
+  if (lr && mod && e.shiftKey && k.toLowerCase() === 'e') { e.preventDefault(); $('btnExport').click(); return; }
+  if (lr && mod && e.shiftKey && k.toLowerCase() === 'i') { e.preventDefault(); $('fileInput').click(); return; }
+  if (lr && mod && k.toLowerCase() === 'k') { e.preventDefault(); if (current().length) editKeywords(current()); return; }
+  if (lr && mod && !e.shiftKey && k.toLowerCase() === 'u' && app.view.mode !== 'library') { e.preventDefault(); app.autoTone(); return; }
+  if (lr && mod && e.shiftKey && k.toLowerCase() === 'r' && app.view.mode !== 'library') { e.preventDefault(); app.resetAll(); return; }
   if (mod && k.toLowerCase() === 'k' && app.view.mode !== 'library') { e.preventDefault(); askWithWords(); return; }
   if (app.view.mode === 'library') {
     if (!mod && (k === 'e' || k === 'd')) { const sel = library.selection(); if (sel.length) openInEditor(sel[0]); else setMode('edit'); e.preventDefault(); return; }
@@ -2122,6 +2150,15 @@ window.addEventListener('keydown', (e) => {
   if (k === ' ' && !spaceDown) { spaceDown = true; viewer.style.cursor = 'grab'; if (tag !== 'BUTTON') e.preventDefault(); return; }
   if (!app.img) { if (k === '?') $('helpDialog').showModal(); return; }
   const t = app.state.tool;
+  const LAB = { 6: 'red', 7: 'yellow', 8: 'green', 9: 'blue' };
+  if (LAB[k]) { setLabel(current(), LAB[k]); e.preventDefault(); return; }
+  if (lr && t !== 'crop' && !e.shiftKey) {
+    const did = { p: () => setFlag(current(), 1), x: () => setFlag(current(), -1), u: () => setFlag(current(), 0),
+      v: () => { app.params = { ...app.params, bw: !app.params.bw }; app.commit(); app.refreshPanel(); app.requestRender(); },
+      k: () => app.setTool('masks') }[k];
+    if (did) { did(); e.preventDefault(); return; }
+  }
+  if (lr && k === 'P') { app.setTool(t === 'presets' ? 'edit' : 'presets'); e.preventDefault(); return; }
   switch (k) {
     case '\\': app.state.before = !app.state.before; app.requestRender(); break;
     case 'y': setCompare(app.state.compare === 'off' ? 'split' : app.state.compare === 'split' ? 'side' : 'off'); break;
@@ -2224,6 +2261,7 @@ function boot() {
     refocusPass.wake = () => app.requestRender();
     // Test hook: ?debug exposes the app to automated checks.
     if (new URLSearchParams(location.search).has('debug')) { window.__rembrandt = app; app._import = importApi; }
+    if (!prefs.since) { prefs.since = Date.now(); savePrefs(); }   // for "Since you switched" in Settings
     app.engine.sourcePasses = retouchPasses;
     ai.onChange(() => { if (app.state.tool === 'ai' || app.state.tool === 'masks') app.refreshPanel(); app.requestRender(); });
   } catch (err) {
@@ -2245,7 +2283,7 @@ function boot() {
   app.updateUndo();
   app.buildPanel();
   library = buildLibrary(app, {
-    openInEditor, removePhotos, deletePhotos, keepOnDevice, syncAnyway, syncOn: () => cloud.cloud.available, setRating, setFlag, setLabel, editKeywords, syncSettings, exportPhotos,
+    openInEditor, removePhotos, deletePhotos, keepOnDevice, syncAnyway, syncOn: () => cloud.cloud.available, setRating, setFlag, setLabel, editKeywords, makeVirtualCopy, syncSettings, exportPhotos,
     copyEdits: copyEditsFrom, pasteEdits: pasteEditsTo, resetEdits, photoMenu, presetMenu, pointAnchor, clipboard: batch.clipboard, describeClip: batch.describeClip,
     importFiles: () => openImporter(),
     syncFolder: (f) => (f ? syncFolder(f) : addSyncedFolder()),

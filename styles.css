@@ -1302,3 +1302,6 @@ body[data-mode="library"] .ask-btn, body[data-mode="account"] .ask-btn { display
 .lab-red { background: #e5484d; } .lab-yellow { background: #f5c142; } .lab-green { background: #46a758; } .lab-blue { background: #3e8ef7; } .lab-purple { background: #8e4ec6; }
 .report-list { margin: 4px 0 12px; padding-left: 18px; line-height: 1.55; font-size: 13px; }
 .report-list.muted { color: var(--muted); }
+.linkish { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
+.savings { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.savings b { font: 600 34px/1 var(--display); letter-spacing: 0.01em; color: var(--accent); }
