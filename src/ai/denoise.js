@@ -21,9 +21,16 @@ const T = 192, PAD = 14;   // tile and overlap, in half-size pixels
 let raw = null;
 async function loadWeights() {
   if (raw) return raw;
-  const r = await fetch(new URL('../../models/denoise-ffdnet-color.bin', import.meta.url));
-  if (!r.ok) throw new Error('The AI Denoise model is not available');
-  const buf = await r.arrayBuffer();
+  const url = new URL('../../models/denoise-ffdnet-color.bin', import.meta.url);
+  const r = await fetch(url);
+  let buf;
+  if (r.ok) buf = await r.arrayBuffer();
+  else {
+    // Hosts that cannot serve binaries may provide a base64 text copy.
+    const t = await fetch(url.href + '.b64.txt');
+    if (!t.ok) throw new Error('The AI Denoise model is not available');
+    buf = Uint8Array.from(atob((await t.text()).trim()), (c) => c.charCodeAt(0)).buffer;
+  }
   if (new TextDecoder().decode(new Uint8Array(buf, 0, 4)) !== 'RDN1') throw new Error('The AI Denoise model file is damaged');
   return (raw = new Uint16Array(buf, 4));
 }
