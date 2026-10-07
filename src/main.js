@@ -56,7 +56,9 @@ import { createCommandBar } from './command.js';
 import { el, svgEl, clamp, clone, debounce, setPath, srgbToLinear, uid, warmDownloads, deepMerge } from './util.js';
 import { icon } from './icons.js';
 import { sliderHooks, closeMenu, popMenu, button } from './ui.js';
-import { displayToScene, solveWhiteBalance, toneInv, MIDDLE_GREY as GREY } from '../engine/src/color.js';
+import { displayToScene, solveWhiteBalance } from '../engine/src/color.js';
+import { toneBase, adapt } from './adapt.js';
+import { signature, similarity, THRESHOLD as SIMILAR_THRESHOLD, MAX_RESULTS as SIMILAR_MAX } from './similar.js';
 import { estimateAirlight } from '../engine/src/pipeline.js';
 
 const $ = (id) => document.getElementById(id);
@@ -161,6 +163,8 @@ const app = {
     this.requestRender();
     if (name) this.toast(`Applied “${name}”`);
   },
+  presetLook: (p) => presetLook(p),
+  lookOfCurrent: (s) => lookOfCurrent(s),
   copySettings(choose = false) {
     const e = this.images[this.cur];
     if (e && this.params) copyEditsFrom(e.id, choose);
@@ -355,23 +359,8 @@ const app = {
     if (this.img) this.developFX?.play({ params: clone(this.params), hold: new Promise((r) => setTimeout(r, 120)), minHold: 120 });
     const s = this.images[this.cur]?.sample;
     if (!s) return;
-    const evs = [];
-    const step = Math.max(1, Math.floor((s.w * s.h) / 60000)) * 4;
-    for (let i = 0; i < s.data.length; i += step) {
-      const Y = 0.2126 * srgbToLinear(s.data[i] / 255) + 0.7152 * srgbToLinear(s.data[i + 1] / 255) + 0.0722 * srgbToLinear(s.data[i + 2] / 255);
-      evs.push(Math.log2(Math.max(toneInv(Y), 1e-5) / GREY));
-    }
-    evs.sort((a, b) => a - b);
-    const q = (t) => evs[Math.min(evs.length - 1, Math.floor(t * evs.length))];
-    const med = q(0.5), lo = q(0.02), hi = q(0.98);
     const p = this.params;
-    p.exposure = Math.round(clamp((-0.25 - med) * 0.75, -2.5, 2.5) * 100) / 100;
-    const h2 = hi + p.exposure, l2 = lo + p.exposure;
-    p.highlights = h2 > 2.8 ? -Math.round(clamp((h2 - 2.8) * 30, 0, 70)) : 0;
-    p.whites = h2 < 1.8 ? Math.round(clamp((1.8 - h2) * 25, 0, 40)) : 0;
-    p.shadows = l2 < -4.2 ? Math.round(clamp((-4.2 - l2) * 18, 0, 55)) : 0;
-    p.blacks = l2 > -3.2 ? -Math.round(clamp((l2 + 3.2) * 20, 0, 40)) : 0;
-    p.contrast = hi - lo < 5.5 ? Math.round(clamp((5.5 - (hi - lo)) * 9, 0, 30)) : 0;
+    Object.assign(p, toneBase(s));
     p.vibrance = Math.max(p.vibrance, 12);
     this.commit();
     this.refreshPanel();
@@ -1100,7 +1089,9 @@ async function syncFolder(f, opts = {}) {
     for (const [rel, e] of mine) if (!seen.has(rel) && !e.offline) { e.offline = true; catalog.updatePhoto(e.id, { offline: true }); }
     if (items.length) {
       folders.setBusy(f, true, `Importing ${items.length} photos…`);
-      await importItems(items, { label: `Syncing ${f.name}:`, catalog: opts.catalog, open: !!opts.open });
+      const had = new Set(app.images.map((e) => e.id));
+      const done = await importItems(items, { label: `Syncing ${f.name}:`, catalog: opts.catalog, open: !!opts.open });
+      if (f.watch && f.lastScan) await applyWatch(f, (done || []).filter((e) => !had.has(e.id)));
     }
     await folders.updateFolder(f, { count: list.length, lastScan: Date.now() });
   } catch (err) {
@@ -1175,6 +1166,61 @@ function sweepFolders(force) {
   if (!force && (document.hidden || performance.now() - lastSweep < 20000)) return;
   lastSweep = performance.now();
   for (const f of folders.allFolders()) if (f.status === 'ok') syncFolder(f);
+}
+// Watched folders are looked at more often, so photos from a tethered camera or a card reader turn up
+// within seconds.
+function sweepWatched() {
+  if (document.hidden) return;
+  for (const f of folders.allFolders()) if (f.watch && f.status === 'ok') syncFolder(f);
+}
+
+// Watch folders: what happens to photos that arrive in a synced folder after it was first imported.
+// f.watch = { preset: name | 'Auto' | '', album: id | '' }.
+const AUTO_LOOK = { name: 'Auto', group: 'Auto', settings: { vibrance: 12 } };
+async function applyWatch(f, list) {
+  const w = f.watch;
+  if (!w || !list.length) return;
+  const ids = list.map((e) => e.id), done = [];
+  const preset = w.preset === 'Auto' ? AUTO_LOOK : w.preset ? allPresets().find((p) => p.name === w.preset) : null;
+  if (preset) { await applyPresetTo(ids, preset, { quiet: true }); done.push(`“${preset.name}”`); }
+  if (w.album) {
+    const keys = list.map((e) => e.key);
+    const al = albums.albumById(w.album);
+    if (al) { await albums.addToAlbum(al.id, keys); done.push(`added to “${al.name}”`); }
+  }
+  app.toast(`${plural(list.length)} new in “${f.name}”${done.length ? `: ${done.join(', ')}` : ''}`, { action: { label: 'Show', onClick: () => { setMode('library'); library?.showView('folder:' + f.id); } } });
+}
+
+function watchDialog(f) {
+  const w = { preset: '', album: '', ...(f.watch || {}) };
+  const opt = (v, label, cur) => el('option', { value: v, selected: v === cur }, label);
+  const presetSel = el('select', { class: 'text-input' },
+    opt('', 'Nothing', w.preset), opt('Auto', 'Auto (fit exposure and tones)', w.preset),
+    ...allPresets().map((p) => opt(p.name, p.name, w.preset)));
+  const albumSel = el('select', { class: 'text-input' }, opt('', 'No album', w.album), opt('new', `A new album “${f.name}”`, w.album),
+    ...albums.allAlbums().map((a) => opt(a.id, a.name, w.album)));
+  const close = () => { dlg.close(); dlg.remove(); };
+  const save = async () => {
+    let album = albumSel.value;
+    if (album === 'new') album = (await albums.createAlbum(f.name, []))?.id || '';
+    await folders.updateFolder(f, { watch: { preset: presetSel.value, album } });
+    close();
+    app.toast(`Watching “${f.name}” for new photos`);
+    syncFolder(f);
+  };
+  const dlg = el('dialog', { class: 'dlg' },
+    el('div', { class: 'dlg-head' }, el('h2', {}, `Watch “${f.name}”`)),
+    el('div', { class: 'dlg-body' },
+      el('p', { class: 'hint' }, 'Rembrandt checks this folder every few seconds while it’s open. New photos, from a camera, a card reader or another app, are imported as they arrive.'),
+      el('label', { class: 'field' }, el('span', {}, 'Apply to each new photo'), presetSel),
+      el('label', { class: 'field' }, el('span', {}, 'Add to'), albumSel),
+      el('p', { class: 'hint' }, 'Presets fit each photo’s exposure first when “Fit to each photo” is on in Presets.')),
+    el('div', { class: 'dlg-foot' },
+      f.watch ? button('Stop watching', async () => { await folders.updateFolder(f, { watch: null }); close(); app.toast(`Stopped watching “${f.name}”`); }, 'ghost') : null,
+      el('span', { class: 'grow' }),
+      button('Cancel', close, 'ghost'), button(f.watch ? 'Save' : 'Watch', save, 'primary')));
+  document.body.append(dlg);
+  dlg.showModal();
 }
 
 // The original file for a photo: in memory, in the catalog, or in its synced folder.
@@ -1546,11 +1592,11 @@ function changeEdits(ids, fn, message) {
     if (e === cur && app.img) { app.params = p; app.commit(); app.rebuildPanel(); app.requestRender(); }
     else { touch(e, { params: p, edited: true }); queueSidecar(e); }
   };
-  for (const e of list) apply(e, fn(editOf(e), photoAspect(e)));
+  for (const e of list) apply(e, fn(editOf(e), photoAspect(e), e));
   refreshLibrary();
   renderStrip();
   refreshThumbs(list.filter((e) => e !== cur || !app.img));
-  app.toast(message, {
+  if (message) app.toast(message, {
     action: {
       label: 'Undo',
       onClick: () => {
@@ -1571,8 +1617,47 @@ function pasteEditsTo(ids) {
 function resetEdits(ids) {
   changeEdits(ids, (p, a) => defaultParams(a), `Reset ${plural(ids.length)}`);
 }
-function applyPresetTo(ids, preset) {
-  changeEdits(ids, (p, a) => withSettings(p, preset.settings, a), `Applied “${preset.name}” to ${plural(ids.length)}`);
+async function applyPresetTo(ids, preset, { quiet } = {}) {
+  // Photos never opened have no sample yet: measure them from their files first.
+  if (adapts(preset)) {
+    const todo = app.images.filter((e) => ids.includes(e.id) && !toneBaseOf(e));
+    if (todo.length > 3 && !quiet) app.toast(`Fitting “${preset.name}” to ${plural(todo.length)}…`);
+    for (const e of todo) {
+      try {
+        const f = e.file || (await catalog.getFile(e.id)) || (e.src ? await folders.fileFor(e.src, { ask: false }) : null);
+        if (!f) continue;
+        const d = await decodeFile(f);
+        baseById.set(e.id, toneBase(sampleData(d.bitmap, 256)));
+        d.bitmap.close?.();
+      } catch { /* left unadapted */ }
+    }
+  }
+  changeEdits(ids, (p, a, e) => withSettings(p, presetLook(preset, e), a), quiet ? '' : `Applied “${preset.name}” to ${plural(ids.length)}`);
+}
+
+// Adaptive presets: a preset's tones go on top of the photo's own starting point (adapt.js), so
+// "Moody" is moody rather than black on a dark photo. Built-in presets and ones saved while it was on
+// adapt; switched off in the Presets panel.
+const baseBySample = new WeakMap(), baseById = new Map();
+function toneBaseOf(e) {
+  if (!e) return null;
+  if (e.sample) {
+    if (!baseBySample.has(e.sample)) baseBySample.set(e.sample, toneBase(e.sample));
+    return baseBySample.get(e.sample);
+  }
+  return baseById.get(e.id) || null;
+}
+const adapts = (p) => p === AUTO_LOOK || (prefs.adaptivePresets !== false && (p.group !== 'Your presets' || p.adaptive));
+function presetLook(p, e = app.images[app.cur]) {
+  return adapts(p) ? adapt(p.settings, toneBaseOf(e)) : p.settings;
+}
+// Saving the open photo's look as an adaptive preset keeps only what it adds to the photo's base.
+function lookOfCurrent(settings) {
+  const b = prefs.adaptivePresets !== false && toneBaseOf(app.images[app.cur]);
+  if (!b) return { settings, adaptive: false };
+  const s = { ...settings, exposure: Math.round(((settings.exposure || 0) - b.exposure) * 100) / 100 };
+  for (const k of ['highlights', 'shadows', 'whites', 'blacks', 'contrast']) s[k] = (settings[k] || 0) - b[k];
+  return { settings: s, adaptive: true };
 }
 // Kept for callers of the old name: paste the open photo's look onto others.
 function syncSettings(ids) {
@@ -1620,6 +1705,7 @@ function photoMenu(ids, anchor, extra = []) {
     { label: c ? `Paste edits${n > 1 ? ` to ${n} photos` : ''}` : 'Paste edits (copy first)', icon: 'paste', onClick: () => pasteEditsTo(ids) },
     { label: 'Apply preset…', icon: 'presets', onClick: () => presetMenu(ids, anchor) },
     { label: n > 1 ? `Reset edits on ${n} photos` : 'Reset edits', icon: 'reset', onClick: () => resetEdits(ids) },
+    n === 1 ? { label: 'Find similar', icon: 'search', onClick: () => findSimilar(ids[0]) } : null,
     ...extra,
   ]);
 }
@@ -1628,6 +1714,40 @@ function presetMenu(ids, anchor) {
   for (const p of allPresets()) (groups[p.group || 'Your presets'] ||= []).push(p);
   popMenu(anchor, Object.entries(groups).flatMap(([g, list], i) => [i ? { sep: true } : null, { head: g }, ...list.map((p) => ({ label: p.name, onClick: () => applyPresetTo(ids, p) }))]));
 }
+// Find similar (similar.js): fingerprints come from the thumbnails, made once per thumbnail.
+const sigs = new Map();
+async function signatureOf(e) {
+  if (!e.thumbUrl) return null;
+  const had = sigs.get(e.id);
+  if (had?.url === e.thumbUrl) return had.sig;
+  const img = new Image();
+  img.src = e.thumbUrl;
+  try { await img.decode(); } catch { return null; }
+  const sig = signature(img);
+  sigs.set(e.id, { url: e.thumbUrl, sig });
+  return sig;
+}
+async function findSimilar(id) {
+  const ref = app.images.find((e) => e.id === id);
+  const a = ref && (await signatureOf(ref));
+  if (!a) { app.toast('This photo has no preview to compare yet'); return; }
+  const taken = (e) => (e.meta?.timestamp ? e.meta.timestamp * 1000 : 0);
+  const found = [];
+  for (const e of app.images) {
+    if (e === ref || e.flag === -1) continue;
+    const b = await signatureOf(e);
+    if (!b) continue;
+    let s = similarity(a, b);
+    // Frames of the same burst: taken within half a minute of each other.
+    if (taken(ref) && taken(e) && Math.abs(taken(ref) - taken(e)) < 30e3) s += 0.08;
+    if (s >= SIMILAR_THRESHOLD) found.push([e, s]);
+  }
+  found.sort((x, y) => y[1] - x[1]);
+  if (!found.length) { app.toast(`Nothing else looks like “${ref.name}”`); return; }
+  if (app.view.mode !== 'library') setMode('library');
+  library?.showSimilar(ref, [ref, ...found.slice(0, SIMILAR_MAX).map(([e]) => e)]);
+}
+
 const pointAnchor = (ev) => ({ getBoundingClientRect: () => ({ left: ev.clientX, right: ev.clientX, top: ev.clientY, bottom: ev.clientY }) });
 
 function visibleImages() {
@@ -2260,7 +2380,7 @@ function boot() {
     app.engine.hostPasses = chain(refocusPass, localAdjustments, studioPass, lensPass, motionPass);
     refocusPass.wake = () => app.requestRender();
     // Test hook: ?debug exposes the app to automated checks.
-    if (new URLSearchParams(location.search).has('debug')) { window.__rembrandt = app; app._import = importApi; }
+    if (new URLSearchParams(location.search).has('debug')) { window.__rembrandt = app; app._import = importApi; app._open = openInEditor; app._similar = findSimilar; app._watch = applyWatch; }
     if (!prefs.since) { prefs.since = Date.now(); savePrefs(); }   // for "Since you switched" in Settings
     app.engine.sourcePasses = retouchPasses;
     ai.onChange(() => { if (app.state.tool === 'ai' || app.state.tool === 'masks') app.refreshPanel(); app.requestRender(); });
@@ -2283,11 +2403,12 @@ function boot() {
   app.updateUndo();
   app.buildPanel();
   library = buildLibrary(app, {
-    openInEditor, removePhotos, deletePhotos, keepOnDevice, syncAnyway, syncOn: () => cloud.cloud.available, setRating, setFlag, setLabel, editKeywords, makeVirtualCopy, syncSettings, exportPhotos,
+    openInEditor, removePhotos, deletePhotos, keepOnDevice, syncAnyway, syncOn: () => cloud.cloud.available, setRating, setFlag, setLabel, editKeywords, makeVirtualCopy, findSimilar, syncSettings, exportPhotos,
     copyEdits: copyEditsFrom, pasteEdits: pasteEditsTo, resetEdits, photoMenu, presetMenu, pointAnchor, clipboard: batch.clipboard, describeClip: batch.describeClip,
     importFiles: () => openImporter(),
     syncFolder: (f) => (f ? syncFolder(f) : addSyncedFolder()),
     unsyncFolder,
+    watchFolder: watchDialog,
     reconnectFolder: async (f) => { if (await folders.reconnect(f)) syncFolder(f); },
     stripChanged: renderStrip,
     openPlan: () => setMode('account', 'cloud'),
@@ -2308,6 +2429,7 @@ function boot() {
     refreshLibrary();
     sweepFolders(true);
     setInterval(() => sweepFolders(false), 60000);
+    setInterval(sweepWatched, 8000);
     window.addEventListener('focus', () => sweepFolders(false));
     setMode(app.images.length ? 'library' : 'edit');
     startSync().then(async () => {

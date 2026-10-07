@@ -3,6 +3,9 @@ import { isMobileApp } from './platform.js';
 import { canSave, countSave, askToUnlock, isUnlocked, freeSavesLeft } from './unlock.js';
 import { el, clamp } from './util.js';
 import { segmented, slider, popMenu } from './ui.js';
+import { withRecipe, recipeOf } from './recipe.js';
+import { beforeAfterPage } from './beforeafter.js';
+import { recordReplay, replaySupported } from './replay.js';
 import { icon } from './icons.js';
 import { DESTINATIONS, destination, deliver } from './export-dest.js';
 
@@ -12,7 +15,7 @@ const SIZES = [
 ];
 const OPTS_KEY = 'lumen:export';
 const opts = (() => {
-  const d = { format: 'jpeg', quality: 92, long: 0, suffix: '-edit', dest: 'device' };
+  const d = { format: 'jpeg', quality: 92, long: 0, suffix: '-edit', dest: 'device', recipe: false };
   try { return { ...d, ...JSON.parse(localStorage.getItem(OPTS_KEY) || '{}') }; } catch { return d; }
 })();
 export const exportDefaults = opts;
@@ -57,14 +60,15 @@ export async function renderPixels(app, { long = 0 } = {}, p = app.params, mats 
 }
 
 // Renders `p` (default: the photo being edited) with the engine's current image.
-export async function renderExport(app, { format, quality, long }, p = app.params, mats = (pp, w, h) => app.outputMats(pp, w, h)) {
+export async function renderExport(app, { format, quality, long, recipe }, p = app.params, mats = (pp, w, h) => app.outputMats(pp, w, h)) {
   const { image, outW, outH } = await renderPixels(app, { long }, p, mats);
   let canvas = el('canvas', { width: image.width, height: image.height });
   canvas.getContext('2d').putImageData(image, 0, 0);
   if (image.width !== outW || image.height !== outH) canvas = resizeCanvas(canvas, outW, outH);
   const [mime] = FORMATS[format];
-  const blob = await new Promise((r) => canvas.toBlob(r, mime, clamp(quality, 1, 100) / 100));
+  let blob = await new Promise((r) => canvas.toBlob(r, mime, clamp(quality, 1, 100) / 100));
   if (!blob) throw new Error('The browser could not encode this format.');
+  if (recipe) blob = await withRecipe(blob, recipeOf(p), canvas.width, canvas.height);
   return { blob, w: canvas.width, h: canvas.height };
 }
 
@@ -90,9 +94,29 @@ export function openExport(app, ids = null, renderPhoto = null) {
       const k = opts.long ? Math.min(1, opts.long / Math.max(nativeW, nativeH)) : 1;
       dims.textContent = `${Math.round(nativeW * k)} × ${Math.round(nativeH * k)} px`;
     }
-    q.el.style.display = opts.format === 'png' ? 'none' : '';
+    const special = opts.format === 'compare' || opts.format === 'replay';
+    // A chip names a choice made in the ⋯ menu, so it's never hidden state.
+    chip.textContent = [SPECIAL[opts.format], opts.recipe && opts.format !== 'replay' ? 'with recipe' : ''].filter(Boolean).join(' · ');
+    chip.hidden = !chip.textContent;
+    q.el.style.display = opts.format === 'png' || special ? 'none' : '';
+    size.el.closest('.field').style.display = opts.format === 'replay' ? 'none' : '';
+    if (opts.format === 'compare') dims.textContent = 'A web page with the original and the edit, and a slider between them. Opens in any browser; nothing to upload.';
+    if (opts.format === 'replay') dims.textContent = 'A short video of the photo developing, one step of the edit at a time, each named on screen. It plays as it records, so keep this window open.';
   }
+  if ((batch || (opts.format === 'replay' && !replaySupported())) && !FORMAT_EXT[opts.format]) opts.format = 'jpeg';
   const fmt = segmented([{ value: 'jpeg', label: 'JPEG' }, { value: 'png', label: 'PNG' }, { value: 'webp', label: 'WebP' }], opts.format, (v) => { opts.format = v; update(); });
+  // Less common outputs and the recipe option sit behind one ⋯ so the dialog stays short.
+  const SPECIAL = { compare: 'Before/after page', replay: 'Replay video' };
+  const extras = el('button', { class: 'icon-btn sm', type: 'button', title: 'More formats and options', 'aria-label': 'More formats and options' }, icon('more'));
+  extras.addEventListener('click', () => popMenu(extras, [
+    ...(batch ? [] : [
+      { label: 'Before/after page (HTML)', checked: opts.format === 'compare', onClick: () => { opts.format = 'compare'; fmt.set(null); update(); } },
+      replaySupported() ? { label: 'Replay video', checked: opts.format === 'replay', onClick: () => { opts.format = 'replay'; fmt.set(null); update(); } } : null,
+      { sep: true },
+    ]),
+    { label: 'Include how it was edited', checked: !!opts.recipe, onClick: () => { opts.recipe = !opts.recipe; update(); } },
+  ]));
+  const chip = el('span', { class: 'export-chip' });
   const size = segmented(SIZES, SIZES.some((s) => s.value === opts.long) ? opts.long : -1, (v) => { opts.long = v; custom.value = ''; update(); });
   if (!SIZES.some((s) => s.value === opts.long)) custom.value = opts.long;
   custom.addEventListener('input', () => { const v = parseInt(custom.value, 10); if (v >= 64) { opts.long = v; size.set(-1); update(); } });
@@ -136,7 +160,18 @@ export function openExport(app, ids = null, renderPhoto = null) {
       await new Promise((r) => setTimeout(r, 30));
       const ext = FORMAT_EXT[opts.format];
       const progress = (t) => { status.textContent = t; };
-      if (!batch) {
+      if (!batch && opts.format === 'replay') {
+        const { blob, ext: vext } = await recordReplay(app, { onProgress: (t) => { status.textContent = t; } });
+        status.textContent = 'Saving…';
+        const d = await deliver(opts.dest, [{ name: (name.value.trim() || base) + '-replay' + vext, blob }], progress);
+        app.toast(d.id === 'device' && !isMobileApp ? `Saved the replay · ${(blob.size / 1048576).toFixed(1)} MB` : doneMessage(d, 1));
+      } else if (!batch && opts.format === 'compare') {
+        status.textContent = 'Rendering before and after…';
+        const blob = await beforeAfterPage(app, { title: name.value.trim() || base, recipe: opts.recipe, long: Math.min(opts.long || 2560, 2560) });
+        status.textContent = 'Saving…';
+        const d = await deliver(opts.dest, [{ name: (name.value.trim() || base) + '-before-after.html', blob }], progress);
+        app.toast(d.id === 'device' && !isMobileApp ? `Saved a before/after page · ${(blob.size / 1048576).toFixed(1)} MB` : doneMessage(d, 1));
+      } else if (!batch) {
         status.textContent = 'Rendering at full resolution…';
         const { blob, w, h } = await renderExport(app, opts);
         status.textContent = 'Saving…';
@@ -181,7 +216,7 @@ export function openExport(app, ids = null, renderPhoto = null) {
     el('div', { class: 'dlg-head' }, el('h2', {}, batch ? `Export ${n} photo${n > 1 ? 's' : ''}` : 'Export photo')),
     el('div', { class: 'dlg-body' },
       el('label', { class: 'field' }, el('span', {}, batch ? 'Add to file names' : 'File name'), name),
-      el('div', { class: 'field' }, el('span', {}, 'Format'), fmt.el),
+      el('div', { class: 'field' }, el('span', {}, 'Format'), el('div', { class: 'row' }, fmt.el, chip, extras)),
       q.el,
       el('div', { class: 'field' }, el('span', {}, 'Long edge'), el('div', { class: 'row' }, size.el, custom)),
       dims,

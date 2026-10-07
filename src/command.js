@@ -306,7 +306,7 @@ export function createCommandBar(app, mount = null) {
     const found = [];
     const lq = q.toLowerCase();
     if (lq.length > 1) {
-      for (const p of allPresets()) if (score(lq, p.name)) found.push({ kind: 'preset', title: p.name, hint: `${p.group} preset`, settings: p.settings, run: () => app.applySettings(p.settings, mount ? undefined : p.name), score: score(lq, p.name) });
+      for (const p of allPresets()) if (score(lq, p.name)) found.push({ kind: 'preset', title: p.name, hint: `${p.group} preset`, settings: app.presetLook(p), run: () => app.applySettings(app.presetLook(p), mount ? undefined : p.name), score: score(lq, p.name) });
       if (!index) buildIndex();
       const seen = new Set();
       for (const c of index) {

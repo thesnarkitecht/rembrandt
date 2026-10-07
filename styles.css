@@ -1305,6 +1305,8 @@ body[data-mode="library"] .ask-btn, body[data-mode="account"] .ask-btn { display
 .linkish { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; text-decoration: underline; text-underline-offset: 2px; cursor: pointer; }
 .savings { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
 .savings b { font: 600 34px/1 var(--display); letter-spacing: 0.01em; color: var(--accent); }
+.export-chip { font-size: 12px; color: var(--muted); padding: 3px 9px; border-radius: 99px; background: var(--accent-soft); white-space: nowrap; }
+.export-chip[hidden] { display: none; }
 .tilt-tip { display: flex; align-items: center; gap: 8px; margin: 8px 0 2px; padding: 7px 8px 7px 10px; border-radius: 6px; background: var(--accent-soft); font-size: 12px; color: var(--text); }
 .tilt-tip > span:not(.i) { flex: 1; }
 .tilt-tip .i { width: 14px; height: 14px; color: var(--accent); }

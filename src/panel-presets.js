@@ -1,6 +1,8 @@
 // Presets: hover to preview on the photo, click to apply. Thumbnails render with the real engine.
 import { el } from './util.js';
-import { section, iconButton, button } from './ui.js';
+import { section, iconButton, button, popMenu } from './ui.js';
+import { prefs, savePrefs } from './account.js';
+import { readRecipe } from './recipe.js';
 import { PRESETS, developSettings, withSettings } from './params.js';
 
 const KEY = 'lumen:presets';
@@ -34,13 +36,13 @@ export function buildPresetsPanel(app) {
         saveUser(loadUser().filter((x) => x.id !== p.id));
         build();
       }, 'sm preset-del') : null);
-    c.addEventListener('mouseenter', () => app.previewSettings(p.settings));
+    c.addEventListener('mouseenter', () => app.previewSettings(app.presetLook(p)));
     c.addEventListener('mouseleave', () => app.previewSettings(null));
     c.addEventListener('click', () => {
       app.previewSettings(null);
-      app.applySettings(p.settings, p.name);
+      app.applySettings(app.presetLook(p), p.name);
     });
-    cards.push({ cv, settings: p.settings });
+    cards.push({ cv, preset: p });
     return c;
   }
 
@@ -48,12 +50,20 @@ export function buildPresetsPanel(app) {
     root.textContent = '';
     cards = [];
     const user = loadUser();
-    const mine = section('Your presets', { id: 'presets-user', badge: { icon: 'save', color: 'linear-gradient(135deg,#34d399,#0ea5e9)' } });
+    // Extras live in one ⋯ menu so the panel stays a grid of looks.
+    const more = iconButton('more', 'Preset options', (e) => {
+      e.stopPropagation();
+      popMenu(e.currentTarget, [
+        { label: 'Fit presets to each photo', checked: prefs.adaptivePresets !== false, onClick: () => { prefs.adaptivePresets = prefs.adaptivePresets === false; savePrefs(); renderThumbs(); app.toast(prefs.adaptivePresets ? 'Presets now start from each photo’s own exposure and tones' : 'Presets apply their exact values'); } },
+        { label: 'Use the look of a photo…', icon: 'photos', onClick: fromPhoto },
+      ]);
+    }, 'sm');
+    const mine = section('Your presets', { id: 'presets-user', right: more, badge: { icon: 'save', color: 'linear-gradient(135deg,#34d399,#0ea5e9)' } });
     const nameInput = el('input', { class: 'text-input', id: 'presetName', value: `My preset ${user.length + 1}`, spellcheck: 'false', 'aria-label': 'Preset name' });
     const save = () => {
       const name = nameInput.value.trim();
       if (!name) return;
-      saveUser([...user, { id: Date.now().toString(36), name, settings: developSettings(app.params) }]);
+      saveUser([...user, { id: Date.now().toString(36), name, ...app.lookOfCurrent(developSettings(app.params)) }]);
       app.toast(`Saved “${name}”`);
       build();
     };
@@ -69,6 +79,23 @@ export function buildPresetsPanel(app) {
       nameInput.focus();
       nameInput.select();
     }, 'sm ghost', 'save');
+    // "How was this edited?": the recipe inside a photo exported from Rembrandt (recipe.js).
+    const fromPhoto = () => {
+      const input = el('input', { type: 'file', accept: 'image/jpeg,image/png,image/webp' });
+      input.addEventListener('change', async () => {
+        const file = input.files[0];
+        if (!file) return;
+        const r = await readRecipe(file);
+        if (!r) { app.toast('That photo has no Rembrandt recipe. Export with “Include how it was edited” to add one.'); return; }
+        app.applySettings(r.settings);
+        const name = file.name.replace(/\.[^.]+$/, '');
+        app.toast(`Look of “${name}”: ${r.text.slice(0, 3).join(', ')}${r.text.length > 3 ? '…' : ''}`, {
+          ms: 7000,
+          action: { label: 'Save as preset', onClick: () => { saveUser([...loadUser(), { id: Date.now().toString(36), name, settings: r.settings }]); build(); } },
+        });
+      });
+      input.click();
+    };
     mine.body.append(open, form);
     if (user.length) mine.body.append(el('div', { class: 'preset-grid' }, user.map((p) => card(p, true))));
     root.append(mine.el);
@@ -90,7 +117,7 @@ export function buildPresetsPanel(app) {
       if (my !== job || !app.img || !root.isConnected) return;
       const c = cards[i++];
       if (!c) { app.requestRender(); return; }
-      const params = withSettings(app.params, c.settings, app.img.aspect);
+      const params = withSettings(app.params, app.presetLook(c.preset), app.img.aspect);
       params.masks = [];
       const img = app.renderSmall(params, 144);
       if (img) {

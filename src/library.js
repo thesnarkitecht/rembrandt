@@ -53,11 +53,13 @@ export function buildLibrary(app, api) {
   let query = '';
   let renaming = null;
   let order = []; // photos in display order
+  let similar = null; // { ref, list } while showing photos like one, most alike first
 
   const albumView = () => (prefs.view.startsWith('album:') ? A.albumById(prefs.view.slice(6)) : null);
   const folderView = () => (prefs.view.startsWith('folder:') ? F.folderById(prefs.view.slice(7)) : null);
   const albumPhotos = (a) => { const keys = new Set(a.keys); return app.images.filter((e) => keys.has(e.key)); };
   function currentName() {
+    if (similar) return `Like “${similar.ref.name}”`;
     const a = albumView();
     if (a) return a.name;
     const f = folderView();
@@ -65,7 +67,7 @@ export function buildLibrary(app, api) {
     if (prefs.view === 'albums') return 'Albums';
     return (SMART.find((s) => s.id === prefs.view) || SMART[0]).name;
   }
-  const setView = (v) => { prefs.view = v; savePrefs(); selected.clear(); side.parentElement?.classList.remove('side-open'); refresh(); api.stripChanged(); content.scrollTop = 0; };
+  const setView = (v) => { similar = null; prefs.view = v; savePrefs(); selected.clear(); side.parentElement?.classList.remove('side-open'); refresh(); api.stripChanged(); content.scrollTop = 0; };
   const ids = () => [...selected];
   const keysOf = (list) => app.images.filter((x) => list.includes(x.id)).map((x) => x.key);
 
@@ -164,6 +166,7 @@ export function buildLibrary(app, api) {
           : f.status === 'missing' ? el('span', { class: 'side-warn', title: 'Folder not found' }, '!') : null;
         const more = iconButton('more', 'Folder options', (e) => { e.stopPropagation(); popMenu(e.currentTarget, [
           { label: 'Sync now', icon: 'sync', onClick: () => api.syncFolder(f) },
+          { label: f.watch ? 'Watching for new photos…' : 'Watch for new photos…', icon: 'clock', checked: !!f.watch, onClick: () => api.watchFolder(f) },
           { label: f.sidecars ? 'Stop writing XMP sidecars' : 'Write edits as XMP sidecars', icon: 'save', onClick: () => F.updateFolder(f, { sidecars: !f.sidecars }) },
           { sep: true },
           { label: 'Stop syncing', icon: 'trash', onClick: () => api.unsyncFolder(f) },
@@ -227,6 +230,7 @@ export function buildLibrary(app, api) {
           ...LABEL_KEYS.map(([lab, key]) => ({ label: `${lab[0].toUpperCase()}${lab.slice(1)}${key ? ` (${key})` : ''}`, dot: lab, onClick: () => api.setLabel(ids(), lab) })),
           { label: 'Keywords…', icon: 'pencil', onClick: () => api.editKeywords(ids()) },
           n === 1 ? { label: 'Make a virtual copy (⌘ \')', icon: 'copy', onClick: () => api.makeVirtualCopy(ids()[0]) } : null,
+          n === 1 ? { label: 'Find similar', icon: 'search', onClick: () => api.findSimilar(ids()[0]) } : null,
           { sep: true },
           n === 1 ? { label: 'Choose what to copy…', icon: 'copy', onClick: () => api.copyEdits(ids()[0], true) } : null,
           { label: 'Apply preset…', icon: 'presets', onClick: () => api.presetMenu(ids(), header.querySelector('[aria-label="More"]') || header) },
@@ -249,6 +253,12 @@ export function buildLibrary(app, api) {
       titleEl.replaceChildren(input);
       requestAnimationFrame(() => { input.focus(); input.select(); });
     } else if (a) titleEl.addEventListener('dblclick', () => { renaming = a.id; refresh(); });
+    if (similar) {
+      header.append(sideBtn, el('div', { class: 'lib-heading' }, titleEl, el('span', { class: 'lib-count' }, `${total - 1} similar`)), el('span', { class: 'grow' }),
+        button('Select all', () => { order.forEach((e) => selected.add(e.id)); refresh(); }, 'sm ghost', 'check'),
+        button('Done', () => { similar = null; refresh(); api.stripChanged(); }, 'sm primary'));
+      return;
+    }
     header.append(...[
       sideBtn,
       el('div', { class: 'lib-heading' }, titleEl, el('span', { class: 'lib-count' }, total ? `${total} ${prefs.view === 'albums' ? (total === 1 ? 'album' : 'albums') : total === 1 ? 'photo' : 'photos'}` : '')),
@@ -275,6 +285,7 @@ export function buildLibrary(app, api) {
   const root = el('section', { class: 'library' + (prefs.sidebar ? '' : ' no-side'), id: 'library' }, side, main);
 
   function visible() {
+    if (similar) return similar.list.filter((e) => app.images.includes(e));
     let list = app.images.slice();
     const a = albumView();
     const f = folderView();
@@ -543,6 +554,7 @@ export function buildLibrary(app, api) {
     selectOnly: (id) => { anchor = id; },
     selection: () => ids(),
     showView: (v) => setView(v),
+    showSimilar: (ref, list) => { similar = { ref, list }; selected.clear(); anchor = ref.id; refresh(); api.stripChanged(); content.scrollTop = 0; },
     focusCurrent: () => { const n = content.querySelector('.ph.current'); n?.scrollIntoView({ block: 'nearest' }); },
     repaintStorage: () => api.paintStorage?.(storage),
   };
