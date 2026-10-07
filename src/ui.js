@@ -135,12 +135,12 @@ export function closeMenu() {
 // Small popover menu anchored to a button. items: [{label, icon, onClick}]
 export function popMenu(anchor, items) {
   closeMenu();
-  // Items: { label, icon?, onClick, checked? } or { sep: true } or { head: 'Title' }.
+  // Items: { label, icon? | dot? (a colour label), onClick, checked? } or { sep: true } or { head: 'Title' }.
   const m = el('div', { class: 'menu', role: 'menu' }, items.filter(Boolean).map((it) =>
     it.sep ? el('div', { class: 'menu-sep', role: 'separator' })
       : it.head ? el('div', { class: 'menu-head' }, it.head)
       : el('button', { class: 'menu-item', role: it.checked === undefined ? 'menuitem' : 'menuitemradio', 'aria-checked': it.checked === undefined ? null : String(!!it.checked), onclick: () => { closeMenu(); it.onClick(); } },
-        it.checked !== undefined ? el('span', { class: 'i menu-check' }, it.checked ? icon('check') : null) : it.icon ? icon(it.icon) : null, el('span', {}, it.label))));
+        it.checked !== undefined ? el('span', { class: 'i menu-check' }, it.checked ? icon('check') : null) : it.dot ? el('span', { class: `i ph-label lab-${it.dot}` }) : it.icon ? icon(it.icon) : null, el('span', {}, it.label))));
   // Inside a modal dialog the menu must live in the dialog too, or it renders underneath it.
   (anchor.closest?.('dialog[open]') || document.body).append(m);
   const r = anchor.getBoundingClientRect();

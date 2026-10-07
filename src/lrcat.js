@@ -1,7 +1,8 @@
 // Lightroom Classic catalog (.lrcat, an SQLite database) reader. Returns each master photo with its
-// folder path, rating, pick flag and develop settings, plus the regular collections. Nothing is
-// written back; the catalog is only read.
-import { crsToParams } from './xmp.js';
+// folder path, rating, pick flag, colour label, keywords, develop settings and virtual copies, plus
+// the regular collections (inside collection sets, named "Set › Collection"), and a tally of what
+// Rembrandt can't bring over. Nothing is written back; the catalog is only read.
+import { crsToParams, untranslated } from './xmp.js';
 
 let sqlp = null;
 function loadSql() {
@@ -124,6 +125,7 @@ export async function readCatalog(file, onProgress = () => {}) {
   try {
     const rows = query(db, `
       SELECT i.id_local AS id, i.rating AS rating, i.pick AS pick, i.masterImage AS master,
+             i.colorLabels AS label, i.copyName AS copyName,
              f.baseName AS base, f.extension AS ext, fo.pathFromRoot AS folder, r.absolutePath AS root, r.name AS rootName,
              s.text AS settings
       FROM Adobe_images i
@@ -132,7 +134,12 @@ export async function readCatalog(file, onProgress = () => {}) {
       JOIN AgLibraryRootFolder r ON r.id_local = fo.rootFolder
       LEFT JOIN Adobe_imageDevelopSettings s ON s.image = i.id_local`);
     if (!rows) throw new Error("This doesn't look like a Lightroom Classic catalog");
-    const cols = query(db, `SELECT id_local AS id, name FROM AgLibraryCollection WHERE creationId = 'com.adobe.ag.library.collection'`) || [];
+    // Collections, with the names of the collection sets they sit in.
+    const allCols = query(db, 'SELECT id_local AS id, name, parent, creationId AS kind FROM AgLibraryCollection') || [];
+    const byId = new Map(allCols.map((c) => [c.id, c]));
+    const path = (c) => { const names = []; for (let x = c, n = 0; x && n < 12; x = byId.get(x.parent), n++) names.unshift(x.name); return names.join(' › '); };
+    const cols = allCols.filter((c) => c.kind === 'com.adobe.ag.library.collection').map((c) => ({ id: c.id, name: path(c) }));
+    const smart = allCols.filter((c) => c.kind === 'com.adobe.ag.library.smart_collection').length;
     const links = query(db, 'SELECT collection, image FROM AgLibraryCollectionImage') || [];
     const colName = new Map(cols.map((c) => [c.id, c.name]));
     const inCols = new Map();
@@ -142,32 +149,53 @@ export async function readCatalog(file, onProgress = () => {}) {
       if (!inCols.has(l.image)) inCols.set(l.image, []);
       inCols.get(l.image).push(n);
     }
+    // Keywords (the leaf names; Lightroom's hierarchy is kept only as the name).
+    const kw = query(db, 'SELECT ki.image AS image, k.name AS name FROM AgLibraryKeywordImage ki JOIN AgLibraryKeyword k ON k.id_local = ki.tag WHERE k.name IS NOT NULL') || [];
+    const keywords = new Map();
+    for (const k of kw) { if (!keywords.has(k.image)) keywords.set(k.image, []); keywords.get(k.image).push(k.name); }
+    const LABELS = { red: 'red', yellow: 'yellow', green: 'green', blue: 'blue', purple: 'purple', rot: 'red', gelb: 'yellow', grün: 'green', blau: 'blue', lila: 'purple' };
+    const label = (v) => LABELS[String(v || '').trim().toLowerCase()] || '';
     const photos = [];
     const roots = new Map();
+    const missing = new Map();   // what Rembrandt doesn't translate → number of photos
     let parseErrors = 0;
-    for (const r of rows) {
-      if (r.master) continue; // virtual copies
-      const name = r.ext ? `${r.base}.${r.ext}` : r.base;
+    const describe = (r) => {
       let crs = null;
       if (r.settings) {
         try { crs = parseLua(r.settings); } catch { parseErrors++; }
       }
-      const rel = joinPath(r.folder, name);
-      photos.push({
-        name,
-        rel,
-        path: joinPath(r.root, r.folder, name),
-        root: r.root,
+      if (crs) for (const m of untranslated(crs)) missing.set(m, (missing.get(m) || 0) + 1);
+      return {
         rating: r.rating ? Math.round(r.rating) : 0,
         flag: r.pick > 0 ? 1 : r.pick < 0 ? -1 : 0,
+        label: label(r.label),
+        keywords: keywords.get(r.id) || [],
         crs,
         collections: inCols.get(r.id) || [],
-      });
+      };
+    };
+    const byMaster = new Map();
+    for (const r of rows) {
+      if (r.master) continue;
+      const name = r.ext ? `${r.base}.${r.ext}` : r.base;
+      const rel = joinPath(r.folder, name);
+      const p = { name, rel, path: joinPath(r.root, r.folder, name), root: r.root, ...describe(r), copies: [] };
+      photos.push(p);
+      byMaster.set(r.id, p);
       const k = r.root || '';
       roots.set(k, { path: r.root, name: r.rootName, count: (roots.get(k)?.count || 0) + 1 });
     }
+    // Virtual copies: their own edits, ratings and labels on their master's file.
+    let copies = 0;
+    for (const r of rows) {
+      const m = r.master && byMaster.get(r.master);
+      if (!m) continue;
+      m.copies.push({ name: r.copyName || `Copy ${m.copies.length + 1}`, ...describe(r) });
+      copies++;
+    }
     const collections = cols.filter((c) => [...inCols.values()].some((names) => names.includes(c.name))).map((c) => c.name);
-    return { photos, collections, roots: [...roots.values()].sort((a, b) => b.count - a.count), parseErrors };
+    const report = { copies, smart, keywords: photos.filter((p) => p.keywords.length).length, labels: photos.filter((p) => p.label).length, missing: [...missing].sort((a, b) => b[1] - a[1]) };
+    return { photos, collections, roots: [...roots.values()].sort((a, b) => b.count - a.count), parseErrors, report };
   } finally {
     db.close();
   }

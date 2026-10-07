@@ -55,7 +55,7 @@ import { createDirect } from './direct.js';
 import { createCommandBar } from './command.js';
 import { el, svgEl, clamp, clone, debounce, setPath, srgbToLinear, uid, warmDownloads, deepMerge } from './util.js';
 import { icon } from './icons.js';
-import { sliderHooks, closeMenu, popMenu } from './ui.js';
+import { sliderHooks, closeMenu, popMenu, button } from './ui.js';
 import { displayToScene, solveWhiteBalance, toneInv, MIDDLE_GREY as GREY } from '../engine/src/color.js';
 import { estimateAirlight } from '../engine/src/pipeline.js';
 
@@ -792,7 +792,7 @@ async function openFiles(files, opts = {}) {
 
 // Develop settings that come with an imported photo: Lightroom catalog, XMP sidecar, or XMP inside the file.
 async function importedSettings(it, file, aspect) {
-  if (it.lr) return { params: it.lr.crs ? crsToParams(it.lr.crs, aspect) : null, rating: it.lr.rating, flag: it.lr.flag };
+  if (it.lr) return { params: it.lr.crs ? crsToParams(it.lr.crs, aspect) : null, rating: it.lr.rating, flag: it.lr.flag, label: it.lr.label, keywords: it.lr.keywords };
   let text = it.xmp ? await it.xmp() : null;
   if (!text && (it.adobe || /\.dng$/i.test(file.name))) text = await embeddedXmp(file).catch(() => null);
   if (!text) return null;
@@ -807,6 +807,8 @@ function applyImported(e, st) {
   if (st.params) { patch.params = st.params; patch.edited = true; }
   if (st.rating !== null && st.rating !== undefined) patch.rating = st.rating;
   if (st.flag !== null && st.flag !== undefined) patch.flag = st.flag;
+  if (st.label) patch.label = st.label;
+  if (st.keywords?.length) patch.keywords = [...new Set([...(e.keywords || []), ...st.keywords])];
   if (st.xmpHash) { patch.xmpHash = st.xmpHash; patch.xmpSeen = st.xmpSeen; }
   Object.assign(e, patch);
   return !!st.params;
@@ -842,6 +844,7 @@ async function importItems(items, opts = {}) {
   const done = [];
   const collections = new Map();
   const failed = [];
+  const copyJobs = [];   // Lightroom virtual copies, made once their photo is in
   const many = items.length > 1;
   const job = many && opts.progress !== false ? beginProgress((opts.label || 'Importing').replace(/:$/, '')) : null;
   for (let n = 0; n < items.length; n++) {
@@ -864,10 +867,11 @@ async function importItems(items, opts = {}) {
       if (it.lr || it.xmp || it.adobe) {
         const st = await importedSettings(it, file, existing.w && existing.h ? existing.w / existing.h : 1.5);
         if (applyImported(existing, st)) Object.assign(patch, { params: existing.params, edited: true });
-        if (st) Object.assign(patch, { rating: existing.rating, flag: existing.flag });
+        if (st) Object.assign(patch, { rating: existing.rating, flag: existing.flag, label: existing.label || '', keywords: existing.keywords || [] });
       }
       if (Object.keys(patch).length) touch(existing, patch);
       it.lr?.collections.forEach((c) => (collections.get(c) || collections.set(c, []).get(c)).push(existing.key));
+      if (it.lr?.copies?.length) copyJobs.push([existing, it.lr.copies, file]);
       first ||= existing;
       done.push(existing);
       continue;
@@ -899,7 +903,7 @@ async function importItems(items, opts = {}) {
       // A photo that can't be saved (storage blocked or full) still opens for this session.
       await catalog.putPhoto({
         id: e.id, key, name: e.name, size: e.size, type: e.type, lastModified: e.lastModified, addedAt: e.addedAt, updatedAt: e.updatedAt,
-        rating: e.rating, flag: e.flag, params: e.params, edited: e.edited, kind: e.kind, raw: e.raw, w: e.w, h: e.h, meta: e.meta || null, stored,
+        rating: e.rating, flag: e.flag, label: e.label || '', keywords: e.keywords || [], params: e.params, edited: e.edited, kind: e.kind, raw: e.raw, w: e.w, h: e.h, meta: e.meta || null, stored,
         src: e.src, xmpHash: e.xmpHash || null, xmpSeen: e.xmpSeen || 0, rendered: e.rendered, linked: e.linked,
       }).catch((err) => console.warn('Could not save to the catalog', err));
       const tb = edited ? await editedThumb(d.bitmap, e.params, e.w / e.h) : await thumbFromBitmap(d.bitmap);
@@ -909,6 +913,11 @@ async function importItems(items, opts = {}) {
       // Linked photos stay in the service they came from and never use Rembrandt storage.
       if (!it.src && !it.linked && cloud.storesOriginals()) cloud.uploadOriginal(e, file).then((ok) => { if (ok === false) app.toast(`${e.name} couldn't be stored online — it stays on this device`); });
       it.lr?.collections.forEach((c) => (collections.get(c) || collections.set(c, []).get(c)).push(e.key));
+      // Virtual copies now, while the photo's preview is still in memory for their thumbnails.
+      for (const c of it.lr?.copies || []) {
+        const vc = await addVirtualCopy(e, c, file, d.bitmap).catch((err) => console.warn('Virtual copy', err));
+        if (vc) c.collections.forEach((n) => (collections.get(n) || collections.set(n, []).get(n)).push(vc.key));
+      }
       first ||= e;
       done.push(e);
       if (it.src) e.file = null;
@@ -919,6 +928,12 @@ async function importItems(items, opts = {}) {
       // Decoder errors are browser jargon; say what it means.
       const decode = /ImageBitmap|decode|EncodingError|InvalidStateError|source image/i.test(`${err?.name} ${err?.message}`);
       failed.push({ name: file.name, why: decode ? 'the file looks damaged or isn’t a photo' : reason(err) });
+    }
+  }
+  for (const [master, copies, file] of copyJobs) {
+    for (const c of copies) {
+      const vc = await addVirtualCopy(master, c, file, null).catch((err) => console.warn('Virtual copy', err));
+      if (vc) c.collections.forEach((n) => (collections.get(n) || collections.set(n, []).get(n)).push(vc.key));
     }
   }
   await restoreEngine();
@@ -943,8 +958,60 @@ async function importItems(items, opts = {}) {
       if (bad) app.toast(bad, { ms: 6000 });
     }
   } else if (bad) app.toast(bad, { ms: 6000 });
+  if (opts.catalog?.report && done.length) showMigrationReport(opts.catalog, fresh);
   updateEmpty();
   return done;
+}
+
+// A Lightroom virtual copy: another library entry for the same photo, with its own edits, rating,
+// label and keywords. In a synced folder it points at the same file; otherwise the file is stored
+// for it too, so deleting either one leaves the other intact.
+async function addVirtualCopy(master, c, file, bitmap) {
+  const key = `${master.key}#${c.name}`;
+  if (app.images.some((x) => x.key === key)) return null;
+  const aspect = master.w && master.h ? master.w / master.h : 1.5;
+  const e = newEntry({
+    id: uid(), key, name: master.name, copyName: c.name, size: master.size, type: master.type, lastModified: master.lastModified,
+    addedAt: Date.now(), rating: c.rating || 0, flag: c.flag || 0, label: c.label || '', keywords: c.keywords || [],
+    params: c.crs ? crsToParams(c.crs, aspect) : null, edited: !!c.crs, src: master.src || null, linked: master.linked || null,
+    kind: master.kind, raw: master.raw, w: master.w, h: master.h, meta: master.meta || null,
+  });
+  e.updatedAt = Date.now();
+  const stored = master.src || master.linked ? false : await catalog.storeFile(e.id, file);
+  await catalog.putPhoto({
+    id: e.id, key, name: e.name, copyName: e.copyName, size: e.size, type: e.type, lastModified: e.lastModified, addedAt: e.addedAt, updatedAt: e.updatedAt,
+    rating: e.rating, flag: e.flag, label: e.label, keywords: e.keywords, params: e.params, edited: e.edited, kind: e.kind, raw: e.raw, w: e.w, h: e.h,
+    meta: e.meta, stored, src: e.src, rendered: false, linked: e.linked,
+  });
+  app.images.push(e);
+  const tb = (bitmap && e.params ? await editedThumb(bitmap, e.params, aspect) : null) || await catalog.getThumb(master.id);
+  if (tb) { thumbURL(e, tb); catalog.putThumb(e.id, tb); }
+  cloud.pushPhoto(e);
+  return e;
+}
+
+// After a Lightroom Classic import: what came over, and what Rembrandt doesn't translate.
+function showMigrationReport(cat, imported) {
+  const r = cat.report;
+  const plural = (n, w) => `${n.toLocaleString()} ${w}${n === 1 ? '' : 's'}`;
+  const got = [
+    `${plural(imported, 'photo')}, with ratings, picks and develop settings`,
+    cat.collections.length ? `${plural(cat.collections.length, 'collection')} as ${cat.collections.length === 1 ? 'an album' : 'albums'}` : '',
+    r.copies ? `${plural(r.copies, 'virtual copy')} as separate versions`.replace('copys', 'copies') : '',
+    r.keywords ? `keywords on ${plural(r.keywords, 'photo')} (searchable)` : '',
+    r.labels ? `colour labels on ${plural(r.labels, 'photo')}` : '',
+  ].filter(Boolean);
+  const missed = [...r.missing.map(([what, n]) => `${what}: ${plural(n, 'photo')}`), r.smart ? `${plural(r.smart, 'smart collection')} (rules differ; use the search and smart albums instead)` : ''].filter(Boolean);
+  const dlg = el('dialog', { class: 'dlg' },
+    el('div', { class: 'dlg-head' }, el('h2', {}, 'Lightroom import')),
+    el('div', { class: 'dlg-body' },
+      el('p', { class: 'hint' }, 'Brought over:'), el('ul', { class: 'report-list' }, got.map((t) => el('li', {}, t))),
+      missed.length ? el('p', { class: 'hint' }, 'Not brought over (the rest of each photo’s edit still is):') : el('p', { class: 'hint' }, 'Everything in the catalog came over.'),
+      missed.length ? el('ul', { class: 'report-list muted' }, missed.map((t) => el('li', {}, t))) : null,
+      el('p', { class: 'hint' }, 'Your catalog wasn’t changed. You can import it again at any time.')),
+    el('div', { class: 'dlg-foot' }, button('Done', () => { dlg.close(); dlg.remove(); }, 'primary')));
+  document.body.append(dlg);
+  dlg.showModal();
 }
 
 // Lightroom catalog photos that match photos already in the library.
@@ -960,7 +1027,7 @@ async function applyCatalog(cat) {
     const p = e.rendered ? null : idx.match(e.name, e.src?.rel || e.name, e.size);
     if (!p) continue;
     const aspect = e.w && e.h ? e.w / e.h : 1.5;
-    const patch = { rating: p.rating, flag: p.flag };
+    const patch = { rating: p.rating, flag: p.flag, label: p.label || '', keywords: [...new Set([...(e.keywords || []), ...(p.keywords || [])])] };
     if (p.crs) Object.assign(patch, { params: crsToParams(p.crs, aspect), edited: true });
     touch(e, patch);
     queueSidecar(e);
@@ -1060,7 +1127,7 @@ function queueSidecar(e) {
     sidecarTimers.delete(e.id);
     const aspect = e.w && e.h ? e.w / e.h : 1.5;
     const p = e.params ? deepMerge(defaultParams(aspect), e.params) : defaultParams(aspect);
-    const text = buildXmp(p, { aspect, raw: e.raw, rating: e.rating, flag: e.flag });
+    const text = buildXmp(p, { aspect, raw: e.raw, rating: e.rating, flag: e.flag, label: e.label, keywords: e.keywords });
     const t = await folders.writeSidecar(e.src, sidecarNames(e.name, e.raw)[0], text);
     if (t) { e.xmpHash = hashText(text); e.xmpSeen = t; catalog.updatePhoto(e.id, { xmpHash: e.xmpHash, xmpSeen: t }); }
   }, 1500));
@@ -1406,6 +1473,29 @@ function setFlag(ids, flag) {
   for (const e of app.images) if (ids.includes(e.id)) { touch(e, { flag }); queueSidecar(e); }
   refreshLibrary();
   renderStrip();
+}
+// Colour label ('red' … 'purple', '' for none); the same label again clears it, as in Lightroom.
+function setLabel(ids, label) {
+  const list = app.images.filter((e) => ids.includes(e.id));
+  const clear = label && list.every((e) => e.label === label);
+  for (const e of list) { touch(e, { label: clear ? '' : label }); queueSidecar(e); }
+  refreshLibrary();
+  renderStrip();
+}
+// Keywords, typed comma-separated; they're searchable and written to XMP sidecars.
+function editKeywords(ids) {
+  const list = app.images.filter((e) => ids.includes(e.id));
+  if (!list.length) return;
+  const common = (list[0].keywords || []).filter((k) => list.every((e) => (e.keywords || []).includes(k)));
+  const text = prompt(list.length > 1 ? `Keywords for ${list.length} photos (comma-separated). Keywords not shown stay as they are.` : 'Keywords (comma-separated)', common.join(', '));
+  if (text === null) return;
+  const next = [...new Set(text.split(',').map((k) => k.trim()).filter(Boolean))];
+  for (const e of list) {
+    const keep = (e.keywords || []).filter((k) => !common.includes(k));
+    touch(e, { keywords: [...new Set([...keep, ...next])] });
+    queueSidecar(e);
+  }
+  refreshLibrary();
 }
 
 // ================================================================== batch editing
@@ -2133,7 +2223,7 @@ function boot() {
     app.engine.hostPasses = chain(refocusPass, localAdjustments, studioPass, lensPass, motionPass);
     refocusPass.wake = () => app.requestRender();
     // Test hook: ?debug exposes the app to automated checks.
-    if (new URLSearchParams(location.search).has('debug')) window.__rembrandt = app;
+    if (new URLSearchParams(location.search).has('debug')) { window.__rembrandt = app; app._import = importApi; }
     app.engine.sourcePasses = retouchPasses;
     ai.onChange(() => { if (app.state.tool === 'ai' || app.state.tool === 'masks') app.refreshPanel(); app.requestRender(); });
   } catch (err) {
@@ -2155,7 +2245,7 @@ function boot() {
   app.updateUndo();
   app.buildPanel();
   library = buildLibrary(app, {
-    openInEditor, removePhotos, deletePhotos, keepOnDevice, syncAnyway, syncOn: () => cloud.cloud.available, setRating, setFlag, syncSettings, exportPhotos,
+    openInEditor, removePhotos, deletePhotos, keepOnDevice, syncAnyway, syncOn: () => cloud.cloud.available, setRating, setFlag, setLabel, editKeywords, syncSettings, exportPhotos,
     copyEdits: copyEditsFrom, pasteEdits: pasteEditsTo, resetEdits, photoMenu, presetMenu, pointAnchor, clipboard: batch.clipboard, describeClip: batch.describeClip,
     importFiles: () => openImporter(),
     syncFolder: (f) => (f ? syncFolder(f) : addSyncedFolder()),

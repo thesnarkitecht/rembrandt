@@ -10,8 +10,12 @@ const NS = {
   rdf: 'http://www.w3.org/1999/02/22-rdf-syntax-ns#',
   crs: 'http://ns.adobe.com/camera-raw-settings/1.0/',
   xmp: 'http://ns.adobe.com/xap/1.0/',
+  dc: 'http://purl.org/dc/elements/1.1/',
   pe: BRAND.xmpNs,
 };
+// Colour labels, as Lightroom writes them in xmp:Label.
+export const LABELS = ['red', 'yellow', 'green', 'blue', 'purple'];
+const labelName = (v) => { const k = String(v || '').trim().toLowerCase(); return LABELS.includes(k) ? k : ''; };
 
 const LR_HSL = ['Red', 'Orange', 'Yellow', 'Green', 'Aqua', 'Blue', 'Purple', 'Magenta'];
 const WB_REF = 5500; // Kelvin assumed for "as shot" when converting absolute white balance
@@ -36,7 +40,7 @@ export function parseXmp(text) {
       else if (a.namespaceURI === NS.xmp || a.namespaceURI === NS.pe) other[a.namespaceURI + a.localName] = a.value;
     }
     for (const c of d.children) {
-      const target = c.namespaceURI === NS.crs ? crs : c.namespaceURI === NS.xmp || c.namespaceURI === NS.pe ? other : null;
+      const target = c.namespaceURI === NS.crs ? crs : c.namespaceURI === NS.xmp || c.namespaceURI === NS.pe || c.namespaceURI === NS.dc ? other : null;
       if (!target) continue;
       const key = c.namespaceURI === NS.crs ? c.localName : c.namespaceURI + c.localName;
       const items = c.getElementsByTagNameNS(NS.rdf, 'li');
@@ -49,9 +53,11 @@ export function parseXmp(text) {
     try { ours = JSON.parse(decodeURIComponent(escape(atob(packed)))); } catch { ours = null; }
   }
   const rating = has(other, NS.xmp + 'Rating') ? Math.round(num(other[NS.xmp + 'Rating'])) : null;
-  const label = other[NS.xmp + 'Label'] || null;
-  const out = { crs, rating, label, ours, digest: other[NS.pe + 'Digest'] || null, flag: has(other, NS.pe + 'Flag') ? Math.round(num(other[NS.pe + 'Flag'])) : null };
-  if (!Object.keys(crs).length && rating === null && !ours) return null;
+  const label = labelName(other[NS.xmp + 'Label']) || null;
+  const subj = other[NS.dc + 'subject'];
+  const keywords = Array.isArray(subj) ? subj.filter(Boolean) : subj ? [subj] : [];
+  const out = { crs, rating, label, keywords, ours, digest: other[NS.pe + 'Digest'] || null, flag: has(other, NS.pe + 'Flag') ? Math.round(num(other[NS.pe + 'Flag'])) : null };
+  if (!Object.keys(crs).length && rating === null && !ours && !label && !keywords.length) return null;
   return out;
 }
 
@@ -154,6 +160,23 @@ export function crsToParams(crs, aspect = 1.5) {
   return p;
 }
 
+// Lightroom settings in use that Rembrandt doesn't bring over, by name (for the import report).
+const UNTRANSLATED = [
+  ['Masks and local adjustments', (c) => ['MaskGroupBasedCorrections', 'PaintBasedCorrections', 'GradientBasedCorrections', 'CircularGradientBasedCorrections'].some((k) => Array.isArray(c[k]) ? c[k].length : c[k] && typeof c[k] === 'object' && Object.keys(c[k]).length)],
+  ['Spot removal', (c) => Array.isArray(c.RetouchAreas) ? c.RetouchAreas.length : !!(c.RetouchAreas && Object.keys(c.RetouchAreas).length) || !!c.RetouchInfo],
+  ['Upright and Transform', (c) => (c.PerspectiveUpright && c.PerspectiveUpright !== 0) || ['PerspectiveVertical', 'PerspectiveHorizontal', 'PerspectiveRotate', 'PerspectiveScale', 'PerspectiveAspect'].some((k) => num(c[k]))],
+  ['Profiles and creative looks', (c) => !!(c.Look && (c.Look.Name || c.Look.name)) || (c.CameraProfile && !/^Adobe (Standard|Color)$/i.test(c.CameraProfile))],
+  ['Calibration', (c) => ['RedHue', 'RedSaturation', 'GreenHue', 'GreenSaturation', 'BlueHue', 'BlueSaturation', 'ShadowTint'].some((k) => num(c[k]))],
+  ['Lens profile corrections', (c) => num(c.LensProfileEnable) === 1],
+  ['Defringe and chromatic aberration', (c) => num(c.AutoLateralCA) === 1 || ['DefringePurpleAmount', 'DefringeGreenAmount'].some((k) => num(c[k]))],
+  ['AI Denoise and Super Resolution', (c) => num(c.EnhanceDenoise) === 1 || num(c.EnhanceSuperResolution) === 1 || !!c.EnhanceDetails],
+  ['Point color', (c) => !!c.PointColors],
+  ['Lens Blur', (c) => !!(c.LensBlur && Object.keys(c.LensBlur).length)],
+];
+export function untranslated(crs) {
+  return UNTRANSLATED.filter(([, test]) => { try { return !!test(crs); } catch { return false; } }).map(([name]) => name);
+}
+
 // Everything an XMP packet says about a photo: { params|null, rating|null, flag|null, source }.
 export function readXmpSettings(text, aspect) {
   const x = parseXmp(text);
@@ -168,7 +191,7 @@ export function readXmpSettings(text, aspect) {
   }
   let flag = x.flag;
   if (x.rating === -1) flag = -1;
-  return { params, rating: x.rating !== null ? clamp(x.rating, 0, 5) : null, flag, source };
+  return { params, rating: x.rating !== null ? clamp(x.rating, 0, 5) : null, flag, label: x.label, keywords: x.keywords, source };
 }
 
 // XMP embedded in a file (DNG, TIFF, JPEG saved from Lightroom), from its first and last megabyte.
@@ -251,20 +274,23 @@ function crsDigest(crs) {
 }
 
 // A complete XMP sidecar for a photo.
-export function buildXmp(p, { aspect = 1.5, raw = false, rating = 0, flag = 0 } = {}) {
+export function buildXmp(p, { aspect = 1.5, raw = false, rating = 0, flag = 0, label = '', keywords = [] } = {}) {
   const { attrs, curves } = paramsToCrs(p, aspect, raw);
   const crsForDigest = { ...attrs };
   for (const [k, v] of Object.entries(curves)) crsForDigest[k] = v;
   const packed = btoa(unescape(encodeURIComponent(JSON.stringify(p))));
   const lines = Object.entries(attrs).map(([k, v]) => `   crs:${k}="${esc(v)}"`);
   const seq = Object.entries(curves).map(([k, pts]) => `   <crs:${k}>\n    <rdf:Seq>\n${pts.map((v) => `     <rdf:li>${v}</rdf:li>`).join('\n')}\n    </rdf:Seq>\n   </crs:${k}>`);
+  if (keywords?.length) seq.push(`   <dc:subject>\n    <rdf:Bag>\n${keywords.map((k) => `     <rdf:li>${esc(k)}</rdf:li>`).join('\n')}\n    </rdf:Bag>\n   </dc:subject>`);
+  const lab = labelName(label);
   return `<x:xmpmeta xmlns:x="adobe:ns:meta/" x:xmptk="${esc(BRAND.name)}">
  <rdf:RDF xmlns:rdf="${NS.rdf}">
   <rdf:Description rdf:about=""
     xmlns:xmp="${NS.xmp}"
     xmlns:crs="${NS.crs}"
     xmlns:pe="${NS.pe}"
-   xmp:Rating="${flag === -1 ? -1 : rating || 0}"
+    xmlns:dc="${NS.dc}"
+   xmp:Rating="${flag === -1 ? -1 : rating || 0}"${lab ? `\n   xmp:Label="${lab[0].toUpperCase() + lab.slice(1)}"` : ''}
    xmp:MetadataDate="${new Date().toISOString()}"
    crs:Version="15.0"
    crs:HasSettings="True"

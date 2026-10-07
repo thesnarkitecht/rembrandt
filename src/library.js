@@ -26,6 +26,8 @@ export const SMART = [
   { id: 'rejected', name: 'Rejected', icon: 'x', test: (e) => e.flag === -1 },
   { id: 'local', name: 'On this device only', icon: 'laptop', test: localOnly },
 ];
+// Colour labels and their Lightroom keys (purple has none).
+const LABEL_KEYS = [['red', '6'], ['yellow', '7'], ['green', '8'], ['blue', '9'], ['purple', '']];
 const SORTS = [['captured', 'Date taken (newest)'], ['captured-asc', 'Date taken (oldest)'], ['added', 'Date added'], ['name', 'File name'], ['rating', 'Rating']];
 
 const takenAt = (e) => (e.meta?.timestamp ? e.meta.timestamp * 1000 : e.lastModified || e.addedAt || 0);
@@ -221,6 +223,10 @@ export function buildLibrary(app, api) {
           { label: 'Reject (X)', icon: 'x', onClick: () => api.setFlag(ids(), -1) },
           { label: 'Clear flag (U)', icon: 'minus', onClick: () => api.setFlag(ids(), 0) },
           { sep: true },
+          { head: 'Label' },
+          ...LABEL_KEYS.map(([lab, key]) => ({ label: `${lab[0].toUpperCase()}${lab.slice(1)}${key ? ` (${key})` : ''}`, dot: lab, onClick: () => api.setLabel(ids(), lab) })),
+          { label: 'Keywords…', icon: 'pencil', onClick: () => api.editKeywords(ids()) },
+          { sep: true },
           n === 1 ? { label: 'Choose what to copy…', icon: 'copy', onClick: () => api.copyEdits(ids()[0], true) } : null,
           { label: 'Apply preset…', icon: 'presets', onClick: () => api.presetMenu(ids(), header.querySelector('[aria-label="More"]') || header) },
           { label: n > 1 ? `Reset edits on ${n} photos` : 'Reset edits', icon: 'reset', onClick: () => api.resetEdits(ids()) },
@@ -275,7 +281,7 @@ export function buildLibrary(app, api) {
     else if (f) list = list.filter((e) => e.src?.folder === f.id);
     else if (prefs.view !== 'albums') list = list.filter((SMART.find((s) => s.id === prefs.view) || SMART[0]).test);
     if (prefs.view !== 'rejected' && !a && !f && prefs.view !== 'all') list = list.filter((e) => e.flag !== -1);
-    if (query) list = list.filter((e) => e.name.toLowerCase().includes(query) || [e.meta?.make, e.meta?.model, e.kind].join(' ').toLowerCase().includes(query));
+    if (query) list = list.filter((e) => [e.name, e.copyName, e.meta?.make, e.meta?.model, e.kind, e.label, ...(e.keywords || [])].join(' ').toLowerCase().includes(query));
     if (prefs.sort === 'name') list.sort((x, y) => x.name.localeCompare(y.name, undefined, { numeric: true }));
     else if (prefs.sort === 'captured') list.sort((x, y) => takenAt(y) - takenAt(x));
     else if (prefs.sort === 'captured-asc') list.sort((x, y) => takenAt(x) - takenAt(y));
@@ -337,12 +343,15 @@ export function buildLibrary(app, api) {
     const cur = app.images[app.cur] === e;
     const t = el('div', {
       class: 'ph' + (on ? ' sel' : '') + (cur ? ' current' : '') + (e.flag === -1 ? ' rejected' : ''),
-      style: { width: `${w}px`, height: `${h}px` }, 'data-id': e.id, draggable: 'true', tabindex: -1, title: e.name,
+      style: { width: `${w}px`, height: `${h}px` }, 'data-id': e.id, draggable: 'true', tabindex: -1,
+      title: [e.copyName ? `${e.name} · ${e.copyName}` : e.name, e.keywords?.length ? e.keywords.join(', ') : ''].filter(Boolean).join('\n'),
     },
       e.thumbUrl ? el('img', { src: e.thumbUrl, alt: e.name, loading: 'lazy', draggable: 'false' }) : el('span', { class: 'thumb-ph' + (e.loading ? ' loading' : '') }),
       el('button', { class: 'ph-check', 'aria-label': on ? 'Deselect' : 'Select', 'aria-pressed': String(on), onclick: (ev) => { ev.stopPropagation(); toggle(e, ev); } }, icon('check')),
       el('button', { class: 'ph-del', 'aria-label': 'Delete', title: 'Delete', onclick: (ev) => { ev.stopPropagation(); removeSelected(selected.has(e.id) ? ids() : [e.id]); } }, icon('trash')),
       el('div', { class: 'ph-badges' },
+        e.label ? el('span', { class: `ph-label lab-${e.label}`, title: `${e.label[0].toUpperCase()}${e.label.slice(1)} label` }) : null,
+        e.copyName ? el('span', { class: 'tag', title: `Virtual copy: ${e.copyName}` }, e.copyName.length > 10 ? `${e.copyName.slice(0, 9)}…` : e.copyName) : null,
         e.raw ? el('span', { class: 'tag' }, 'RAW') : null,
         e.edited ? el('span', { class: 'tag', title: 'Edited' }, icon('edit')) : null,
         e.offline ? el('span', { class: 'tag warn', title: 'Original not on this device' }, icon('cloud')) : null),
@@ -521,6 +530,8 @@ export function buildLibrary(app, api) {
     if (k === 'p') { api.setFlag(ids(), 1); return true; }
     if (k === 'x') { api.setFlag(ids(), -1); return true; }
     if (k === 'u') { api.setFlag(ids(), 0); return true; }
+    const lab = LABEL_KEYS.find(([, key]) => key === k);
+    if (lab) { api.setLabel(ids(), lab[0]); return true; }
     if (k === 'Delete' || k === 'Backspace') { removeSelected(); return true; }
     return false;
   }
