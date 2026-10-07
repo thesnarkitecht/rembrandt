@@ -57,8 +57,9 @@ import { createCommandBar } from './command.js';
 import { el, svgEl, clamp, clone, debounce, setPath, srgbToLinear, uid, warmDownloads, deepMerge } from './util.js';
 import { icon } from './icons.js';
 import { sliderHooks, closeMenu, popMenu, button } from './ui.js';
-import { displayToScene, solveWhiteBalance } from '../engine/src/color.js';
+import { displayToScene, solveWhiteBalance, RAW_EV } from '../engine/src/color.js';
 import { toneBase, adapt } from './adapt.js';
+import { writeDNG } from './merge.js';
 import { signature, similarity, THRESHOLD as SIMILAR_THRESHOLD, MAX_RESULTS as SIMILAR_MAX } from './similar.js';
 import { estimateAirlight } from '../engine/src/pipeline.js';
 
@@ -266,6 +267,39 @@ const app = {
     const file = new File([blob], `${base}-${scale === 1 ? 'restored' : `${scale}x`}.jpg`, { type: 'image/jpeg', lastModified: Date.now() });
     await openFiles([file]);
     return { w: out.width, h: out.height };
+  },
+  // AI Denoise (ai/denoise.js): a denoised linear DNG beside the original, with the same edits.
+  async denoise({ strength = 0.5, onProgress } = {}) {
+    const e = this.images[this.cur];
+    if (!e) throw new Error('Open a photo first');
+    const file = await originalFile(e);
+    if (!file) throw new Error('The original of this photo isn’t available');
+    let frame, gain = 1;
+    if (e.raw) {
+      const lin = e.linear || await decodeRawLinear(file, { quality: prefs.rawQuality });
+      frame = { w: lin.w, h: lin.h, data: lin.data };
+      gain = lin.gain;
+    } else {
+      const d = await decodeFile(file);
+      frame = frameFromBitmap(d.bitmap, 0);
+      d.bitmap.close?.();
+    }
+    let finish;
+    this.developFX?.play({ hold: new Promise((r) => { finish = r; }) });
+    try {
+      const { denoiseFrame } = await import('./ai/denoise.js');
+      const r = await denoiseFrame(frame, { gain, strength, onProgress });
+      const dng = writeDNG({ w: frame.w, h: frame.h, data: r.data, baseline: Math.log2(r.scale) - RAW_EV, model: 'Denoise' });
+      const base = e.name.replace(/\.[^.]+$/, '');
+      const out = new File([dng], `${base}-Denoise.dng`, { type: 'image/x-adobe-dng', lastModified: e.lastModified || Date.now() });
+      const params = clone(editOf(e)), edited = e.edited;
+      const [made] = (await openFiles([out])) || [];
+      if (made && edited) {
+        touch(made, { params, edited: true, rating: e.rating, flag: e.flag });
+        if (this.images[this.cur] === made && this.img) { this.params = deepMerge(defaultParams(this.img.aspect), params); this.history.reset(this.params); this.rebuildPanel(); this.requestRender(); }
+      }
+      return { w: frame.w, h: frame.h };
+    } finally { finish(); }
   },
   aiFailed(err) {
     console.error(err);

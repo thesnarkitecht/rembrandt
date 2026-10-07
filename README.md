@@ -77,15 +77,23 @@ checks it against the published SHA-256 sums, and restarts the server.
   deconvolution on the GPU), on the subject or the whole picture.
 - **Super Resolution**: 2× and 4× with real detail, or Restore at the same size for soft photos;
   runs on the GPU (Metal on Apple silicon).
+- **AI Denoise**: clean high-ISO shots into a new DNG with the same edits, on the GPU.
+- **Merge**: HDR from brackets, panoramas and focus stacks, each to a RAW-like DNG.
 - **RAW** from 1,000+ cameras, developed on the GPU: tone, colour, curves, grading, dehaze, detail.
 - **Masks**: brush, gradients, colour and tone ranges, AI subject, background, object and depth.
 - **Remove**: heal and clone spots and strokes; Rembrandt picks a matching source for you.
-- **Lens corrections**: the camera's built-in profile from Fujifilm and Sony RAWs (distortion,
-  vignetting, chromatic aberration), plus manual distortion and vignetting for any photo.
+- **Lens corrections**: the camera's built-in profile from Fujifilm and Sony RAWs, or one of 1,500
+  lens profiles from [Lensfun](https://lensfun.github.io) (distortion, vignetting, chromatic
+  aberration), plus manual distortion and vignetting for any photo. Auto straighten levels horizons.
 - **On-device AI**: Refocus, background replacement. Nothing is uploaded.
-- **Library**: albums, ratings, flags, search, sorting, keyboard shortcuts, one-click delete with Undo.
-- **Batch**: copy and paste edits to hundreds of photos, presets, batch export.
-- **Bring your photos**: folders, Lightroom Classic and Lightroom, Google Photos, Google Drive,
+- **Library**: albums, ratings, flags, colour labels, keywords, virtual copies, search, Find similar,
+  sorting, keyboard shortcuts (or Lightroom's), one-click delete with Undo.
+- **Batch**: copy and paste edits to hundreds of photos, batch export, and presets that fit each
+  photo's exposure. Watch a folder to apply a preset and album to new photos as they arrive.
+- **Share how**: a before/after page with a slider, a replay video of the edit, or the recipe inside
+  the exported file so anyone can see (and reuse) how it was edited.
+- **Bring your photos**: folders, Lightroom Classic (edits, keywords, labels, virtual copies,
+  collections, with a report of anything that can't come over) and Lightroom, Google Photos, Google Drive,
   Dropbox, OneDrive ([setup](docs/cloud-services.md)). Export back to them too.
 - **Open formats**: edits are standard XMP, readable by Lightroom and others.
 - **Cloud sync (optional, paid)**: turn it on in Settings to sync edits, albums and photos between

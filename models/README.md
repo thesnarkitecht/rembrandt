@@ -20,3 +20,16 @@ Runs on the GPU through Rembrandt's own WebGPU / WebGL2 kernels (`src/ai/upscale
 Format: the 4 bytes `RSR1`, then the two networks one after the other, each as 34 layers of weights
 `[out][in][3][3]`, biases `[out]` and (all but the last layer) PReLU slopes `[out]`, as little-endian
 float16. Real-ESRGAN is Copyright (c) 2021 Xintao Wang, under the BSD 3-Clause license (`LICENSE-Real-ESRGAN`).
+
+## AI Denoise
+
+Runs on the same GPU kernels as Super Resolution (`src/ai/denoise.js`).
+
+| File | Purpose | Source (MIT) |
+|---|---|---|
+| `denoise-ffdnet-color.bin` | AI Denoise: FFDNet for colour images (Zhang, Zuo & Zhang, IEEE TIP 2018), converted to half precision | `github.com/cszn/KAIR/releases/download/v1.0/ffdnet_color.pth` |
+
+Format: the 4 bytes `RDN1`, then 12 layers of weights `[out][in][3][3]` and biases `[out]` as
+little-endian float16 (13 → 96 → … → 96 → 12 channels, ReLU between layers, on the photo
+pixel-unshuffled by 2 plus a noise-level map). KAIR is Copyright (c) 2019 Kai Zhang, under the MIT
+license (`LICENSE-KAIR`).

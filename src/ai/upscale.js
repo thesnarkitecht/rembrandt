@@ -520,3 +520,5 @@ export async function upscale(source, { scale = 2, denoise = 0.5, tile = 0, onPr
 
 // For tests.
 export const _internals = { GLRunner, GPURunner, webgpu, blendedLayers, loadRaw, convWGSL, shuffleWGSL };
+// Shared with AI Denoise (denoise.js).
+export { webgpu, packMats, convWGSL, convGLSL, VS, TX, TH };

@@ -152,3 +152,27 @@ export function buildSRSection(app) {
     },
   };
 }
+
+// AI Denoise: one slider and one button; the result is a new DNG beside the original (denoise.js).
+export function buildDenoiseSection(app) {
+  const sec = section('AI Denoise', { id: 'ai-denoise', open: false, badge: { icon: 'sparkle' } });
+  const strength = slider({ label: 'Strength', min: 0, max: 100, def: 50, get: () => prefs.dn ?? 50, set: (v) => { prefs.dn = v; }, commit: save });
+  const bar = el('div', { class: 'progress', hidden: true }, el('span'));
+  let busy = false;
+  const go = button('Create denoised copy', async () => {
+    if (busy) return;
+    busy = true; go.disabled = true; bar.hidden = false; bar.firstChild.style.width = '0%';
+    const t0 = performance.now();
+    try {
+      const { w, h } = await app.denoise({ strength: (prefs.dn ?? 50) / 100, onProgress: (f) => { bar.firstChild.style.width = `${Math.round(f * 100)}%`; } });
+      app.toast(`Added a denoised ${w} × ${h} DNG in ${((performance.now() - t0) / 1000).toFixed(1)} s`);
+    } catch (err) {
+      console.error(err);
+      app.toast(err?.message || 'AI Denoise failed');
+    } finally { busy = false; go.disabled = false; bar.hidden = true; }
+  }, 'primary sr-go', 'sparkle');
+  sec.body.append(
+    el('p', { class: 'ai-lede' }, 'Clean, detailed high-ISO shots. Makes a new DNG beside the original with the same edits; best on RAW.'),
+    strength.el, el('div', { class: 'sr-actions' }, go), bar);
+  return { el: sec.el, refresh() { strength.refresh(); } };
+}
