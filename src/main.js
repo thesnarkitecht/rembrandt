@@ -60,6 +60,7 @@ import { sliderHooks, closeMenu, popMenu, button } from './ui.js';
 import { displayToScene, solveWhiteBalance, RAW_EV } from '../engine/src/color.js';
 import { toneBase, adapt } from './adapt.js';
 import { writeDNG } from './merge.js';
+import { readExif } from './exif.js';
 import { addJob, breathe, whenQuiet, registerKind, restoreJobs, trackActivity } from './jobs.js';
 import { mountJobs } from './jobs-ui.js';
 import { denoiseStrength } from './ai/panel-sr.js';
@@ -895,6 +896,8 @@ async function importItems(items, opts = {}) {
       e.kind = d.kind;
       e.raw = !!d.raw;
       if (d.linear) { e.linear = d.linear; e.meta = d.linear.meta; }
+      // JPEGs and other files with EXIF: camera, exposure and when it was taken (RAWs get this from LibRaw).
+      else if (!d.raw) e.meta = (await readExif(file)) || null;
       e.w = d.linear ? d.linear.w : d.bitmap.width;
       e.h = d.linear ? d.linear.h : d.bitmap.height;
       e.loading = false;
@@ -1309,6 +1312,11 @@ async function applySource(e) {
       e.lensProfile = prof || e.lensProfile;
       if (prof && app.images[app.cur] === e) { app.engine.setLensProfile(prof); app.requestRender(); app.refreshPanel(); }
     }).catch(() => {});
+  }
+  // Photos imported before EXIF was read: pick up their camera details and date taken now.
+  if (!e.raw && !e.meta && e.file && !e.exifTried) {
+    e.exifTried = true;
+    readExif(e.file).then((m) => { if (m) touch(e, { meta: m }); }).catch(() => {});
   }
   // No built-in correction: look the lens up in Lensfun once its name is known (after the RAW decode).
   if (e.raw && e.meta?.lens && !e.lensProfile && !e.lensfunTried) {
@@ -1996,7 +2004,7 @@ async function renderPhotoForExport(id, opts) {
   if (e === cur && app.img) {
     if (engineDirty) { await applySource(cur); engineDirty = false; }
     await ai.ensure(cur, app.params);
-    const { blob } = await renderExport(app, opts);
+    const { blob } = await renderExport(app, { ...opts, meta: e.meta });
     return { blob, base };
   }
   const file = await originalFile(e);
@@ -2018,7 +2026,7 @@ async function renderPhotoForExport(id, opts) {
   await ai.ensure(tmp, params);
   e.ai = tmp.ai;
   await loadBackground(params);
-  const { blob } = await renderExport(app, opts, params, (p, ww, hh) => outputMatsFor(p, aspect, ww, hh));
+  const { blob } = await renderExport(app, { ...opts, meta: e.meta || lin?.meta }, params, (p, ww, hh) => outputMatsFor(p, aspect, ww, hh));
   d.bitmap?.close?.();
   return { blob, base };
 }

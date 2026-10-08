@@ -4,6 +4,8 @@ import { canSave, countSave, askToUnlock, isUnlocked, freeSavesLeft } from './un
 import { el, clamp } from './util.js';
 import { segmented, slider, popMenu } from './ui.js';
 import { withRecipe, recipeOf } from './recipe.js';
+import { withMetadata } from './exif.js';
+import { prefs } from './account.js';
 import { beforeAfterPage } from './beforeafter.js';
 import { recordReplay, replaySupported } from './replay.js';
 import { icon } from './icons.js';
@@ -60,7 +62,7 @@ export async function renderPixels(app, { long = 0 } = {}, p = app.params, mats 
 }
 
 // Renders `p` (default: the photo being edited) with the engine's current image.
-export async function renderExport(app, { format, quality, long, recipe }, p = app.params, mats = (pp, w, h) => app.outputMats(pp, w, h)) {
+export async function renderExport(app, { format, quality, long, recipe, meta }, p = app.params, mats = (pp, w, h) => app.outputMats(pp, w, h)) {
   const { image, outW, outH } = await renderPixels(app, { long }, p, mats);
   let canvas = el('canvas', { width: image.width, height: image.height });
   canvas.getContext('2d').putImageData(image, 0, 0);
@@ -68,6 +70,9 @@ export async function renderExport(app, { format, quality, long, recipe }, p = a
   const [mime] = FORMATS[format];
   let blob = await new Promise((r) => canvas.toBlob(r, mime, clamp(quality, 1, 100) / 100));
   if (!blob) throw new Error('The browser could not encode this format.');
+  // Camera details, your name and copyright, and the sRGB profile (Settings › Export), then the recipe.
+  const by = { artist: (prefs.artist || '').trim(), copyright: (prefs.copyright || '').trim() };
+  blob = await withMetadata(blob, { meta: meta === undefined ? app.images?.[app.cur]?.meta : meta, ...by, exif: prefs.exportExif !== false, w: canvas.width, h: canvas.height });
   if (recipe) blob = await withRecipe(blob, recipeOf(p), canvas.width, canvas.height);
   return { blob, w: canvas.width, h: canvas.height };
 }
@@ -131,7 +136,7 @@ export function openExport(app, ids = null, renderPhoto = null) {
   const paintDest = () => {
     const d = destination(opts.dest);
     destBtn.replaceChildren(icon(d.icon), el('span', {}, d.name), icon('chevron', 'i chev'));
-    destHint.textContent = d.hint || (d.id === 'device' ? (batch && n > 1 ? 'Photos are rendered at full quality one by one and saved together as a ZIP file.' : 'Rendered by the same GPU pipeline at full resolution. Metadata (EXIF) is not copied.') : `Each photo is uploaded to ${d.name}${['dropbox', 'onedrive', 'gdrive'].includes(d.id) ? ' in a “Rembrandt” folder' : ''}.`);
+    destHint.textContent = d.hint || (d.id === 'device' ? (batch && n > 1 ? 'Photos are rendered at full quality one by one and saved together as a ZIP file.' : (prefs.exportExif !== false ? 'Full resolution, with the camera details, your name and copyright (Settings › Export) and an sRGB colour profile. Location is never included.' : 'Full resolution, with an sRGB colour profile. Camera details are off (Settings › Export).')) : `Each photo is uploaded to ${d.name}${['dropbox', 'onedrive', 'gdrive'].includes(d.id) ? ' in a “Rembrandt” folder' : ''}.`);
     go.textContent = d.id === 'device' ? (batch ? `Export ${n}` : 'Export') : d.id === 'folder' ? 'Choose folder & save' : `Send to ${d.name.replace(/ \(.*\)$/, '')}`;
   };
   destBtn.addEventListener('click', () => popMenu(destBtn, DESTINATIONS.map((d) => ({

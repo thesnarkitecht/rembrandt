@@ -99,7 +99,8 @@ checks it against the published SHA-256 sums, and restarts the server.
 - **Bring your photos**: folders, Lightroom Classic (edits, keywords, labels, virtual copies,
   collections, with a report of anything that can't come over) and Lightroom, Google Photos, Google Drive,
   Dropbox, OneDrive ([setup](docs/cloud-services.md)). Export back to them too.
-- **Open formats**: edits are standard XMP, readable by Lightroom and others.
+- **Open formats**: edits are standard XMP, readable by Lightroom and others. Exports keep the camera
+  details and date taken, add your name and copyright, and embed an sRGB profile; location is never written.
 - **Cloud sync (optional, paid)**: turn it on in Settings to sync edits, albums and photos between
   your computers, the web and your phone. It's the only thing that needs an account, and the only
   thing that costs money; everything else stays free.

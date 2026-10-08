@@ -346,6 +346,12 @@ export function buildAccountPage(app, hooks) {
       s.addEventListener('change', () => { prefs[key] = +s.value; savePrefs(); });
       return s;
     };
+    const textPref = (key, placeholder) => {
+      const i = el('input', { class: 'text-input', value: prefs[key] || '', placeholder, spellcheck: 'false' });
+      i.addEventListener('keydown', (e) => e.stopPropagation());
+      i.addEventListener('change', () => { prefs[key] = i.value.trim(); savePrefs(); });
+      return i;
+    };
     const field = (label, ctl, hint) => el('div', { class: 'field' }, el('span', {}, label), ctl, hint ? el('span', { class: 'hint' }, hint) : null);
     const ver = window.LUMEN_BUILD?.version;
     // Since you switched: what the Adobe plan would have cost since Rembrandt's first launch.
@@ -376,7 +382,10 @@ export function buildAccountPage(app, hooks) {
         el('p', { class: 'hint' }, 'Leave Rembrandt open and your computer plugged in. Queued work is remembered if you close it.')),
       card('Storage', toggle('Keep linked photos on this device', () => !!prefs.keepLinked, (v) => { prefs.keepLinked = v; savePrefs(); }).el,
         el('p', { class: 'hint' }, 'Off: photos linked from Google Photos, Drive, Dropbox or OneDrive use no space here or in Rembrandt storage. Only a small preview and your edits are kept, and after you close Rembrandt you pick a photo again to keep editing it. On: they open instantly, but use space on this device.')),
-      card('Export', field('Default format', fmt.el), q.el),
+      card('Export', field('Default format', fmt.el), q.el,
+        toggle('Include camera details (camera, lens, exposure, date taken)', () => prefs.exportExif !== false, (v) => { prefs.exportExif = v; savePrefs(); }).el,
+        field('Your name', textPref('artist', 'Shown as the author of exported photos'), null),
+        field('Copyright', textPref('copyright', '© 2026 Your Name'), 'Written into every exported photo. Location is never included.')),
     ];
   }
 
