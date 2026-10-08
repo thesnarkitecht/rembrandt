@@ -349,7 +349,8 @@ fn newer(a: &str, b: &str) -> bool {
 
 #[cfg(desktop)]
 fn http() -> Result<reqwest::Client, String> {
-    reqwest::Client::builder().user_agent("Rembrandt-updater").build().map_err(|e| e.to_string())
+    // HTTPS only, redirects included (GitHub sends release downloads on to its CDN).
+    reqwest::Client::builder().user_agent("Rembrandt-updater").https_only(true).build().map_err(|e| e.to_string())
 }
 
 /// Looks for a newer release. Resolves its version number, or null when this is the latest.
@@ -365,8 +366,11 @@ async fn update_check(app: tauri::AppHandle, state: State<'_, UpdateState>) -> R
             .error_for_status().map_err(|e| e.to_string())?
             .json().await.map_err(|e| e.to_string())?;
         let version = rel["tag_name"].as_str().unwrap_or("").trim_start_matches('v').to_string();
+        // Only files attached to this repository's own releases.
+        let prefix = format!("https://github.com/{REPO}/releases/download/");
         let url_of = |name: &str| {
-            rel["assets"].as_array().and_then(|a| a.iter().find(|x| x["name"] == name)).and_then(|x| x["browser_download_url"].as_str()).map(String::from)
+            rel["assets"].as_array().and_then(|a| a.iter().find(|x| x["name"] == name)).and_then(|x| x["browser_download_url"].as_str())
+                .filter(|u| u.starts_with(&prefix)).map(String::from)
         };
         let current = app.package_info().version.to_string();
         match (url_of(&asset), url_of("SHA256SUMS")) {

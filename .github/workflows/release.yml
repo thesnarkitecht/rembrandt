@@ -65,9 +65,11 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write      # signs the build provenance (Sigstore)
+      attestations: write  # stores it with the repository
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with: { path: dl, pattern: rembrandt-*, merge-multiple: true }
       - name: Checksums and Arch package recipe
         run: |
@@ -79,6 +81,12 @@ jobs:
           sed -e "s/@VERSION@/$VERSION/" -e "s/@SHA256@/$DEB_SHA/" ../packaging/arch/PKGBUILD.in > PKGBUILD
           sha256sum * > SHA256SUMS
           cat SHA256SUMS
+      # Signed record that each file was built by this workflow from this commit. Anyone can check a
+      # download with: gh attestation verify <file> --repo thesnarkitecht/rembrandt
+      - name: Build provenance
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: 'dl/*'
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}

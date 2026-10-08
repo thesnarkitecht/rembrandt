@@ -17,13 +17,13 @@ jobs:
     env:
       HAS_WINDOWS_CERT: ${{ secrets.WINDOWS_CERTIFICATE != '' }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with: { node-version: 22 }
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@89b12181fb390509a0842a86cc55eeb8eb928c1d # stable
         with:
           targets: ${{ inputs.target }}${{ inputs.musl && format(',{0}', inputs.musl) || '' }}
-      - uses: swatinem/rust-cache@v2
+      - uses: swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with: { workspaces: "src-tauri\nserver" }
       - name: Linux dependencies
         if: runner.os == 'Linux'
@@ -112,7 +112,7 @@ jobs:
           if [ "$RUNNER_OS" = Windows ]; then (cd pkg && 7z a -tzip "../out/$s.zip" . >/dev/null); echo "$s.zip"
           else tar -czf "out/$s.tar.gz" -C pkg .; echo "$s.tar.gz"; fi
           ls -la out
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: rembrandt-${{ inputs.server }}
           path: out/*
