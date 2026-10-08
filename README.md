@@ -7,6 +7,7 @@ No account needed, no subscription, no “we’ve updated our terms” emails.</
   <a href="#download"><b>Download</b></a> ·
   <a href="#self-host-it">Self-host</a> ·
   <a href="#features">Features</a> ·
+  <a href="#how-it-compares">Compare</a> ·
   <a href="#build">Build</a>
 </p>
 
@@ -102,6 +103,45 @@ checks it against the published SHA-256 sums, and restarts the server.
 - **Cloud sync (optional, paid)**: turn it on in Settings to sync edits, albums and photos between
   your computers, the web and your phone. It's the only thing that needs an account, and the only
   thing that costs money; everything else stays free.
+
+## How it compares
+
+- **Lightroom**: the everyday editing and library work is here: RAW development, masks (including AI
+  subject, depth and object), healing, presets, lens corrections, HDR and panorama merges,
+  denoise, batch editing, and catalog import. Not here yet: Print, Book, Slideshow, Web and Map
+  modules, face recognition, Adobe's camera profiles, tethered capture (a watched folder covers most
+  tethering apps), and a plugin ecosystem.
+- **darktable**: Rembrandt borrows darktable's central idea, a *scene-referred* pipeline (edits work
+  on linear light before a tone curve maps it to the screen), which is why highlights recover cleanly.
+  darktable has far more modules and control; Rembrandt aims to be usable in five minutes, with fewer,
+  broader controls and on-device AI. The engine is an independent implementation (see Credits).
+- **RawTherapee / ART**: similar ground to darktable; Rembrandt trades depth of control for speed of use.
+- **GIMP / Photoshop**: different kind of tool. Those are pixel editors for compositing and painting;
+  Rembrandt is a non-destructive RAW developer and library, like Lightroom.
+
+## Your photos aren't locked in
+
+Rembrandt never moves or rewrites your originals. Edits are saved as standard XMP sidecars next to
+your photos, which Lightroom, darktable and others can read, and Settings › Data & privacy exports a backup of all your edits.
+If Rembrandt disappeared tomorrow, your library and your edits would still be yours, in open formats.
+
+## How it's built
+
+JavaScript with WebGL2 and WebGPU shaders for the editing engine and on-device AI, in a small Rust
+([Tauri](https://tauri.app)) desktop app. RAW files are decoded by [LibRaw](https://www.libraw.org)
+(C++, compiled to WebAssembly). Every release is built by GitHub Actions from this repository, with
+checksums and signed build provenance ([SECURITY.md](SECURITY.md)).
+
+## Credits
+
+- [darktable](https://www.darktable.org): the scene-referred workflow Rembrandt's engine is modelled on.
+  An early prototype ported darktable's algorithms; it was replaced by an independent implementation of
+  the published methods (listed in [NOTICE.md](NOTICE.md)) before the code was released.
+- [LibRaw](https://www.libraw.org) (RAW decoding), [Lensfun](https://lensfun.github.io) (lens profiles),
+  [RAWmakase](https://github.com/pch/rawmakase) (lens tables, heal and clone),
+  [Real-ESRGAN](https://github.com/xinntao/Real-ESRGAN) (Super Resolution),
+  [KAIR / FFDNet](https://github.com/cszn/KAIR) (AI Denoise), [MediaPipe](https://ai.google.dev/edge/mediapipe)
+  (subject, depth and object models). Licences and notices in [NOTICE.md](NOTICE.md).
 
 ## Help out
 
