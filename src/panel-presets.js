@@ -3,6 +3,7 @@ import { el } from './util.js';
 import { section, iconButton, button, popMenu } from './ui.js';
 import { prefs, savePrefs } from './account.js';
 import { readRecipe } from './recipe.js';
+import { importPresetFiles } from './lrpresets.js';
 import { PRESETS, developSettings, withSettings } from './params.js';
 
 const KEY = 'lumen:presets';
@@ -15,7 +16,9 @@ function saveUser(list) {
 }
 
 // Built-in presets followed by the user's own.
-export const allPresets = () => [...PRESETS, ...loadUser().map((p) => ({ ...p, group: 'Your presets' }))];
+export const allPresets = () => [...PRESETS, ...loadUser().map((p) => ({ ...p, group: p.lr ? lrGroup(p) : 'Your presets' }))];
+// Imported Lightroom presets keep their Lightroom group, in sections of their own.
+const lrGroup = (p) => `Lightroom · ${p.group || 'Imported'}`;
 
 const PRESET_BADGE = {
   Color: { icon: 'drop', color: 'linear-gradient(135deg,#ff5f9e,#a55cff)' },
@@ -50,12 +53,36 @@ export function buildPresetsPanel(app) {
     root.textContent = '';
     cards = [];
     const user = loadUser();
+    // Lightroom .xmp / .lrtemplate presets, or zip packs of them (lrpresets.js).
+    const importLr = () => {
+      const input = el('input', { type: 'file', multiple: true, accept: '.xmp,.lrtemplate,.zip,application/zip' });
+      input.addEventListener('change', async () => {
+        if (!input.files.length) return;
+        try {
+          const r = await importPresetFiles([...input.files]);
+          if (!r.presets.length) { app.toast('No Lightroom presets found in those files'); return; }
+          // Same name in the same group: the new one replaces the old.
+          const key = (p) => `${p.group || ''}|${p.name}`;
+          const fresh = new Set(r.presets.map(key));
+          const list = loadUser().filter((p) => !(p.lr && fresh.has(key(p))));
+          let n = 0;
+          for (const p of r.presets) list.push({ id: `${Date.now().toString(36)}${(n++).toString(36)}`, name: p.name, group: p.group, lr: true, partial: true, settings: p.settings });
+          saveUser(list);
+          build();
+          const groups = new Set(r.presets.map((p) => p.group || 'Imported')).size;
+          const left = r.missing.length ? ` Not brought over: ${r.missing.map(([what, c]) => `${what} (${c})`).join(', ')}.` : '';
+          app.toast(`Imported ${r.presets.length} preset${r.presets.length === 1 ? '' : 's'}${groups > 1 ? ` in ${groups} groups` : ''}.${left}`, { ms: left ? 10000 : 5000 });
+        } catch (err) { app.toast(`Couldn't import: ${err.message}`); }
+      });
+      input.click();
+    };
     // Extras live in one ⋯ menu so the panel stays a grid of looks.
     const more = iconButton('more', 'Preset options', (e) => {
       e.stopPropagation();
       popMenu(e.currentTarget, [
-        { label: 'Fit presets to each photo', checked: prefs.adaptivePresets !== false, onClick: () => { prefs.adaptivePresets = prefs.adaptivePresets === false; savePrefs(); renderThumbs(); app.toast(prefs.adaptivePresets ? 'Presets now start from each photo’s own exposure and tones' : 'Presets apply their exact values'); } },
+        { label: 'Fit presets to each photo', checked: prefs.adaptivePresets !== false, onClick: () => { prefs.adaptivePresets = prefs.adaptivePresets === false; savePrefs(); cards.forEach((c) => { c.done = false; }); renderThumbs(); app.toast(prefs.adaptivePresets ? 'Presets now start from each photo’s own exposure and tones' : 'Presets apply their exact values'); } },
         { label: 'Use the look of a photo…', icon: 'photos', onClick: fromPhoto },
+        { label: 'Import Lightroom presets…', icon: 'presets', onClick: importLr },
       ]);
     }, 'sm');
     const mine = section('Your presets', { id: 'presets-user', right: more, badge: { icon: 'save', color: 'linear-gradient(135deg,#34d399,#0ea5e9)' } });
@@ -97,8 +124,18 @@ export function buildPresetsPanel(app) {
       input.click();
     };
     mine.body.append(open, form);
-    if (user.length) mine.body.append(el('div', { class: 'preset-grid' }, user.map((p) => card(p, true))));
+    const own = user.filter((p) => !p.lr);
+    if (own.length) mine.body.append(el('div', { class: 'preset-grid' }, own.map((p) => card(p, true))));
     root.append(mine.el);
+
+    // Imported Lightroom presets: one collapsed section per Lightroom group.
+    const imported = user.filter((p) => p.lr);
+    for (const g of [...new Set(imported.map(lrGroup))]) {
+      const list = imported.filter((p) => lrGroup(p) === g);
+      const s = section(g, { id: 'presets-lr-' + g, open: false, badge: { icon: 'presets', color: 'linear-gradient(135deg,#31a8ff,#0a5bd6)' } });
+      s.body.append(el('div', { class: 'preset-grid' }, list.map((p) => card(p, true))));
+      root.append(s.el);
+    }
 
     const groups = [...new Set(PRESETS.map((p) => p.group))];
     for (const g of groups) {
@@ -115,8 +152,11 @@ export function buildPresetsPanel(app) {
     let i = 0;
     const step = () => {
       if (my !== job || !app.img || !root.isConnected) return;
-      const c = cards[i++];
+      let c = cards[i++];
+      // Cards in collapsed sections wait until their section opens.
+      while (c && (c.done || !c.cv.offsetParent)) c = cards[i++];
       if (!c) { app.requestRender(); return; }
+      c.done = true;
       const params = withSettings(app.params, app.presetLook(c.preset), app.img.aspect);
       params.masks = [];
       const img = app.renderSmall(params, 144);
@@ -130,6 +170,8 @@ export function buildPresetsPanel(app) {
     requestAnimationFrame(step);
   }
 
+  // Opening a section renders the thumbnails it shows.
+  root.addEventListener('click', (e) => { if (e.target.closest('.sec-head')) requestAnimationFrame(renderThumbs); });
   build();
-  return { el: root, refresh: () => {}, rebuild: build, thumbs: renderThumbs };
+  return { el: root, refresh: () => {}, rebuild: build, thumbs: () => { cards.forEach((c) => { c.done = false; }); renderThumbs(); } };
 }

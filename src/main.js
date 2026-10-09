@@ -1679,8 +1679,10 @@ function toneBaseOf(e) {
   }
   return baseById.get(e.id) || null;
 }
-const adapts = (p) => p === AUTO_LOOK || (prefs.adaptivePresets !== false && (p.group !== 'Your presets' || p.adaptive));
+const adapts = (p) => p === AUTO_LOOK || (!p.partial && prefs.adaptivePresets !== false && (p.group !== 'Your presets' || p.adaptive));
 function presetLook(p, e = app.images[app.cur]) {
+  // Imported Lightroom presets change only what they contain, on top of the photo's own edit.
+  if (p.partial) return deepMerge(developSettings(e === app.images[app.cur] && app.params ? app.params : editOf(e)), p.settings);
   return adapts(p) ? adapt(p.settings, toneBaseOf(e)) : p.settings;
 }
 // Saving the open photo's look as an adaptive preset keeps only what it adds to the photo's base.
