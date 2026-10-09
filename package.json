@@ -1,6 +1,6 @@
 {
   "name": "rembrandt",
-  "version": "0.3.9",
+  "version": "0.3.10",
   "private": true,
   "description": "Rembrandt: a free, source-available photo editor for RAW and JPEG, with on-device AI.",
   "license": "GPL-3.0-or-later",
