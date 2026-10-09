@@ -66,6 +66,23 @@ export function aiNeeds(p) {
 }
 export const objectComps = (m) => m.comps.filter((c) => c.type === 'object' && c.point).slice(0, 4);
 
+// Faces in a photo: [[ [x, y] × 478 ] per face], x and y 0–1 of the photo. Uses a larger input than
+// the other analyses so faces in wider shots are still found.
+export async function detectFaces(e) {
+  if (e.ai?.faces) return e.ai.faces;
+  let bm;
+  if (e.bitmap) {
+    const k = Math.min(1, 2048 / Math.max(e.bitmap.width, e.bitmap.height));
+    bm = await createImageBitmap(e.bitmap, { resizeWidth: Math.max(1, Math.round(e.bitmap.width * k)), resizeHeight: Math.max(1, Math.round(e.bitmap.height * k)), resizeQuality: 'high' });
+  } else bm = await inputBitmap(e);
+  const r = await call('face', bm);
+  const d = r.data, n = d[0], faces = [];
+  for (let k = 0; k < n; k++) faces.push(Array.from({ length: 478 }, (_, i) => [d[1 + (k * 478 + i) * 2], d[2 + (k * 478 + i) * 2]]));
+  e.ai ||= { objects: new Map() };
+  e.ai.faces = faces;
+  return faces;
+}
+
 export class AI {
   constructor() {
     this.engine = null;

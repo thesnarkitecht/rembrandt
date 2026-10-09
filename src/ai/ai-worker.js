@@ -32,6 +32,25 @@ async function loadModel(name) {
   return out;
 }
 
+// Face landmarks (MediaPipe Face Landmarker, 478 points per face), for blemish removal.
+let faceTask = null;
+async function faceLandmarker() {
+  return (faceTask ||= (async () => {
+    const fs = await files();
+    let buf;
+    const r = await fetch(MODELS + 'face.task');
+    if (r.ok) buf = new Uint8Array(await r.arrayBuffer());
+    else {
+      const t = await fetch(MODELS + 'face.task.b64.txt');
+      if (!t.ok) throw new Error('The face model is not available');
+      const bin = atob((await t.text()).trim());
+      buf = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+    }
+    return Vision.FaceLandmarker.createFromOptions(fs, { baseOptions: { modelAssetBuffer: buf, delegate: 'CPU' }, runningMode: 'IMAGE', numFaces: 8, minFaceDetectionConfidence: 0.4 });
+  })());
+}
+
 async function segmenter(name) {
   if (!tasks[name]) {
     tasks[name] = (async () => {
@@ -131,6 +150,16 @@ async function run(op, bitmap, point) {
       m = bg.map((v) => 1 - v);
     }
     return guided(L, m, w, h, r, 4e-4);
+  }
+  if (op === 'face') {
+    // [faces, then x, y (0–1) for each of 478 landmarks per face]
+    const fl = await faceLandmarker();
+    const res = fl.detect(bitmap);
+    const faces = res.faceLandmarks || [];
+    const out = new Float32Array(1 + faces.length * 478 * 2);
+    out[0] = faces.length;
+    faces.forEach((f, k) => f.slice(0, 478).forEach((p, i) => { out[1 + (k * 478 + i) * 2] = p.x; out[2 + (k * 478 + i) * 2] = p.y; }));
+    return out;
   }
   if (op === 'object') {
     const seg = await segmenter('object');

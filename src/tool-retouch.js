@@ -9,9 +9,11 @@ import { el, svgEl } from './util.js';
 import { slider, segmented, button, toggle } from './ui.js';
 import { A } from './geometry.js';
 import { findSource, imageOf, radii, pin, MAX_OPS } from './retouch.js';
+import { findSpots } from './blemish.js';
+import { detectFaces } from './ai/ai.js';
 
 // Tool settings shared by the overlay and the panel (new spots use them; the selected spot shows them).
-export const retouchState = { mode: 'heal', size: 0.02, feather: 0.5, opacity: 1, selected: -1, hide: false, tried: [] };
+export const retouchState = { mode: 'heal', size: 0.02, feather: 0.5, opacity: 1, selected: -1, hide: false, tried: [], keepMoles: true, sensitivity: 0.5, kept: [], keptFor: null };
 
 const ops = (app) => app.params.retouch || (app.params.retouch = []);
 const aspect = (app) => app.img?.aspect || 1.5;
@@ -67,6 +69,9 @@ export class RetouchOverlay {
   down(e, x, y) {
     if (e.button !== 0) return false;
     const S = retouchState;
+    // A kept mole: clicking it removes it after all.
+    const km = this.keptAt(x, y);
+    if (km >= 0) { healKept(this.app, km); return true; }
     const h = retouchState.hide ? null : this.hit(x, y);
     if (h) {
       S.selected = h.i; S.tried = [];
@@ -118,6 +123,12 @@ export class RetouchOverlay {
     this.app.drawOverlay();
   }
 
+  keptAt(x, y) {
+    const S = retouchState;
+    if (S.hide || S.keptFor !== this.app.images[this.app.cur]?.id) return -1;
+    return S.kept.findIndex((m) => { const [cx, cy] = this.css(m.u, m.v); return Math.hypot(x - cx, y - cy) <= Math.max(8, this.cssRadius(m)); });
+  }
+
   leave() { this.hover = null; this.app.drawOverlay(); }
   cursor(x, y) { return this.hit(x, y) ? 'move' : 'none'; }
 
@@ -144,6 +155,13 @@ export class RetouchOverlay {
         svg.append(g);
       });
     }
+    // Moles and beauty marks that automatic removal kept: dotted; click one to remove it too.
+    if (!S.hide && S.keptFor === this.app.images[this.app.cur]?.id) {
+      for (const m of S.kept) {
+        const [cx, cy] = this.css(m.u, m.v);
+        svg.append(svgEl('circle', { cx, cy, r: Math.max(5, this.cssRadius(m)), class: 'rt-kept' }));
+      }
+    }
     // The brush under the pointer, and a stroke being painted.
     const d = this.drag;
     const r = this.cssRadius({ radius: S.size });
@@ -159,6 +177,52 @@ export class RetouchOverlay {
 }
 
 // ---------------------------------------------------------------- actions
+
+// A Heal spot for an automatically found spot, with its source chosen like a hand-placed one.
+function healSpot(app, img, s) {
+  const op = { mode: 'heal', shape: 'spot', points: [[s.u, s.v]], radius: s.radius, feather: 0.6, opacity: 1, offset: [0, 0], auto: true };
+  op.offset = (img && findSource(img, op, ops(app), [])) || (() => { const [ru] = radii(op.radius, aspect(app)); return [s.u > 0.7 ? -3 * ru : 3 * ru, 0]; })();
+  ops(app).push(op);
+}
+
+// Automatic blemish removal (blemish.js): replaces earlier automatic spots on this photo.
+// Resolves { faces, healed, kept }.
+export async function autoBlemish(app) {
+  const S = retouchState, e = app.images[app.cur];
+  if (!e || !app.img) return { faces: 0, healed: 0, kept: 0 };
+  const faces = await detectFaces(e);
+  if (!faces.length) return { faces: 0, healed: 0, kept: 0 };
+  const img = sourceImage(app);
+  app.params.retouch = ops(app).filter((o) => !o.auto);
+  const kept = [];
+  let healed = 0;
+  for (const face of faces) {
+    const { spots } = findSpots(img, face, { sensitivity: S.sensitivity });
+    spots.sort((a, b) => b.strength - a.strength);
+    for (const sp of spots) {
+      if (sp.kind === 'mole' && S.keepMoles) { kept.push(sp); continue; }
+      if (ops(app).length >= MAX_OPS) break;
+      healSpot(app, img, sp);
+      healed++;
+    }
+  }
+  // A spot split in two (a pimple's darker core, say) shouldn't be both healed and kept.
+  const auto = ops(app).filter((o) => o.auto);
+  const overlaps = (m) => auto.some((o) => Math.hypot((o.points[0][0] - m.u) * aspect(app), o.points[0][1] - m.v) < (o.radius + m.radius) * Math.max(1, aspect(app)));
+  const keptOnly = kept.filter((m) => !overlaps(m));
+  kept.length = 0; kept.push(...keptOnly);
+  S.kept = kept; S.keptFor = e.id; S.selected = -1;
+  app.requestRender(); app.commit(); app.refreshPanel(); app.drawOverlay();
+  return { faces: faces.length, healed, kept: kept.length };
+}
+
+function healKept(app, i) {
+  const S = retouchState, m = S.kept[i];
+  if (!m) return;
+  healSpot(app, sourceImage(app), m);
+  S.kept.splice(i, 1);
+  app.requestRender(); app.commit(); app.refreshPanel(); app.drawOverlay();
+}
 
 export function newSourceForSelected(app) {
   const S = retouchState, op = ops(app)[S.selected];
@@ -200,8 +264,27 @@ export function buildRetouchPanel(app) {
     newSrc.disabled = del.disabled = !sel();
     clear.disabled = !n;
   }
+  // Automatic blemish removal for portraits.
+  const keep = toggle('Keep moles and beauty marks', () => S.keepMoles, (v) => { S.keepMoles = v; });
+  const sens = slider({ label: 'Sensitivity', min: 0, max: 100, def: 50, get: () => S.sensitivity * 100, set: (v) => { S.sensitivity = v / 100; } });
+  const autoNote = el('div', { class: 'hint' });
+  const auto = button('Remove blemishes', async () => {
+    auto.disabled = true;
+    autoNote.textContent = 'Finding faces and blemishes…';
+    try {
+      const r = await autoBlemish(app);
+      autoNote.textContent = !r.faces ? 'No face found in this photo.'
+        : `${r.healed} blemish${r.healed === 1 ? '' : 'es'} healed${r.kept ? ` · ${r.kept} mole${r.kept === 1 ? '' : 's'} kept (dotted circles: click one to remove it too)` : ''}. Each is a normal spot you can move or delete.`;
+    } catch (err) {
+      console.error(err);
+      autoNote.textContent = `Couldn’t run: ${err.message}`;
+    } finally { auto.disabled = false; }
+  }, 'sm primary', 'sparkle');
   refresh();
   const root = el('div', { class: 'panel-view retouch' },
+    el('div', { class: 'panel-section' },
+      el('div', { class: 'subhead' }, el('span', {}, 'Portraits')),
+      el('div', { class: 'row-btns' }, auto), keep.el, sens.el, autoNote),
     el('div', { class: 'panel-section' },
       el('p', { class: 'hint rt-intro' }, 'Click a spot to remove it, or drag to paint over a larger area. Rembrandt picks a matching source; drag the source circle to choose your own.'),
       el('div', { class: 'field' }, el('span', {}, 'Mode'), mode.el),

@@ -8,6 +8,7 @@ All run locally in the browser through MediaPipe Tasks (TFLite, WebAssembly). No
 | `subject-person.tflite` | people segmentation | `storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite` |
 | `subject-general.tflite` | 21-class scene segmentation (DeepLab v3) | `storage.googleapis.com/mediapipe-models/image_segmenter/deeplab_v3/float32/latest/deeplab_v3.tflite` |
 | `object.tflite` | click-to-select objects (MagicTouch) | `storage.googleapis.com/mediapipe-models/interactive_segmenter/magic_touch/float32/latest/magic_touch.tflite` |
+| `face.task` | face landmarks for Remove blemishes (skin area, eyes, brows, lips) | `storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task` |
 
 ## Super Resolution
 
