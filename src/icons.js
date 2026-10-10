@@ -54,6 +54,7 @@ export const ICON = {
   mic: s('<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/>'),
   enlarge: s('<path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/>'),
   sparkle: s('<path d="M12 3.5 13.8 9 19.5 10.8 13.8 12.6 12 18.3 10.2 12.6 4.5 10.8 10.2 9z"/><path d="M19 3v3M17.5 4.5h3M5 17v3M3.5 18.5h3"/>'),
+  person: s('<circle cx="9" cy="8" r="3"/><path d="M3.5 19.5c.5-3.3 2.6-5 5.5-5s5 1.7 5.5 5"/><circle cx="16.5" cy="9" r="2.5"/><path d="M16 14.6c2.6-.2 4.2 1.4 4.6 4.4"/>'),
   subject: s('<circle cx="12" cy="8" r="3.5"/><path d="M5 20.5c.6-3.9 3.3-6 7-6s6.4 2.1 7 6"/>'),
   background: s('<rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="12" cy="10" r="2.6" fill="currentColor" fill-opacity=".25"/><path d="M7.5 20c.5-2.8 2.2-4.3 4.5-4.3s4 1.5 4.5 4.3" fill="currentColor" fill-opacity=".25"/>'),
   object: s('<path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16"/><path d="m9 9 7 2.6-3 1.1-1.1 3z"/>'),

@@ -234,6 +234,7 @@ export function buildLibrary(app, api) {
           n === 1 ? { label: 'Make a virtual copy (⌘ \')', icon: 'copy', onClick: () => api.makeVirtualCopy(ids()[0]) } : null,
           n === 1 ? { label: 'Find similar', icon: 'search', onClick: () => api.findSimilar(ids()[0]) } : null,
           { label: n > 1 ? `AI Denoise ${n} photos` : 'AI Denoise', icon: 'sparkle', onClick: () => { api.denoisePhotos(ids()); app.toast(`AI Denoise: ${n === 1 ? 'added' : `${n} photos added`} to background work`); } },
+          n > 1 ? { label: `Pick the best of ${n}`, icon: 'star', onClick: () => { api.cullPhotos(ids()); app.toast('Picking the best: added to background work'); } } : null,
           n > 1 ? { sep: true } : null,
           n > 1 ? { head: 'Merge' } : null,
           n > 1 ? { label: 'HDR (bracketed exposures)', icon: 'sun', onClick: () => api.mergePhotos(ids(), 'hdr') } : null,

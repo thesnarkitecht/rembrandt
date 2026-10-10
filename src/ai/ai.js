@@ -3,6 +3,7 @@
 // Copyright © 2026 the Rembrandt contributors. Licensed under the GNU GPL v3 or later (see LICENSE).
 
 import { estimateBlur } from './refocus.js';
+import { landmarkParts, unionOf, SEG_PARTS } from '../people.js';
 
 const ANALYSIS_LONG = 1024;
 
@@ -60,11 +61,13 @@ export function aiNeeds(p) {
     for (const c of m.comps) {
       if (c.type === 'subject') need.add('subject');
       if (c.type === 'depth') need.add('depth');
+      if (c.type === 'person') need.add('people');
     }
   }
   return need;
 }
-export const objectComps = (m) => m.comps.filter((c) => c.type === 'object' && c.point).slice(0, 4);
+// Masks made from AI maps of their own (a clicked object, people parts) share one RGBA texture.
+export const objectComps = (m) => m.comps.filter((c) => (c.type === 'object' && c.point) || (c.type === 'person' && c.parts?.length)).slice(0, 4);
 
 // Faces in a photo: [[ [x, y] × 478 ] per face], x and y 0–1 of the photo. Uses a larger input than
 // the other analyses so faces in wider shots are still found.
@@ -115,6 +118,7 @@ export class AI {
     const job = (async () => {
       this.busy++; this.emit();
       try {
+        if (op === 'people') { e.ai.people = await this.people(e); if (e === this.entry) this.upload(); return e.ai.people; }
         const r = await call(op, await inputBitmap(e), point);
         const map = { w: r.w, h: r.h, data: r.data, u8: toU8(r.data) };
         if (op === 'object') e.ai.objects.set(key, map);
@@ -133,11 +137,24 @@ export class AI {
     return job;
   }
 
+  // People parts: { w, h, maps: { part: Uint8Array } } at the analysis size.
+  async people(e) {
+    const bm = await inputBitmap(e);
+    const { width: w, height: h } = bm;
+    const c = new OffscreenCanvas(w, h), x = c.getContext('2d', { willReadFrequently: true });
+    x.drawImage(bm, 0, 0);
+    const rgba = x.getImageData(0, 0, w, h).data;
+    const [r, faces] = await Promise.all([call('people', bm), detectFaces(e)]);
+    const maps = landmarkParts(faces, w, h, rgba);
+    SEG_PARTS.forEach((p, k) => { maps[p] = toU8(r.data.subarray(k * w * h, (k + 1) * w * h)); });
+    return { w, h, maps, faces: faces.length };
+  }
+
   // Run everything the settings need that is not there yet.
   async ensure(e, p) {
     const ops = [...aiNeeds(p)].filter((op) => !this.has(e, op));
     const objs = [];
-    for (const m of p.masks || []) for (const c of objectComps(m)) objs.push(c.point);
+    for (const m of p.masks || []) for (const c of objectComps(m)) if (c.type === 'object') objs.push(c.point);
     await Promise.all([...ops.map((op) => this.analyze(e, op)), ...objs.map((pt) => this.analyze(e, 'object', pt))]);
     if (p.ai?.refocus?.amount > 0 && e.sample) {
       const key = e.ai?.subject ? 'subject' : 'all';
@@ -203,11 +220,14 @@ export class AI {
   // RGBA texture with up to four clicked objects of mask `m` (one per channel).
   objectTexture(m) {
     const comps = objectComps(m);
-    const maps = comps.map((c) => this.entry?.ai?.objects.get(`${c.point[0].toFixed(4)},${c.point[1].toFixed(4)}`));
-    if (!maps.length || maps.some((x) => !x)) return null;
-    const key = comps.map((c) => c.point.join(',')).join('|');
+    const key = comps.map((c) => (c.type === 'person' ? c.parts.join('+') : c.point.join(','))).join('|');
     const cur = this.objTex.get(m.id);
     if (cur && cur.key === key) return cur.tex;
+    const ai = this.entry?.ai;
+    const maps = comps.map((c) => c.type === 'person'
+      ? ai?.people && { w: ai.people.w, h: ai.people.h, u8: unionOf(ai.people, c.parts) }
+      : ai?.objects.get(`${c.point[0].toFixed(4)},${c.point[1].toFixed(4)}`));
+    if (!maps.length || maps.some((x) => !x)) return null;
     const { w, h } = maps[0];
     const data = new Uint8Array(w * h * 4);
     maps.forEach((mp, ch) => { for (let i = 0; i < w * h; i++) data[i * 4 + ch] = mp.u8[i]; });

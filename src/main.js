@@ -10,7 +10,8 @@ import { refreshUnlock, isUnlocked } from './unlock.js';
 import { syncStoreSubscriptions } from './subscriptions.js';
 import { initTheme, onThemeChange, cssRGB } from './theme.js';
 import { localAdjustments } from './local-adjust.js';
-import { ai } from './ai/ai.js';
+import { ai, detectFaces } from './ai/ai.js';
+import { focusOf, sharpOf, FOCUS_PX, decide as cullDecide } from './cull.js';
 import { lensPass, chain, setBackgroundImage, hasBackgroundImage, quality as lensQuality, lensActive } from './ai/lens.js';
 import { refocusPass, refocusActive } from './ai/refocus.js';
 import { studioPass, motionPass } from './ai/studio.js';
@@ -1742,6 +1743,7 @@ function photoMenu(ids, anchor, extra = []) {
     { label: 'Apply preset…', icon: 'presets', onClick: () => presetMenu(ids, anchor) },
     { label: n > 1 ? `Reset edits on ${n} photos` : 'Reset edits', icon: 'reset', onClick: () => resetEdits(ids) },
     n === 1 ? { label: 'Find similar', icon: 'search', onClick: () => findSimilar(ids[0]) } : null,
+    n > 1 ? { label: `Pick the best of ${n}`, icon: 'star', onClick: () => queueCull(ids) } : null,
     ...extra,
   ]);
 }
@@ -1750,6 +1752,47 @@ function presetMenu(ids, anchor) {
   for (const p of allPresets()) (groups[p.group || 'Your presets'] ||= []).push(p);
   popMenu(anchor, Object.entries(groups).flatMap(([g, list], i) => [i ? { sep: true } : null, { head: g }, ...list.map((p) => ({ label: p.name, onClick: () => applyPresetTo(ids, p) }))]));
 }
+// Culling (cull.js) as a background job: per photo, sharpness and eyes from a 1024 px decode, then
+// the best of each burst is picked and clear misses rejected. One Undo puts every flag back.
+function queueCull(ids) {
+  return addJob({ kind: 'cull', title: `Pick the best · ${plural(ids.length)}`, when: 'now', desc: { ids }, run: (job) => runCull(ids, job) });
+}
+async function runCull(ids, job) {
+  const list = byIds(ids), items = [];
+  const takenAt = (e) => (e.meta?.timestamp ? e.meta.timestamp * 1000 : e.lastModified || 0);
+  for (const [k, e] of list.entries()) {
+    job.setProgress(k / list.length, `${k + 1} of ${list.length}`);
+    await breathe(job);
+    const file = await originalFile(e).catch(() => null);
+    if (!file) continue;
+    const d = await decodeFile(file).catch(() => null);
+    if (!d) continue;
+    const s = Math.min(1, 1024 / Math.max(d.bitmap.width, d.bitmap.height));
+    const w = Math.max(1, Math.round(d.bitmap.width * s)), h = Math.max(1, Math.round(d.bitmap.height * s));
+    const bm = await createImageBitmap(d.bitmap, { resizeWidth: w, resizeHeight: h, resizeQuality: 'high' });
+    const faces = await detectFaces({ bitmap: bm, ai: null }).catch(() => []);
+    bm.close?.();
+    // The focus box from the full-size decode, resampled to the same width for every photo.
+    const { box, eyes } = focusOf(faces, d.bitmap.width / d.bitmap.height);
+    const W = d.bitmap.width, H = d.bitmap.height, bw = (box[2] - box[0]) * W, bh = (box[3] - box[1]) * H;
+    const cw = FOCUS_PX, ch = Math.max(8, Math.round(FOCUS_PX * bh / bw));
+    const x = new OffscreenCanvas(cw, ch).getContext('2d', { willReadFrequently: true });
+    x.imageSmoothingQuality = 'high';
+    x.drawImage(d.bitmap, box[0] * W, box[1] * H, bw, bh, 0, 0, cw, ch);
+    d.bitmap.close?.();
+    const m = { sharp: sharpOf(x.getImageData(0, 0, cw, ch).data, cw, ch), eyes };
+    items.push({ id: e.id, at: takenAt(e), sig: await signatureOf(e), flag: e.flag || 0, ...m });
+  }
+  const r = cullDecide(items.filter((it) => it.sig), similarity, SIMILAR_THRESHOLD);
+  const before = new Map(byIds([...r.pick, ...r.reject]).map((e) => [e.id, e.flag || 0]));
+  if (r.pick.length) setFlag(r.pick, 1);
+  if (r.reject.length) setFlag(r.reject, -1);
+  app.toast(`${r.groups} group${r.groups === 1 ? '' : 's'}: ${r.pick.length} picked, ${r.reject.length} rejected (blurry or eyes closed)`, {
+    ms: 10000,
+    action: (r.pick.length || r.reject.length) && { label: 'Undo', onClick: () => { for (const [id, f] of before) setFlag([id], f); } },
+  });
+}
+
 // AI Denoise as a background job: decode, denoise in GPU-sized tiles, write the DNG, import it with
 // the original's edits.
 function queueDenoise(id, strength, when) {
@@ -2551,7 +2594,7 @@ function boot() {
     app.engine.hostPasses = chain(refocusPass, localAdjustments, studioPass, lensPass, motionPass);
     refocusPass.wake = () => app.requestRender();
     // Test hook: ?debug exposes the app to automated checks.
-    if (new URLSearchParams(location.search).has('debug')) { window.__rembrandt = app; app._import = importApi; app._open = openInEditor; app._similar = findSimilar; app._merge = mergePhotos; app._watch = applyWatch; app._library = () => library; }
+    if (new URLSearchParams(location.search).has('debug')) { window.__rembrandt = app; app._import = importApi; app._open = openInEditor; app._similar = findSimilar; app._merge = mergePhotos; app._watch = applyWatch; app._library = () => library; app._cull = runCull; }
     if (!prefs.since) { prefs.since = Date.now(); savePrefs(); }   // for "Since you switched" in Settings
     app.engine.sourcePasses = retouchPasses;
     ai.onChange(() => { if (app.state.tool === 'ai' || app.state.tool === 'masks') app.refreshPanel(); app.requestRender(); });
@@ -2574,7 +2617,7 @@ function boot() {
   app.updateUndo();
   app.buildPanel();
   library = buildLibrary(app, {
-    openInEditor, removePhotos, deletePhotos, keepOnDevice, syncAnyway, syncOn: () => cloud.cloud.available, setRating, setFlag, setLabel, editKeywords, makeVirtualCopy, findSimilar, mergePhotos, denoisePhotos: (ids) => app.denoise({ ids, strength: denoiseStrength() }), syncSettings, exportPhotos,
+    openInEditor, removePhotos, deletePhotos, keepOnDevice, syncAnyway, syncOn: () => cloud.cloud.available, setRating, setFlag, setLabel, editKeywords, makeVirtualCopy, findSimilar, mergePhotos, cullPhotos: queueCull, denoisePhotos: (ids) => app.denoise({ ids, strength: denoiseStrength() }), syncSettings, exportPhotos,
     copyEdits: copyEditsFrom, pasteEdits: pasteEditsTo, resetEdits, photoMenu, presetMenu, pointAnchor, clipboard: batch.clipboard, describeClip: batch.describeClip,
     importFiles: () => openImporter(),
     syncFolder: (f) => (f ? syncFolder(f) : addSyncedFolder()),
@@ -2603,6 +2646,7 @@ function boot() {
     // Background work: kinds that can come back after a restart, then last session's queue.
     registerKind('denoise', (d, job) => denoisePhoto(d.id, d.strength, job));
     registerKind('merge', (d, job) => runMerge(d.ids, d.kind, job));
+    registerKind('cull', (d, job) => runCull(d.ids, job));
     restoreJobs();
     sweepFolders(true);
     setInterval(() => sweepFolders(false), 60000);

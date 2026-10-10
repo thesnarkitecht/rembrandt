@@ -6,10 +6,11 @@ import { icon } from './icons.js';
 import { A } from './geometry.js';
 import { newMask, newComponent, maskAdjDefaults, COMP_LABELS } from './params.js';
 import { brushCanvas, brushAppend, brushForget } from './brush.js';
+import { PARTS } from './people.js';
 
 const TYPES = ['brush', 'linear', 'radial', 'color', 'luminance', 'all'];
-const AI_TYPES = ['subject', 'background', 'object', 'depth'];
-const SHORT = { brush: 'Brush', linear: 'Linear', radial: 'Radial', color: 'Color', luminance: 'Tone', all: 'Everything', subject: 'Subject', background: 'Background', object: 'Object', depth: 'Depth' };
+const AI_TYPES = ['subject', 'background', 'person', 'object', 'depth'];
+const SHORT = { brush: 'Brush', linear: 'Linear', radial: 'Radial', color: 'Color', luminance: 'Tone', all: 'Everything', subject: 'Subject', background: 'Background', object: 'Object', depth: 'Depth', person: 'People' };
 const compLabel = (c) => (c.type === 'subject' && c.invert ? 'Background' : COMP_LABELS[c.type]);
 const compIcon = (c) => (c.type === 'subject' && c.invert ? 'background' : c.type);
 const MODE_ICON = { add: 'plus', subtract: 'minus', intersect: 'intersect' };
@@ -287,6 +288,21 @@ function compSettings(app, m, c, reg) {
         ? 'Everything except the main subject, found by AI on this device.'
         : 'The main subject — people first, otherwise the most prominent object — found by AI on this device.')));
       break;
+    case 'person': {
+      // Parts of the people in the photo, any combination (like Lightroom's People mask).
+      const chips = el('div', { class: 'chips' }, PARTS.map(([part, label]) => {
+        const on = c.parts.includes(part);
+        return el('button', { class: 'chip' + (on ? ' on' : ''), 'aria-pressed': String(on), onclick: () => {
+          c.parts = on ? c.parts.filter((x) => x !== part) : [...c.parts, part];
+          app.commit(); app.aiEnsure(); app.requestRender(); app.rebuildPanel();
+        } }, label);
+      }));
+      const n = app.images[app.cur]?.ai?.people?.faces;
+      box.append(chips, el('div', { class: 'hint' }, app.aiStatus('people', n === 0
+        ? 'No face found, so eyes, brows, lips and teeth select nothing. Hair, skin and clothes still work.'
+        : 'Pick the parts to adjust. Found by AI on this device.')));
+      break;
+    }
     case 'object':
       box.append(el('div', { class: 'hint' }, c.point ? app.aiStatus('object', 'Click another spot on the photo to select a different object.') : 'Click the object you want to select.'));
       break;
@@ -430,7 +446,7 @@ export class MaskOverlay {
       app.rebuildPanel();
       return true;
     }
-    if (c.type === 'all' || c.type === 'subject' || c.type === 'depth') return false;
+    if (c.type === 'all' || c.type === 'subject' || c.type === 'depth' || c.type === 'person') return false;
     const h = this.hit(c, x, y);
     if (h) {
       this.drag = { type: 'handle', id: h.id, start: [X, Y], c0: { ...c } };

@@ -104,7 +104,7 @@ export function maskAdjDefaults() {
 export const COMP_LABELS = {
   brush: 'Brush', linear: 'Linear gradient', radial: 'Radial gradient',
   color: 'Color range', luminance: 'Luminance range', all: 'Entire image',
-  subject: 'Subject', background: 'Background', object: 'Object', depth: 'Depth range',
+  subject: 'Subject', background: 'Background', object: 'Object', depth: 'Depth range', person: 'People',
 };
 
 export function newComponent(type, aspect = 1.5, mode = 'add') {
@@ -117,6 +117,7 @@ export function newComponent(type, aspect = 1.5, mode = 'add') {
     case 'subject': return base;
     case 'background': return { ...base, type: 'subject', invert: true };
     case 'object': return { ...base, point: null };
+    case 'person': return { ...base, parts: ['faceSkin', 'bodySkin'] };
     case 'depth': return { ...base, near: 100, far: 55, feather: 15 };
     default: return base;
   }

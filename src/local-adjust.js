@@ -128,7 +128,7 @@ void main() {
   o = vec4(res, uShowOverlay == 1 ? w : inC.a);
 }`;
 
-const TYPE = { all: 0, linear: 1, radial: 2, brush: 3, luminance: 4, color: 5, subject: 6, depth: 7, object: 8 };
+const TYPE = { all: 0, linear: 1, radial: 2, brush: 3, luminance: 4, color: 5, subject: 6, depth: 7, object: 8, person: 8 };
 const MODE = { add: 0, subtract: 1, intersect: 2 };
 
 function compPQ(c) {
@@ -156,7 +156,7 @@ export function maskUniforms(m, aspect) {
     mode[i] = i === 0 ? 0 : MODE[c.mode] ?? 0;
     inv[i] = c.invert ? 1 : 0;
     let [p, q] = unpicked ? [[9, 9, 0, 0.001], [0, 0, 0, 0]] : compPQ(c);
-    if (c.type === 'object') p = [Math.max(0, objs.indexOf(c)), objTex && objs.includes(c) ? 1 : 0, 0, 0];
+    if (c.type === 'object' || c.type === 'person') p = [Math.max(0, objs.indexOf(c)), objTex && objs.includes(c) ? 1 : 0, 0, 0];
     P.set(p, i * 4);
     Q.set(q, i * 4);
   });

@@ -2,6 +2,8 @@
 //   depth   — monocular relative depth (MiDaS-style, near = 1)
 //   subject — main subject probability (people first, then a 21-class scene segmenter)
 //   object  — interactive "click to select" segmentation
+//   people  — hair, skin and clothes (multiclass selfie segmenter)
+//   face    — face landmarks
 // All maps are refined with a fast guided filter using the photo's luminance as guide, so edges
 // follow the image. Output: Float32Array in [0, 1], same size as the input bitmap.
 /* global Vision */
@@ -123,6 +125,19 @@ function normalize(a, lo = 0.01, hi = 0.99) {
   return out;
 }
 
+// Bilinear resize of a float map.
+function resize(m, mw, mh, w, h) {
+  const out = new Float32Array(w * h);
+  for (let y = 0; y < h; y++) {
+    const fy = Math.min(mh - 1, Math.max(0, (y + 0.5) * mh / h - 0.5)), y0 = Math.floor(fy), y1 = Math.min(mh - 1, y0 + 1), ty = fy - y0;
+    for (let x = 0; x < w; x++) {
+      const fx = Math.min(mw - 1, Math.max(0, (x + 0.5) * mw / w - 0.5)), x0 = Math.floor(fx), x1 = Math.min(mw - 1, x0 + 1), tx = fx - x0;
+      out[y * w + x] = (m[y0 * mw + x0] * (1 - tx) + m[y0 * mw + x1] * tx) * (1 - ty) + (m[y1 * mw + x0] * (1 - tx) + m[y1 * mw + x1] * tx) * ty;
+    }
+  }
+  return out;
+}
+
 const mask0 = (r, i = 0) => { const m = r.confidenceMasks[i]; return { data: Float32Array.from(m.getAsFloat32Array()), w: m.width, h: m.height }; };
 const closeAll = (r) => r.confidenceMasks?.forEach((m) => m.close());
 
@@ -150,6 +165,20 @@ async function run(op, bitmap, point) {
       m = bg.map((v) => 1 - v);
     }
     return guided(L, m, w, h, r, 4e-4);
+  }
+  if (op === 'people') {
+    // Multiclass selfie segmenter: background, hair, body skin, face skin, clothes, other.
+    // Out: hair, body skin, face skin, clothes, then the whole person, each w × h.
+    const seg = await segmenter('people');
+    const res = seg.segment(bitmap);
+    const planes = [1, 2, 3, 4].map((k) => mask0(res, k).data);
+    const bg = mask0(res, 0).data;
+    closeAll(res);
+    const mw = res.confidenceMasks?.[0]?.width ?? w;
+    planes.push(bg.map((v) => 1 - v));
+    const out = new Float32Array(5 * w * h);
+    planes.forEach((m, k) => out.set(guided(L, m.length === w * h ? m : resize(m, mw, m.length / mw, w, h), w, h, r, 4e-4), k * w * h));
+    return out;
   }
   if (op === 'face') {
     // [faces, then x, y (0–1) for each of 478 landmarks per face]
