@@ -71,7 +71,7 @@ export function buildLibrary(app, api) {
   }
   const setView = (v) => { similar = null; prefs.view = v; savePrefs(); selected.clear(); side.parentElement?.classList.remove('side-open'); refresh(); api.stripChanged(); content.scrollTop = 0; };
   const ids = () => [...selected];
-  const keysOf = (list) => app.images.filter((x) => list.includes(x.id)).map((x) => x.key);
+  const keysOf = (list) => { const want = new Set(list); return app.images.filter((x) => want.has(x.id)).map((x) => x.key); };
 
   // ---------------------------------------------------------------- sidebar
   const side = el('nav', { class: 'lib-side', 'aria-label': 'Collections' });
@@ -293,7 +293,7 @@ export function buildLibrary(app, api) {
   const root = el('section', { class: 'library' + (prefs.sidebar ? '' : ' no-side'), id: 'library' }, side, main);
 
   function visible() {
-    if (similar) return similar.list.filter((e) => app.images.includes(e));
+    if (similar) { const have = new Set(app.images); return similar.list.filter((e) => have.has(e)); }
     let list = app.images.slice();
     const a = albumView();
     const f = folderView();
@@ -414,10 +414,20 @@ export function buildLibrary(app, api) {
     return t;
   }
 
+  // Tiles are built a few rows at a time as they come near the viewport: a 20,000-photo library
+  // would otherwise make 400,000 DOM nodes on every refresh. Placeholders keep the exact height.
+  const fillers = new Map();   // photo id -> builds the block holding its tile
+  const near = new IntersectionObserver((es) => { for (const x of es) if (x.isIntersecting) x.target.fill(); }, { root: content, rootMargin: '1500px 0px' });
+  const tileNode = (id) => { fillers.get(id)?.(); return content.querySelector(`[data-id="${id}"]`); };
+
   function renderPhotos(list) {
     const width = Math.max(200, content.clientWidth - 32);
     const gap = 4;
     const frag = document.createDocumentFragment();
+    near.disconnect();
+    fillers.clear();
+    let y = 0;
+    const eager = content.scrollTop + content.clientHeight + 1500;
     for (const g of groups(list)) {
       const allOn = g.items.every((e) => selected.has(e.id));
       const sec = el('section', { class: 'ph-group' + (allOn ? ' all-on' : '') });
@@ -425,12 +435,32 @@ export function buildLibrary(app, api) {
         sec.append(el('div', { class: 'ph-group-head' },
           el('button', { class: 'ph-check group', 'aria-label': `Select ${g.label}`, onclick: () => { g.items.forEach((e) => (allOn ? selected.delete(e.id) : selected.add(e.id))); refresh(); } }, icon('check')),
           el('h2', {}, g.label), el('span', { class: 'lib-count' }, String(g.items.length))));
+        y += 40;
       }
-      for (const r of layoutRows(g.items, width, prefs.size, gap)) {
-        const row = el('div', { class: 'ph-row', style: { height: `${Math.round(r.h)}px` } });
-        for (const [e, ar] of r.items) row.append(tile(e, Math.floor(r.h * ar), Math.round(r.h)));
-        sec.append(row);
+      const rows = layoutRows(g.items, width, prefs.size, gap);
+      for (let i = 0; i < rows.length; i += 8) {
+        const chunk = rows.slice(i, i + 8);
+        // The group's last row margin collapses into the group's own, so it doesn't count.
+        const h = chunk.reduce((a, r) => a + Math.round(r.h) + gap, 0) - (i + 8 >= rows.length ? gap : 0);
+        const blk = el('div', { style: { height: `${h}px` } });
+        blk.fill = () => {
+          if (!blk.fill) return;
+          blk.fill = null;
+          near.unobserve(blk);
+          blk.style.height = '';
+          for (const r of chunk) {
+            const row = el('div', { class: 'ph-row', style: { height: `${Math.round(r.h)}px` } });
+            for (const [e, ar] of r.items) row.append(tile(e, Math.floor(r.h * ar), Math.round(r.h)));
+            blk.append(row);
+          }
+        };
+        for (const r of chunk) for (const [e] of r.items) fillers.set(e.id, () => blk.fill?.());
+        if (y < eager) blk.fill();
+        else near.observe(blk);
+        sec.append(blk);
+        y += h;
       }
+      y += 18;
       frag.append(sec);
     }
     content.append(frag);
@@ -478,7 +508,8 @@ export function buildLibrary(app, api) {
 
   function refresh() {
     if (prefs.view.startsWith('album:') && !albumView()) prefs.view = 'all';
-    for (const id of [...selected]) if (!app.images.some((e) => e.id === id)) selected.delete(id);
+    const ids = new Set(app.images.map((e) => e.id));
+    for (const id of selected) if (!ids.has(id)) selected.delete(id);
     const scroll = content.scrollTop;
     content.textContent = '';
     content.style.setProperty('--row', `${prefs.size}px`);
@@ -515,11 +546,11 @@ export function buildLibrary(app, api) {
       selected.add(list[n].id);
       anchor = list[n].id;
       refresh();
-      content.querySelector(`[data-id="${anchor}"]`)?.scrollIntoView({ block: 'nearest' });
+      tileNode(anchor)?.scrollIntoView({ block: 'nearest' });
     };
     // Up/down: the photo in the previous/next row closest horizontally.
     const vertical = (dir) => {
-      const node = content.querySelector(`[data-id="${anchor}"]`);
+      const node = tileNode(anchor);
       if (!node) return pick(0);
       const r = node.getBoundingClientRect(), cx = r.left + r.width / 2;
       let best = null, bestD = Infinity;
@@ -563,7 +594,7 @@ export function buildLibrary(app, api) {
     selection: () => ids(),
     showView: (v) => setView(v),
     showSimilar: (ref, list) => { similar = { ref, list }; selected.clear(); anchor = ref.id; refresh(); api.stripChanged(); content.scrollTop = 0; },
-    focusCurrent: () => { const n = content.querySelector('.ph.current'); n?.scrollIntoView({ block: 'nearest' }); },
+    focusCurrent: () => { const e = app.images[app.cur]; (e && tileNode(e.id))?.scrollIntoView({ block: 'nearest' }); },
     repaintStorage: () => api.paintStorage?.(storage),
   };
 }

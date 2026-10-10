@@ -698,14 +698,14 @@ syncCheck.onFlagged((e) => {
   refreshLibrary();
 });
 async function keepOnDevice(ids) {
-  const list = app.images.filter((e) => ids.includes(e.id));
+  const list = byIds(ids);
   await syncCheck.keepLocal(list);
   if (cloud.cloud.available) for (const e of list) cloud.deletePhoto(e.key);
   refreshLibrary();
   app.toast(`${list.length === 1 ? 'Kept' : `Kept ${list.length} photos`} on this device only`);
 }
 async function syncAnyway(ids) {
-  const list = app.images.filter((e) => ids.includes(e.id));
+  const list = byIds(ids);
   if (!list.length || !(await syncCheck.confirmSyncAnyway(list.length))) return;
   await syncCheck.allowSync(list);
   for (const e of list) {
@@ -1503,7 +1503,7 @@ function commitPendingDelete() {
 // Two clicks: every delete (the photo's trash button, the toolbar, the menus, the Delete key) asks in
 // a dialog in the middle of the screen first; after that there's still Undo for a few seconds.
 function deletePhotos(ids) {
-  const list = ids.map((id) => app.images.find((x) => x.id === id)).filter(Boolean);
+  const list = byIds(ids);
   if (!list.length) return;
   const n = list.length, one = n === 1;
   const dlg = el('dialog', { class: 'dlg confirm-delete' });
@@ -1561,18 +1561,18 @@ function touch(e, patch) {
   cloud.pushPhoto(e);
 }
 function setRating(ids, rating) {
-  for (const e of app.images) if (ids.includes(e.id)) { touch(e, { rating }); queueSidecar(e); }
+  for (const e of byIds(ids)) { touch(e, { rating }); queueSidecar(e); }
   refreshLibrary();
   renderStrip();
 }
 function setFlag(ids, flag) {
-  for (const e of app.images) if (ids.includes(e.id)) { touch(e, { flag }); queueSidecar(e); }
+  for (const e of byIds(ids)) { touch(e, { flag }); queueSidecar(e); }
   refreshLibrary();
   renderStrip();
 }
 // Colour label ('red' … 'purple', '' for none); the same label again clears it, as in Lightroom.
 function setLabel(ids, label) {
-  const list = app.images.filter((e) => ids.includes(e.id));
+  const list = byIds(ids);
   const clear = label && list.every((e) => e.label === label);
   for (const e of list) { touch(e, { label: clear ? '' : label }); queueSidecar(e); }
   refreshLibrary();
@@ -1580,7 +1580,7 @@ function setLabel(ids, label) {
 }
 // Keywords, typed comma-separated; they're searchable and written to XMP sidecars.
 function editKeywords(ids) {
-  const list = app.images.filter((e) => ids.includes(e.id));
+  const list = byIds(ids);
   if (!list.length) return;
   const common = (list[0].keywords || []).filter((k) => list.every((e) => (e.keywords || []).includes(k)));
   const text = prompt(list.length > 1 ? `Keywords for ${list.length} photos (comma-separated). Keywords not shown stay as they are.` : 'Keywords (comma-separated)', common.join(', '));
@@ -1615,7 +1615,7 @@ async function copyEditsFrom(id, choose = false) {
 
 // Changes the edits of many photos at once, with a single Undo for all of them.
 function changeEdits(ids, fn, message) {
-  const list = app.images.filter((e) => ids.includes(e.id));
+  const list = byIds(ids);
   if (!list.length) return;
   const cur = app.images[app.cur];
   const before = list.map((e) => [e, clone(editOf(e))]);
@@ -1651,7 +1651,7 @@ function resetEdits(ids) {
 async function applyPresetTo(ids, preset, { quiet } = {}) {
   // Photos never opened have no sample yet: measure them from their files first.
   if (adapts(preset)) {
-    const todo = app.images.filter((e) => ids.includes(e.id) && !toneBaseOf(e));
+    const todo = byIds(ids).filter((e) => !toneBaseOf(e));
     if (todo.length > 3 && !quiet) app.toast(`Fitting “${preset.name}” to ${plural(todo.length)}…`);
     for (const e of todo) {
       await whenQuiet();
@@ -1700,17 +1700,18 @@ function syncSettings(ids) {
 }
 
 // Thumbnails for photos whose edits changed without opening them, rendered one by one in the background.
-const thumbQueue = [];
+const thumbQueue = new Set();
 let thumbBusy = false;
 function refreshThumbs(list) {
-  for (const e of list) if (!thumbQueue.includes(e)) thumbQueue.push(e);
+  for (const e of list) thumbQueue.add(e);
   if (!thumbBusy) runThumbs();
 }
 async function runThumbs() {
   thumbBusy = true;
-  while (thumbQueue.length) {
+  while (thumbQueue.size) {
     await whenQuiet();
-    const e = thumbQueue.shift();
+    const [e] = thumbQueue;
+    thumbQueue.delete(e);
     try {
       const f = e.file || (await catalog.getFile(e.id)) || (e.src ? await folders.fileFor(e.src, { ask: false }) : null);
       if (!f) continue;
@@ -1720,7 +1721,7 @@ async function runThumbs() {
       if (tb) { thumbURL(e, tb); catalog.putThumb(e.id, tb); }
       // Keep the photo in the editor on screen while working through the queue.
       if (app.view.mode === 'edit') await restoreEngine();
-      if (!thumbQueue.length || thumbQueue.length % 6 === 0) { refreshLibrary(); renderStrip(); }
+      if (!thumbQueue.size || thumbQueue.size % 6 === 0) { refreshLibrary(); renderStrip(); }
     } catch (err) { console.warn('thumbnail', err); }
   }
   await restoreEngine();
@@ -1824,7 +1825,7 @@ function mergePhotos(ids, kind, when) {
 async function runMerge(ids, kind, job) {
   const M = MERGES[kind];
   const takenAt = (e) => (e.meta?.timestamp ? e.meta.timestamp * 1000 : e.lastModified || 0);
-  const list = app.images.filter((e) => ids.includes(e.id)).sort((a, b) => takenAt(a) - takenAt(b) || a.name.localeCompare(b.name, undefined, { numeric: true }));
+  const list = byIds(ids).sort((a, b) => takenAt(a) - takenAt(b) || a.name.localeCompare(b.name, undefined, { numeric: true }));
   if (list.length < M.min) throw new Error(`${M.name} needs at least ${M.min} photos`);
   const worker = new Worker(new URL('./merge-worker.js', import.meta.url), { type: 'module' });
   let seq = 0;
@@ -1912,6 +1913,12 @@ async function findSimilar(id) {
 
 const pointAnchor = (ev) => ({ getBoundingClientRect: () => ({ left: ev.clientX, right: ev.clientX, top: ev.clientY, bottom: ev.clientY }) });
 
+// The library entries for a list of ids, in library order (a Set: selections can be thousands).
+function byIds(ids) {
+  const want = new Set(ids);
+  return app.images.filter((e) => want.has(e.id));
+}
+
 function visibleImages() {
   return library ? library.visible() : app.images;
 }
@@ -1920,10 +1927,11 @@ function renderStrip() {
   const strip = $('strip');
   strip.textContent = '';
   const list = visibleImages();
+  const index = new Map(app.images.map((e, i) => [e, i]));
   list.forEach((e) => {
-    const i = app.images.indexOf(e);
+    const i = index.get(e);
     const t = el('div', { class: 'thumb' + (i === app.cur ? ' on' : '') + (e.loading ? ' loading' : '') + (e.offline ? ' offline' : ''), title: e.name, tabindex: 0 },
-      e.thumbUrl ? el('img', { src: e.thumbUrl, alt: '', draggable: 'false' }) : el('span', { class: 'thumb-ph' }),
+      e.thumbUrl ? el('img', { src: e.thumbUrl, alt: '', draggable: 'false', loading: 'lazy' }) : el('span', { class: 'thumb-ph' }),
       e.rating ? el('span', { class: 'thumb-stars' }, '★'.repeat(e.rating)) : null,
       e.flag === 1 ? el('span', { class: 'thumb-flag pick' }) : e.flag === -1 ? el('span', { class: 'thumb-flag reject' }) : null,
     );
@@ -2543,7 +2551,7 @@ function boot() {
     app.engine.hostPasses = chain(refocusPass, localAdjustments, studioPass, lensPass, motionPass);
     refocusPass.wake = () => app.requestRender();
     // Test hook: ?debug exposes the app to automated checks.
-    if (new URLSearchParams(location.search).has('debug')) { window.__rembrandt = app; app._import = importApi; app._open = openInEditor; app._similar = findSimilar; app._merge = mergePhotos; app._watch = applyWatch; }
+    if (new URLSearchParams(location.search).has('debug')) { window.__rembrandt = app; app._import = importApi; app._open = openInEditor; app._similar = findSimilar; app._merge = mergePhotos; app._watch = applyWatch; app._library = () => library; }
     if (!prefs.since) { prefs.since = Date.now(); savePrefs(); }   // for "Since you switched" in Settings
     app.engine.sourcePasses = retouchPasses;
     ai.onChange(() => { if (app.state.tool === 'ai' || app.state.tool === 'masks') app.refreshPanel(); app.requestRender(); });

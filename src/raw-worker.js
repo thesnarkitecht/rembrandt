@@ -57,19 +57,19 @@ function preview(src, w, h, gain, long = 1024) {
       }
       const k = gain / (taps * taps * 65535);
       const R = r * k, G = g * k, Bb = b * k;
-      const s = rawLook([A[0][0] * R + A[0][1] * G + A[0][2] * Bb, A[1][0] * R + A[1][1] * G + A[1][2] * Bb, A[2][0] * R + A[2][1] * G + A[2][2] * Bb].map((v) => Math.max(v, 0)));
-      const pc = s.map(toneAt);
+      const s = rawLook([Math.max(0, A[0][0] * R + A[0][1] * G + A[0][2] * Bb), Math.max(0, A[1][0] * R + A[1][1] * G + A[1][2] * Bb), Math.max(0, A[2][0] * R + A[2][1] * G + A[2][2] * Bb)]);
+      // Plain scalars from here on: this runs for every preview pixel.
+      let q0 = toneAt(s[0]), q1 = toneAt(s[1]), q2 = toneAt(s[2]);
       const m = Math.max(s[0], s[1], s[2]);
-      let q = pc;
       if (m > 1e-7) {
         const mt = toneAt(m), k = mt / m;
         const t = Math.min(1, Math.max(0, (mt - 0.55) / 0.43)), f = t * t * (3 - 2 * t);
-        q = s.map((v, c) => v * k * (1 - f) + pc[c] * f);
+        q0 = s[0] * k * (1 - f) + q0 * f; q1 = s[1] * k * (1 - f) + q1 * f; q2 = s[2] * k * (1 - f) + q2 * f;
       }
       const o = (y * pw + x) * 4;
-      out[o] = enc(Math.max(0, B[0][0] * q[0] + B[0][1] * q[1] + B[0][2] * q[2])) * 255;
-      out[o + 1] = enc(Math.max(0, B[1][0] * q[0] + B[1][1] * q[1] + B[1][2] * q[2])) * 255;
-      out[o + 2] = enc(Math.max(0, B[2][0] * q[0] + B[2][1] * q[1] + B[2][2] * q[2])) * 255;
+      out[o] = enc(Math.max(0, B[0][0] * q0 + B[0][1] * q1 + B[0][2] * q2)) * 255;
+      out[o + 1] = enc(Math.max(0, B[1][0] * q0 + B[1][1] * q1 + B[1][2] * q2)) * 255;
+      out[o + 2] = enc(Math.max(0, B[2][0] * q0 + B[2][1] * q1 + B[2][2] * q2)) * 255;
       out[o + 3] = 255;
     }
   }

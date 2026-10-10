@@ -78,8 +78,9 @@ function probeJpeg(u8, off) {
 function findJpegs(u8) {
   const found = [];
   const n = u8.length - 3;
-  for (let i = 0; i < n; i++) {
-    if (u8[i] !== 0xff || u8[i + 1] !== 0xd8 || u8[i + 2] !== 0xff) continue;
+  // indexOf jumps between 0xFF bytes natively instead of stepping through the whole RAW in JS.
+  for (let i = u8.indexOf(0xff); i >= 0 && i < n; i = u8.indexOf(0xff, i + 1)) {
+    if (u8[i + 1] !== 0xd8 || u8[i + 2] !== 0xff) continue;
     const m = u8[i + 3];
     if (!((m >= 0xe0 && m <= 0xef) || m === 0xdb || m === 0xc4 || m === 0xc0 || m === 0xfe)) continue;
     const j = probeJpeg(u8, i);

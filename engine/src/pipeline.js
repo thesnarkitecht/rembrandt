@@ -159,8 +159,11 @@ export function estimateAirlight(rgb, w, h, radius = 2) {
     for (let k = -radius; k <= radius; k++) m = Math.min(m, tmp[cl(y + k, h - 1) * w + x]);
     dark[y * w + x] = m;
   }
-  const idx = Array.from({ length: n }, (_, i) => i).sort((a, b) => dark[b] - dark[a]);
-  const top = idx.slice(0, Math.max(1, Math.floor(n * 0.001)));
+  // The 0.1 % brightest: threshold from a native typed-array sort, no index array or comparator.
+  const k = Math.max(1, Math.floor(n * 0.001));
+  const t = Float32Array.from(dark).sort()[n - k];
+  const top = [];
+  for (let i = 0; i < n && top.length < k; i++) if (dark[i] >= t) top.push(i);
   let best = top[0], bestSum = -1;
   for (const i of top) {
     const s = rgb[i * 3] + rgb[i * 3 + 1] + rgb[i * 3 + 2];
