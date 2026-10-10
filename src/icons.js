@@ -51,6 +51,7 @@ export const ICON = {
   more: s('<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>'),
   clip: s('<path d="M3 20h18L12 4z"/>'),
   send: s('<path d="M12 19V5M6 11l6-6 6 6"/>'),
+  mic: s('<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/>'),
   enlarge: s('<path d="M14 4h6v6M10 20H4v-6M20 4l-6.5 6.5M4 20l6.5-6.5"/>'),
   sparkle: s('<path d="M12 3.5 13.8 9 19.5 10.8 13.8 12.6 12 18.3 10.2 12.6 4.5 10.8 10.2 9z"/><path d="M19 3v3M17.5 4.5h3M5 17v3M3.5 18.5h3"/>'),
   subject: s('<circle cx="12" cy="8" r="3.5"/><path d="M5 20.5c.6-3.9 3.3-6 7-6s6.4 2.1 7 6"/>'),

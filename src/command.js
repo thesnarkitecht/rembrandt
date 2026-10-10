@@ -11,6 +11,7 @@ import { buildEditPanel } from './panel-edit.js';
 import { buildAIPanel } from './ai/panel-ai.js';
 import { createStudio } from './studio.js';
 import { measureTilt, straightened } from './tool-crop.js';
+import { isTauri } from './platform.js';
 
 const c100 = (v) => clamp(Math.round(v), -100, 100);
 const add = (key, d, lo = -100, hi = 100) => (p, k) => ({ [key]: clamp(Math.round((p[key] + d * k) * 100) / 100, lo, hi) });
@@ -97,7 +98,7 @@ export function digits(t) {
 
 const UP = /\b(up|increase|raise|boost|more|add|plus|lift|brighter|higher|bump|push|warmer)\b/;
 const DOWN = /\b(down|decrease|lower|reduce|drop|less|minus|subtract|cut|darker|cooler|take( off)?)\b/;
-const RESET = /\b(reset|zero|clear|remove|no|none|neutral)\b/;
+const RESET = /\b(reset|zero|clear|remove|no|none|neutral|off)\b/;
 // One clause → { path, label, value, lo, hi, dp, says } with `value` the new slider value, or null.
 function exact(s, p) {
   let path, label, lo = -100, hi = 100, dp = 0;
@@ -116,7 +117,7 @@ function exact(s, p) {
   if (!m) {
     if (RESET.test(s) && !UP.test(s)) return { path, label, lo, hi, dp, value: 0 };
     // "more clarity", "a bit less texture": a step of the slider (vignette's slider runs the other way).
-    if (!/\b(more|less|up|down|increase|decrease|raise|lower|reduce|boost)\b/.test(s) || /^(temp|ai\.)/.test(path)) return null;
+    if (!/\b(more|less|up|down|increase|decrease|raise|lower|reduce|boost)\b/.test(s) || path === 'temp') return null;
     const k = strength(s.replace(/\b(less|reduce)\b/, '')) * (DOWN.test(s) ? -1 : 1) * (path === 'vignette.amount' ? -1 : 1);
     return { path, label, lo, hi, dp, value: clamp(+(cur + (path === 'exposure' ? 0.3 : 15) * k).toFixed(dp), lo, hi) };
   }
@@ -242,8 +243,15 @@ export function createCommandBar(app, mount = null) {
   // Under the words, what Rembrandt understood, live: "Exposure to −0.10 · Shadows to +25".
   const reading = el('div', { class: 'chat-reading', 'aria-live': 'polite' });
   const send = el('button', { class: 'chat-send', type: 'button', 'aria-label': 'Do it' }, icon('send'));
+  // Speak instead of typing: the browser's own speech recognition fills the box and the words run
+  // as if typed. (Chrome does the listening on Google's servers, Safari on Apple's.) The Windows and
+  // Linux app webviews expose the API without a service behind it, so no button there.
+  const Speech = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const mic = mount && Speech && !(isTauri && !/Mac/.test(navigator.platform))
+    ? el('button', { class: 'chat-mic', type: 'button', 'aria-label': 'Speak an edit', title: 'Speak an edit, like “bring lens blur down”' }, icon('mic'))
+    : null;
   const box = mount
-    ? el('div', { class: 'cmd-box' }, el('div', { class: 'cmd-field' }, input, send), reading, list)
+    ? el('div', { class: 'cmd-box' }, el('div', { class: 'cmd-field' }, input, mic, send), reading, list)
     : el('div', { class: 'cmd-box' }, el('div', { class: 'cmd-field' }, icon('sparkle'), input, el('kbd', {}, 'esc')), list);
   // In the left panel: the studio (studio.js), a small Rembrandt that does the edits, and the box.
   const studio = mount ? createStudio(app) : null;
@@ -254,6 +262,23 @@ export function createCommandBar(app, mount = null) {
   if (mount) {
     send.addEventListener('pointerdown', (e) => e.preventDefault());
     send.addEventListener('click', () => run(sel));
+    let rec = null;
+    mic?.addEventListener('pointerdown', (e) => e.preventDefault());
+    mic?.addEventListener('click', () => {
+      if (rec) { rec.stop(); return; }
+      let said = '';
+      rec = new Speech();
+      rec.lang = navigator.language;
+      rec.interimResults = true;
+      // Words show and preview on the photo while you talk; when you stop, they run.
+      rec.onresult = (e) => { said = [...e.results].map((r) => r[0].transcript).join(' '); input.value = said; input.dispatchEvent(new Event('input')); };
+      rec.onerror = (e) => { if (e.error !== 'no-speech' && e.error !== 'aborted') app.toast(e.error === 'not-allowed' ? 'Allow the microphone to edit with your voice' : 'Voice edits aren’t available here'); };
+      rec.onend = () => { rec = null; root.classList.remove('listening'); mic.setAttribute('aria-pressed', 'false'); if (said.trim()) run(sel); };
+      root.classList.add('listening');
+      mic.setAttribute('aria-pressed', 'true');
+      input.focus();
+      rec.start();
+    });
     // Example requests take turns in the empty box.
     const EX = ['Tell me what to change…', 'exposure −0.3', 'paste from the last photo', 'shadows +25', 'set contrast to 20', 'same as photo 2', 'blue saturation −30', 'a bit warmer', 'golden hour'];
     let ex = 0;

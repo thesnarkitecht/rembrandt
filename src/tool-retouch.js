@@ -6,7 +6,7 @@
 // where it copies from. Delete removes the selected spot, / finds it a different source, H hides
 // the spots. (Interaction after RAWmakase's retouch tool, MIT; see NOTICE.md.)
 import { el, svgEl } from './util.js';
-import { slider, segmented, button, toggle } from './ui.js';
+import { slider, segmented, button, toggle, section } from './ui.js';
 import { A } from './geometry.js';
 import { findSource, imageOf, radii, pin, MAX_OPS } from './retouch.js';
 import { findSpots } from './blemish.js';
@@ -281,16 +281,19 @@ export function buildRetouchPanel(app) {
     } finally { auto.disabled = false; }
   }, 'sm primary', 'sparkle');
   refresh();
-  const root = el('div', { class: 'panel-view retouch' },
-    el('div', { class: 'panel-section' },
-      el('div', { class: 'subhead' }, el('span', {}, 'Portraits')),
-      el('div', { class: 'row-btns' }, auto), keep.el, sens.el, autoNote),
-    el('div', { class: 'panel-section' },
-      el('p', { class: 'hint rt-intro' }, 'Click a spot to remove it, or drag to paint over a larger area. Rembrandt picks a matching source; drag the source circle to choose your own.'),
-      el('div', { class: 'field' }, el('span', {}, 'Mode'), mode.el),
-      size.el, feather.el, opacity.el, hide.el,
-      el('div', { class: 'row-btns' }, newSrc, del, clear),
-      count,
-      el('div', { class: 'hint' }, 'Keys: / new source · Delete remove · H show or hide spots.')));
+  // Shortcuts live in the tooltips rather than a line of text.
+  newSrc.title = 'New source (/)';
+  del.title = 'Delete spot (Delete)';
+  hide.el.title = 'Show or hide spots (H)';
+  const spots = section('Remove spots', { id: 'rt-spots', badge: { icon: 'erase', color: 'linear-gradient(135deg,#f472b6,#db2777)' } });
+  spots.body.append(
+    el('p', { class: 'hint rt-intro' }, 'Click a spot to remove it, or drag to paint over a larger area. Rembrandt picks a matching source; drag the source circle to choose your own.'),
+    el('div', { class: 'field' }, el('span', {}, 'Mode'), mode.el),
+    size.el, feather.el, opacity.el, hide.el,
+    el('div', { class: 'row-btns rt-actions' }, newSrc, del, clear),
+    count);
+  const portraits = section('Portraits', { id: 'rt-portraits', badge: { icon: 'sparkle', color: 'linear-gradient(135deg,#fbbf24,#f97316)' } });
+  portraits.body.append(el('div', { class: 'row-btns' }, auto), keep.el, sens.el, autoNote);
+  const root = el('div', { class: 'panel-view retouch' }, spots.el, portraits.el);
   return { el: root, refresh };
 }

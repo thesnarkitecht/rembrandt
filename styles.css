@@ -284,6 +284,7 @@ body[data-mode="library"] .file-title, body[data-mode="plan"] .file-title { visi
 .subhead .row .i { width: 14px; height: 14px; color: var(--accent); }
 .divider { height: 1px; background: var(--line); margin: 10px 0; }
 .row-btns { display: flex; gap: 6px; margin-top: 10px; flex-wrap: wrap; }
+.rt-actions { flex-wrap: nowrap; } .rt-actions > * { flex: 1; min-width: 0; justify-content: center; }
 .row-btns.end { justify-content: flex-end; margin-top: 16px; }
 .empty-note { color: var(--muted); font-size: 12px; line-height: 1.55; margin-top: 10px; }
 .warn-text { font-size: 12px; color: var(--danger); flex: 1; }
@@ -1248,6 +1249,12 @@ body[data-mode="library"] .ask-btn, body[data-mode="account"] .ask-btn { display
 .chat-send .i { width: 13px; height: 13px; }
 .cmd.inline.typed .chat-send { background: var(--accent-bg); color: var(--on-accent); transform: scale(1.06); }
 .chat-send:active { transform: scale(0.94); }
+.chat-mic { width: 24px; height: 24px; flex: none; display: grid; place-items: center; border: 0; border-radius: 50%; background: none; color: var(--dim); cursor: pointer; }
+.chat-mic .i { width: 14px; height: 14px; }
+.chat-mic:hover { color: var(--text); background: var(--raised); }
+.cmd.inline.listening .chat-mic { background: var(--accent-bg); color: var(--on-accent); animation: mic-pulse 1.2s ease-in-out infinite; }
+@keyframes mic-pulse { 50% { box-shadow: 0 0 0 5px color-mix(in srgb, var(--accent-bg) 30%, transparent); } }
+@media (prefers-reduced-motion: reduce) { .cmd.inline.listening .chat-mic { animation: none; } }
 .cmd.inline.active .cmd-box { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent); }
 .cmd.inline .cmd-list { max-height: 42vh; padding: 4px; border-bottom: 1px solid var(--line); }
 .cmd.inline .cmd-list:empty { display: none; }

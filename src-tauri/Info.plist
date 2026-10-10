@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>NSMicrophoneUsageDescription</key>
+  <string>Rembrandt listens when you press the microphone, so you can describe an edit out loud.</string>
+  <key>NSSpeechRecognitionUsageDescription</key>
+  <string>Rembrandt turns what you say into edits, like “bring lens blur down”.</string>
+</dict>
+</plist>
