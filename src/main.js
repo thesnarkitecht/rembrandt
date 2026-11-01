@@ -279,6 +279,7 @@ const app = {
     viewer.dataset.tool = t;
     if (t === 'masks' && !activeMask(this) && this.params?.masks.length) this.state.activeMaskId = this.params.masks[this.params.masks.length - 1].id;
     this.buildPanel();
+    $('panelBody').scrollTop = 0;   // a new tool starts at its top, not where the last one was scrolled to
     this.fitView();
   },
   buildPanel() {

@@ -1499,4 +1499,20 @@ body.tethering #empty { display: none; }
 
 /* Messages wrap within the window instead of running off a narrow screen */
 .toast { max-width: calc(100vw - 24px); }
+/* Phones. Before a photo is open, the welcome screen gets the whole height (the tools have nothing to
+   act on yet); the zoom control drops its readout; the panel doesn't drag the page when it ends. */
+@media (max-width: 860px) {
+  body:not(.has-image) .workspace { grid-template-rows: minmax(0, 1fr); }
+  body:not(.has-image) .panel { display: none; }
+  .zoom-label { display: none; }
+  .panel-body { overscroll-behavior: contain; padding-bottom: env(safe-area-inset-bottom); }
+}
+/* A phone on its side: the tools sit beside the photo instead of under it, where they'd leave the
+   photo a thin strip. */
+@media (max-width: 1000px) and (max-height: 540px) and (orientation: landscape) {
+  :root { --panel-w: min(340px, 42vw); }
+  .workspace { grid-template-columns: minmax(0, 1fr) var(--panel-w); grid-template-rows: minmax(0, 1fr); }
+  body:not(.has-image) .workspace { grid-template-columns: minmax(0, 1fr); }
+  .panel { border-top: none; border-left: 1px solid var(--line-strong); }
+}
 @media (max-width: 720px) { .toast { white-space: normal; text-align: center; line-height: 1.4; } }
