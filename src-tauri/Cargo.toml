@@ -48,7 +48,7 @@ libloading = "0.8"
 # Elsewhere the web app's WebAssembly version (the prebuilt Linux library needs glibc 2.38 and a newer
 # libstdc++ than the builds and many systems have; Windows would need DirectML shipped).
 [target.'cfg(all(target_os = "macos", target_arch = "aarch64"))'.dependencies]
-ort = { version = "=2.0.0-rc.14", default-features = false, features = ["std", "download-binaries", "tls-native", "coreml"] }
+ort = { version = "=2.0.0-rc.15", default-features = false, features = ["std", "download-binaries", "tls-native", "coreml"] }
 
 # Tethering on macOS with ImageCaptureCore (src/tether/mac.rs).
 [target.'cfg(target_os = "macos")'.dependencies]
