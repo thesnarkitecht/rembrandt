@@ -327,6 +327,7 @@ uniform vec2 uTexel;
 uniform int uGuideOn;
 uniform vec4 uTone;           // blacks, shadows, highlights, whites
 uniform float uClarity, uTexture;
+uniform vec3 uHdr;            // shadows opened, highlights brought down, detail
 uniform int uWBOn;
 uniform mat3 uWB;
 uniform float uVib, uSat;
@@ -374,6 +375,14 @@ void main() {
     float gain = zoneGain(shownLightness(exp2(base)), uTone);
     float detail = clamp(g - base, -3.0, 3.0);
     gain += uClarity * 0.65 * detail * exp(-ev * ev / 24.0);
+    // HDR (after Durand and Dorsey, 2002): the base layer's distance from mid grey shrinks, so deep
+    // shadows open and bright areas come down, while the detail riding on it is kept or lifted.
+    // The shadow lift levels off (a black frame doesn't turn to grey noise); nothing moves near mid grey.
+    if (uHdr.x + uHdr.y + uHdr.z > 0.0) {
+      float e = clamp(ev, -10.0, 7.0);
+      gain += e < 0.0 ? uHdr.x * 3.4 * (1.0 - exp(e / 3.4)) : -uHdr.y * e * smoothstep(0.0, 1.2, e);
+      gain += uHdr.z * detail;
+    }
     rgb *= exp2(gain);
   }
   if (uTexture != 0.0) {

@@ -1,6 +1,6 @@
 // The main "Edit" panel: light, color, effects, curve, mixer, grading, detail.
 import { el, getPath, setPath } from './util.js';
-import { slider, section, segmented, iconButton, button, popMenu, toggle } from './ui.js';
+import { slider, section, segmented, iconButton, button, popMenu, toggle , disclosure } from './ui.js';
 import { icon } from './icons.js';
 import { autoVertical } from './tool-crop.js';
 import { detectDistortion } from './lens-auto.js';
@@ -31,6 +31,7 @@ export function buildEditPanel(app) {
     light: { icon: 'sun', color: 'linear-gradient(135deg,#ffc04d,#ff7a1a)' },
     color: { icon: 'drop', color: 'linear-gradient(135deg,#ff5f9e,#a55cff)' },
     effects: { icon: 'fx', color: 'linear-gradient(135deg,#4dd0ff,#3a6bff)' },
+    hdr: { icon: 'sun', color: 'linear-gradient(135deg,#ffe08a,#ff9f1c)' },
     curve: { icon: 'curve', color: 'linear-gradient(135deg,#4be3b6,#139e76)' },
     mixer: { icon: 'mixer', color: 'conic-gradient(from 200deg,#ff5f5f,#ffd34d,#4de38a,#4dc3ff,#8a6bff,#ff5fc8,#ff5f5f)' },
     grading: { icon: 'wheel', color: 'linear-gradient(135deg,#ff8a65,#7c5cff)' },
@@ -142,6 +143,30 @@ export function buildEditPanel(app) {
       : `Learns how your ${key} renders color from the JPEGs inside its RAW files. On this device.`;
   } });
 
+  // --- HDR: local tone mapping, live. One tap for a strength, three sliders to shape it.
+  const HDRS = [['Off', 0, 0, 0], ['Natural', 40, 0, 15], ['Balanced', 65, 0, 30], ['Dramatic', 90, 0, 60], ['Sky', 60, 60, 20], ['Interior', 70, -60, 25]];
+  const hdrOf = () => (app.params.hdr ||= { amount: 0, balance: 0, detail: 0 });
+  const hdr = sec('HDR', 'hdr', { id: 'hdr', open: false, onReset: () => { app.params.hdr = { amount: 0, balance: 0, detail: 0 }; app.requestRender(); app.commit(); app.refreshPanel(); } });
+  const hdrChips = el('div', { class: 'chips' });
+  const paintHdr = () => {
+    const h = hdrOf();
+    hdrChips.replaceChildren(...HDRS.map(([name, a, b, d]) => {
+      const cur = h.amount === a && h.balance === b && h.detail === d;
+      return el('button', { class: 'chip' + (cur ? ' on' : ''), 'aria-pressed': String(cur), onclick: () => {
+        Object.assign(hdrOf(), { amount: a, balance: b, detail: d });
+        app.requestRender(); app.commit(); app.refreshPanel();
+      } }, name);
+    }));
+  };
+  const hdrS = (key, label, min, max, extra = {}) => slider({ label, min, max, def: 0, get: () => hdrOf()[key] || 0, set: (v) => { hdrOf()[key] = v; app.requestRender(); }, commit: () => { app.commit(); paintHdr(); }, ...extra });
+  const hdrCtl = [hdrS('amount', 'Strength', 0, 100), hdrS('balance', 'Balance', -100, 100), hdrS('detail', 'Detail', 0, 100)];
+  hdrCtl[1].el.title = 'Left: open the shadows more. Right: bring the highlights down more.';
+  hdr.body.append(hdrChips, ...hdrCtl.map((c) => c.el),
+    disclosure('hdr-more', 'More',
+      el('p', { class: 'hint' }, 'Works on one photo. For bracketed exposures, select them in the Library and choose Merge › HDR. Export › HDR saves brighter highlights for HDR screens.'),
+      el('div', { class: 'row-btns' }, button('Make an HDR copy', () => { try { app.hdrFromOne('natural'); } catch (err) { app.toast(err.message); } }, 'sm ghost', 'sun'))));
+  reg.push({ refresh: () => { paintHdr(); hdrCtl.forEach((c) => c.refresh()); } });
+
   // --- look: film looks and imported .cube LUTs
   const look = sec('Look', 'look', { id: 'look', open: false, onReset: resetPaths(['look']) });
   const chips = el('div', { class: 'chips' });
@@ -248,7 +273,7 @@ export function buildEditPanel(app) {
   snaps.body.append(snapshotsControl(app, reg));
   reg.push(snaps);
 
-  const root = el('div', { class: 'panel-view' }, tools, profRow, light.el, color.el, look.el, fx.el, curve.el, mixer.el, grading.el, detail.el, optics.el, snaps.el);
+  const root = el('div', { class: 'panel-view' }, tools, profRow, light.el, hdr.el, color.el, look.el, fx.el, curve.el, mixer.el, grading.el, detail.el, optics.el, snaps.el);
   const panel = { el: root, refresh: () => reg.forEach((c) => c.refresh()) };
   // A panel built again (coming back from another tool) starts in step with the photo: without this
   // the Profile row showed, blank, on photos that aren't RAW.

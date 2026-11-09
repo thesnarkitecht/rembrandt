@@ -31,7 +31,8 @@ export function preUniforms(p, stats) {
 
 // ------------------------------------------------------------------ MAIN
 
-export const toneActive = (p) => !!(p.blacks || p.shadows || p.highlights || p.whites || p.clarity);
+export const hdrActive = (p) => !!(p.hdr && (p.hdr.amount || p.hdr.detail));
+export const toneActive = (p) => !!(p.blacks || p.shadows || p.highlights || p.whites || p.clarity) || hdrActive(p);
 
 // Tone zone shapes over displayed lightness (see ZONES in shaders.js): [centre, width below, width
 // above (−1 = flat to that end)] for raising, [EV at +100, EV at −100], and the window for lowering
@@ -47,6 +48,14 @@ export const ZONE_SHAPES = {
   whites: [[0.723, 0.503, -1], [0.875, 0.562], [0.65, 0.406, -1]],
 };
 const ZONE_ORDER = ['blacks', 'shadows', 'highlights', 'whites'];
+
+// HDR: [how much the shadows open, how much the highlights come down, detail kept on top]. Balance
+// leans the strength toward the shadows (−100) or the highlights (+100).
+function hdrUniform(h) {
+  if (!h) return [0, 0, 0];
+  const a = (h.amount || 0) / 100, b = (h.balance || 0) / 100;
+  return [a * 0.62 * (1 - Math.max(0, b)), a * 0.55 * (1 + Math.min(0, b)), (h.detail || 0) / 100 * 0.55];
+}
 
 export function mainUniforms(p) {
   const hsl = p.hsl || { hue: [], sat: [], lum: [] };
@@ -65,6 +74,7 @@ export function mainUniforms(p) {
     uZoneWn: new Float32Array(ZONE_ORDER.flatMap((k) => [...(ZONE_SHAPES[k][2] || ZONE_SHAPES[k][0]), 0])),
     uZoneA: new Float32Array(ZONE_ORDER.flatMap((k) => ZONE_SHAPES[k][1])),
     uClarity: p.clarity / 100,
+    uHdr: hdrUniform(p.hdr),
     uTexture: p.texture / 100,
     uWBOn: p.temp || p.tint ? 1 : 0,
     uWB: toGL(whiteBalance(p.temp, p.tint)),

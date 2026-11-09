@@ -18,6 +18,7 @@ export const TOOLS = [
 export const SECTIONS = [
   { id: 'edit:color', label: 'Color', icon: 'drop' },
   { id: 'edit:look', label: 'Look', icon: 'presets' },
+  { id: 'edit:hdr', label: 'HDR', icon: 'sun' },
   { id: 'edit:effects', label: 'Effects', icon: 'fx' },
   { id: 'edit:curve', label: 'Curve', icon: 'curve' },
   { id: 'edit:mixer', label: 'Color Mixer', icon: 'mixer' },
@@ -49,4 +50,4 @@ export class AiOffError extends Error {
 export function assertAi() { if (!aiOn()) throw new AiOffError(); }
 
 // Adjustment groups that need a model; while AI is off they render as if switched off.
-export const AI_GROUPS = ['refocus', 'lens', 'background', 'enhance', 'relight', 'sky', 'atmos', 'rays', 'skin', 'motion'];
+export const AI_GROUPS = ['refocus', 'lens', 'background', 'enhance', 'relight', 'light', 'sky', 'atmos', 'rays', 'skin', 'motion'];

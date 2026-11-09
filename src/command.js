@@ -33,6 +33,8 @@ const INTENTS = [
   [/\bdull\b/, 'Vibrance', add('vibrance', 20)],
   [/\b(remove|cut|reduce|clear)\b.*\b(haze|fog|mist)\b/, 'Dehaze', (p, k) => add('dehaze', 15)(p, Math.abs(k))],
   [/\bdark(en)? (the )?(edges|corners)|\bvignette/, 'Vignette', (p, k) => ({ vignette: { amount: c100(p.vignette.amount - 20 * k) } })],
+  [/\bhdr\b|\bdynamic range\b/, 'HDR', (p, k) => ({ hdr: { amount: clamp(Math.round((p.hdr?.amount || 0) + 55 * k), 0, 100), balance: p.hdr?.balance || 0, detail: clamp(Math.round((p.hdr?.detail || 0) + 25 * k), 0, 100) } })],
+  [/\b(studio|portrait|rembrandt|dramatic|side) light(ing)?\b/, 'Studio light', (p, k) => ({ ai: { light: { preset: 'rembrandt', angle: p.ai.light?.angle ?? -140, fill: p.ai.light?.fill ?? 20, rim: p.ai.light?.rim || 0, backdrop: p.ai.light?.backdrop ?? -30, warmth: p.ai.light?.warmth ?? 12, amount: clamp(Math.round((p.ai.light?.amount || 0) + 70 * k), 0, 100) } } })],
   [/\bshadows?\b|\bdetail in the dark/, 'Shadows', (p, k) => ({ shadows: c100(p.shadows + 30 * k) })],
   [/\bhighlights?\b|\bsky\b|\bblown|\brecover/, 'Highlights', (p, k) => ({ highlights: c100(p.highlights - 30 * k) })],
   [/\bblur (the )?background|\bbokeh|\bportrait mode|\bdepth of field/, 'Lens blur', ai('blur', 'amount', 55)],

@@ -22,6 +22,8 @@ export function defaultParams(aspect = 1.5) {
     exposure: 0, contrast: 0, highlights: 0, shadows: 0, whites: 0, blacks: 0,
     temp: 0, tint: 0, vibrance: 0, saturation: 0, bw: false,
     texture: 0, clarity: 0, dehaze: 0, haze: 0,
+    // HDR: local tone mapping (see uHdr in engine/src/shaders.js). Photos saved before it have none.
+    hdr: { amount: 0, balance: 0, detail: 0 },
     vignette: { amount: 0, midpoint: 50, roundness: 0, feather: 50 },
     grain: { amount: 0, size: 25, roughness: 50 },
     curve: { master: ident(), r: ident(), g: ident(), b: ident() },
@@ -54,6 +56,8 @@ export function defaultParams(aspect = 1.5) {
       blur: { amount: 0, focus: -1, range: 12, bokeh: 0, protect: true, sharpen: 0, blades: 0, catseye: 0 },
       enhance: { amount: 0 },
       relight: { near: 0, far: 0, boundary: 50, warmth: 0 },
+      // Studio light: a key light from a direction, shaped by the depth map (ai/studio.js).
+      light: { preset: 'none', amount: 0, angle: -135, fill: 50, rim: 0, backdrop: 0, warmth: 0 },
       sky: { deepen: 0, warmth: 0, saturation: 0, replace: 'none', amount: 100, relight: 50 },
       atmos: { amount: 0, warmth: 0, lift: 30, depth: 50 },
       rays: { amount: 0, x: 0.72, y: 0.18, length: 50, warmth: 40 },
@@ -72,6 +76,7 @@ export const GROUPS = {
   light: ['exposure', 'contrast', 'highlights', 'shadows', 'whites', 'blacks'],
   color: ['temp', 'tint', 'vibrance', 'saturation', 'bw'],
   effects: ['texture', 'clarity', 'dehaze', 'haze', 'vignette', 'grain'],
+  hdr: ['hdr'],
   curve: ['curve'],
   mixer: ['hsl', 'pointColor'],
   grading: ['grading'],
@@ -83,7 +88,7 @@ export const GROUPS = {
   refocus: ['ai.refocus'],
   lens: ['ai.blur'],
   background: ['ai.bg'],
-  enhance: ['ai.enhance'], relight: ['ai.relight'], sky: ['ai.sky'], atmos: ['ai.atmos'], rays: ['ai.rays'], skin: ['ai.skin'], motion: ['ai.motion'],
+  enhance: ['ai.enhance'], relight: ['ai.relight'], light: ['ai.light'], sky: ['ai.sky'], atmos: ['ai.atmos'], rays: ['ai.rays'], skin: ['ai.skin'], motion: ['ai.motion'],
   masks: ['masks'],
 };
 

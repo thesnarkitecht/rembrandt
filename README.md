@@ -88,6 +88,12 @@ checks it against the published SHA-256 sums, and restarts the server.
   device; exact requests like “shadows +25” never need it, and with AI off the words still work.
 - **Edit the photo itself**: drag up or down on any part of the picture to lighten or darken that
   tone, left or right to change that colour; the sliders follow.
+- **HDR**: a live HDR section in Edit. One tap for Natural, Balanced, Dramatic, Sky or Interior, then
+  Strength, Balance (shadows or highlights) and Detail. It opens shadows and brings highlights down
+  without halos, and stays editable like any slider.
+- **Studio Light**: one-click lighting set-ups (Soft, Rembrandt, Split, Butterfly, Rim, Stage, High key,
+  Golden) that light the subject from a direction using the depth map, with Strength, Direction, Fill,
+  Rim light, Backdrop and Warmth.
 - **AI looks**: Enhance, Relight, Sky (deepen it, or replace it with a clear, cloudy, golden-hour,
   sunset or dusk sky that relights the scene), Atmosphere, Sunrays, Skin, Motion and Lens Blur with
   aperture shapes, from on-device depth and subject maps.

@@ -1,7 +1,7 @@
 // AI panel: Enhance, Relight, Sky, Atmosphere, Sunrays, Skin, Lens Blur (with bokeh shapes), Motion,
 // Background, Super Resolution and Refocus. Everything runs on this device.
 // Copyright © 2026 the Rembrandt contributors. Licensed under the GNU GPL v3 or later (see LICENSE).
-import { SKIES } from './studio.js';
+import { SKIES, LIGHTS } from './studio.js';
 import { el } from '../util.js';
 import { slider, section, segmented, toggle, button, disclosure } from '../ui.js';
 import { icon } from '../icons.js';
@@ -42,6 +42,30 @@ export function buildAIPanel(app) {
   enhance.body.append(
     el('p', { class: 'ai-lede' }, 'One slider: depth, light and color, balanced for the subject.'),
     S(() => A().enhance.amount, (v) => { A().enhance.amount = v; }, 'Amount', 0, 100, 0));
+
+  // ---- studio light: one click for a set-up, then shape it
+  if (!A().light) A().light = structuredClone(D.light);
+  const KL = () => (A().light ||= structuredClone(D.light));
+  const light = sec('Studio Light', 'light', 'light', 'sun', true);
+  const lightChips = el('div', { class: 'chips' });
+  const paintLight = () => lightChips.replaceChildren(...[['none', 'None', D.light], ...Object.entries(LIGHTS).map(([k, [n, v]]) => [k, n, v])].map(([k, n, v]) => {
+    const cur = (KL().preset || 'none') === k;
+    return el('button', { class: 'chip' + (cur ? ' on' : ''), 'aria-pressed': String(cur), onclick: () => {
+      A().light = { ...structuredClone(D.light), ...v, preset: k };
+      ensure(); refresh();
+    } }, n);
+  }));
+  paintLight();
+  reg.push({ refresh: paintLight });
+  const LS = (key, label, min, max, def, extra) => S(() => KL()[key] ?? def, (v) => { KL()[key] = v; }, label, min, max, def, extra);
+  light.body.append(lightChips,
+    LS('amount', 'Strength', 0, 100, 0),
+    LS('angle', 'Direction', -180, 180, -135, { format: (v) => `${Math.round(v)}°` }),
+    disclosure('ai-light', 'More options',
+      LS('fill', 'Fill', 0, 100, 50),
+      LS('rim', 'Rim light', 0, 100, 0),
+      LS('backdrop', 'Backdrop', -100, 100, 0),
+      LS('warmth', 'Warmth', -100, 100, 0)));
 
   // ---- relight
   const relight = sec('Relight', 'relight', 'relight', 'sun');
@@ -180,7 +204,7 @@ export function buildAIPanel(app) {
   reg.push(enhance, relight, sky, atmos, rays, skin, lens, motion, bg, refocus, sr, dn);
   const group = (name) => el('div', { class: 'ai-group' }, name);
   const root = el('div', { class: 'panel-view ai-panel' }, status, enhance.el,
-    group('Light'), relight.el, sky.el, atmos.el, rays.el,
+    group('Light'), light.el, relight.el, sky.el, atmos.el, rays.el,
     group('People'), skin.el,
     group('Lens'), lens.el, motion.el, bg.el,
     group('Detail'), dn.el, sr.el, refocus.el);

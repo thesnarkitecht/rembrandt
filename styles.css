@@ -405,7 +405,7 @@ body:not(.has-image) .panel-body { opacity: 0.35; pointer-events: none; }
 .edit-tools.no-ai { grid-template-columns: minmax(0, 1.2fr) minmax(0, 0.85fr) minmax(0, 0.85fr) 32px; }
 /* Auto, Color, B&W and More are four equal cells: the Color / B&W pair is unwrapped into the grid. */
 .edit-tools > .grow { display: none; }
-.edit-tools > .btn { gap: 5px; overflow: hidden; } .edit-tools > .btn > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.edit-tools > .btn { gap: 4px; padding: 0 4px; letter-spacing: 0.03em; }
 .edit-tools .treatment { display: contents; }
 .edit-tools > .btn, .edit-tools .seg-btn, .edit-tools > .icon-btn { width: auto; height: 30px; margin: 0; padding: 0 6px; border-radius: 2px; }
 .edit-tools .seg-btn { border: 1px solid var(--line); background: transparent; font-size: 11px; font-weight: 500; }
@@ -1521,3 +1521,24 @@ body.tethering #empty { display: none; }
   .panel { border-top: none; border-left: 1px solid var(--line-strong); }
 }
 @media (max-width: 720px) { .toast { white-space: normal; text-align: center; line-height: 1.4; } }
+
+/* ---- Window dressing. Borrowed, lightly, from the small "operating system" windows on typesafe.ai:
+   a double rule around anything that floats, an inverted mono tag for the section that's open and for
+   menu titles, square corners, and controls that give a little when pressed. Menus and chips are
+   tighter, so a panel shows more before it scrolls. */
+.menu, .dlg, .toast { border-radius: 0; box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--line-strong), var(--shadow-pop); }
+.menu { padding: 3px; min-width: 184px; }
+.menu-item { height: 26px; padding: 0 8px; gap: 8px; font-size: 12px; border-radius: 0; }
+.menu-sep { margin: 3px 4px; }
+.menu-head { margin: -3px -3px 3px; padding: 4px 8px; background: var(--text); color: var(--bg); font: 500 10px var(--mono); text-transform: uppercase; letter-spacing: 0.08em; }
+.dlg::backdrop { background-image: radial-gradient(rgba(255, 255, 255, 0.07) 1px, transparent 1.2px); background-size: 6px 6px; }
+#panelBody .sec > .sec-head, .navside .sec > .sec-head { height: 34px; }
+#panelBody .sec.open > .sec-head .sec-title, .navside .sec.open > .sec-head .sec-title { padding: 2px 6px; margin-left: -2px; background: var(--text); color: var(--bg); }
+#panelBody .sec.open > .sec-body { animation: sec-in 0.16s ease-out; }
+@keyframes sec-in { from { opacity: 0; transform: translateY(-4px); } }
+.chips { gap: 4px; margin: 4px 0 8px; }
+.chip { height: 24px; padding: 0 8px; border-radius: 0; font-size: 11.5px; }
+.btn, .chip, .icon-btn, .rail-btn { transition: transform 0.06s, background-color 0.12s, border-color 0.12s, color 0.12s; }
+.btn:active:not(:disabled), .chip:active, .icon-btn:active:not(:disabled), .rail-btn:active { transform: translateY(1px); }
+#panelBody .range:active::-webkit-slider-thumb { box-shadow: 0 0 0 1px var(--thumb-ring), 0 0 0 5px color-mix(in srgb, var(--accent) 22%, transparent); }
+#panelBody .range:active::-moz-range-thumb { box-shadow: 0 0 0 1px var(--thumb-ring), 0 0 0 5px color-mix(in srgb, var(--accent) 22%, transparent); }

@@ -66,6 +66,8 @@ const MAIN = HEAD + MAPS + `
 uniform sampler2D uIn, uSoft, uSoftWide, uLight;
 uniform float uEnhance;
 uniform vec4 uRelight;      // near EV, far EV, boundary (depth), near warmth
+uniform vec4 uKey;          // light direction (x, y; y down), strength (EV), fill 0–1
+uniform vec3 uKey2;         // rim, backdrop (EV), warmth
 uniform vec3 uSky;          // deepen, warmth, saturation
 uniform vec4 uSkyRep;       // on, amount, relight, cloud cover
 uniform vec3 uSkyZen, uSkyHor, uSkyCloud;
@@ -116,6 +118,39 @@ void main() {
     float n = smoothstep(uRelight.z - 0.18, uRelight.z + 0.18, d);
     c *= exp2(mix(uRelight.y, uRelight.x, n));
     if (uRelight.w != 0.0) c = warm(c, uRelight.w * n);
+  }
+
+  // Studio light: a key light from one side. The depth map's slope stands in for the surface: parts
+  // that face the light brighten, parts that face away fall into shadow (as much as Fill allows). A
+  // rim light traces the subject's edge on the light's side; the backdrop dims or brightens behind.
+  if (uKey.z != 0.0 || uKey2.x != 0.0 || uKey2.y != 0.0) {
+    vec2 L2 = uKey.xy;
+    float lam = 0.0;
+    if (uHasDepth == 1) {
+      // Slope over a wide footprint: the map is coarse, and studio light is broad anyway.
+      vec2 gsum = vec2(0.0);
+      for (int i = 0; i < 12; i++) {
+        float a = float(i) * 0.5236, rr = 0.012 * (1.0 + float(i - (i / 3) * 3));
+        vec2 dir = vec2(cos(a), sin(a));
+        gsum += dir * (depthAt(vUv + dir * vec2(rr / uAspect, rr)) - depthAt(vUv - dir * vec2(rr / uAspect, rr))) / (rr / 0.012);
+      }
+      vec3 nrm = normalize(vec3(-gsum * 0.8, 0.11));
+      lam = dot(nrm, normalize(vec3(L2 * 0.82, 0.57))) - 0.57;   // 0 on a surface facing the camera
+    }
+    // Across the subject as a whole too, so one side of a face is the lit side even where the map is flat.
+    float side = uHasSubj == 1 ? subjAt(vUv - L2 * vec2(0.05 / uAspect, 0.05)) - subjAt(vUv + L2 * vec2(0.05 / uAspect, 0.05)) : 0.0;
+    float on = uHasSubj == 1 ? mix(0.3, 1.0, s) : 1.0;          // mostly the subject; the room a little
+    float lit = clamp(lam * 1.6 * on + side * 0.55, -1.0, 1.0);
+    // A light adds light: the lit side gains the most, the subject as a whole a little, and the far
+    // side only falls off as much as Fill leaves it to.
+    float ev = uKey.z * ((lit > 0.0 ? lit : lit * (1.0 - uKey.w) * 0.7) + 0.22) * on;
+    c *= exp2(ev);
+    c = warm(c, uKey2.z * (0.35 + 0.65 * max(lit, 0.0)) * on);
+    if (uKey2.x > 0.0 && uHasSubj == 1) {
+      float edge = s * (1.0 - subjAt(vUv + L2 * vec2(0.012 / uAspect, 0.012))) + s * 0.5 * (1.0 - subjAt(vUv + L2 * vec2(0.03 / uAspect, 0.03)));
+      c *= exp2(uKey2.x * 2.4 * clamp(edge, 0.0, 1.0));
+    }
+    if (uKey2.y != 0.0 && uHasSubj == 1) c *= exp2(uKey2.y * (1.0 - smoothstep(0.15, 0.7, s)));
   }
 
   // Sky: deepen (darker, richer), warm, saturate.
@@ -250,12 +285,27 @@ export function skyScore(sample, depth) {
 }
 export const hasSky = (s) => s.area > 0.06 && s.score > 0.6 && s.top > 0.35;
 
+// Studio light set-ups, one click each. angle: where the light stands, in degrees (0 right, −90 above,
+// 180 left); amount, fill, rim, warmth 0–100; backdrop −100 (black) to 100 (bright).
+export const LIGHTS = {
+  soft: ['Soft', { amount: 40, angle: -120, fill: 75, rim: 0, backdrop: 0, warmth: 0 }],
+  rembrandt: ['Rembrandt', { amount: 85, angle: -140, fill: 20, rim: 0, backdrop: -30, warmth: 12 }],
+  split: ['Split', { amount: 95, angle: 180, fill: 5, rim: 0, backdrop: -20, warmth: 0 }],
+  butterfly: ['Butterfly', { amount: 60, angle: -90, fill: 45, rim: 0, backdrop: 0, warmth: 0 }],
+  rim: ['Rim', { amount: 25, angle: -35, fill: 40, rim: 85, backdrop: -45, warmth: 0 }],
+  stage: ['Stage', { amount: 55, angle: -90, fill: 30, rim: 20, backdrop: -100, warmth: 0 }],
+  highkey: ['High key', { amount: 30, angle: -100, fill: 100, rim: 0, backdrop: 60, warmth: 0 }],
+  golden: ['Golden', { amount: 55, angle: -25, fill: 55, rim: 45, backdrop: -10, warmth: 60 }],
+};
+
 const skyRep = (a) => a.sky?.replace && SKIES[a.sky.replace] && (a.sky.amount ?? 100) > 0;
+
+const lightActive = (a) => !!(a.light && (a.light.amount || a.light.rim || a.light.backdrop || a.light.warmth));
 
 export function studioActive(p) {
   const a = S(p);
   return skyRep(a) || (a.enhance?.amount > 0) || (a.skin?.amount > 0) || (a.sky && (a.sky.deepen || a.sky.warmth || a.sky.saturation))
-    || (a.relight && (a.relight.near || a.relight.far || a.relight.warmth)) || (a.atmos?.amount > 0) || (a.rays?.amount > 0);
+    || (a.relight && (a.relight.near || a.relight.far || a.relight.warmth)) || lightActive(a) || (a.atmos?.amount > 0) || (a.rays?.amount > 0);
 }
 export const motionActive = (p) => S(p).motion?.amount > 0;
 
@@ -264,7 +314,7 @@ function maps() {
 }
 
 export const studioPass = {
-  key(p) { return studioActive(p) ? JSON.stringify([S(p).enhance, S(p).relight, S(p).sky, S(p).atmos, S(p).rays, S(p).skin, ai.version, !!ai.tex.depth, !!ai.tex.subject]) : ''; },
+  key(p) { return studioActive(p) ? JSON.stringify([S(p).enhance, S(p).relight, S(p).light, S(p).sky, S(p).atmos, S(p).rays, S(p).skin, ai.version, !!ai.tex.depth, !!ai.tex.subject]) : ''; },
   run(engine, p, ctx, input) {
     if (!studioActive(p)) return input;
     const P = progs(engine), L = engine.L, a = S(p), m = maps();
@@ -290,9 +340,12 @@ export const studioPass = {
       u.uLight = t.tex;
     }
     const r = a.relight || {}, sky = a.sky || {}, at = a.atmos || {}, ray = a.rays || {};
+    const kl = a.light || {}, ka = (kl.angle ?? -135) * Math.PI / 180;
     Object.assign(u, {
       uEnhance: (a.enhance?.amount || 0) / 100,
       uRelight: [(r.near || 0) / 50, (r.far || 0) / 50, (r.boundary ?? 50) / 100, (r.warmth || 0) / 100],
+      uKey: [Math.cos(ka), Math.sin(ka), (kl.amount || 0) / 100 * 1.6, (kl.fill ?? 50) / 100],
+      uKey2: [(kl.rim || 0) / 100, (kl.backdrop || 0) / 100 * 3, (kl.warmth || 0) / 100],
       uSky: [(sky.deepen || 0) / 100, (sky.warmth || 0) / 100, (sky.saturation || 0) / 100],
       uAtmos: [(at.amount || 0) / 100, (at.warmth || 0) / 100, (at.lift ?? 30) / 100, 3.0 - 2.2 * (at.depth ?? 50) / 100],
       uRays: [(ray.amount || 0) / 100, ray.x ?? 0.72, ray.y ?? 0.18, 0.2 + (ray.length ?? 50) / 125],
