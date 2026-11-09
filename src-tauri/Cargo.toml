@@ -20,7 +20,7 @@ tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 # 2.6.2 doesn't compile on Linux (it builds ini::ParseOption without the fields rust-ini 0.21.3 added).
-tauri-plugin-deep-link = ">=2, <2.6.2"
+tauri-plugin-deep-link = ">=2, <2.6.4"
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
