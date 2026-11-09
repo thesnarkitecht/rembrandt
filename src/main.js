@@ -679,7 +679,10 @@ const app = {
 
   updateHud() {
     const pct = (this.view.scale / this.engine.fullH) * 100;
-    $('zoomLabel').textContent = `${this.view.fit ? 'Fit · ' : ''}${pct < 10 ? pct.toFixed(1) : Math.round(pct)}%`;
+    // The Fit and 1:1 buttons light up when they describe the view; the readout is just the number.
+    $('zoomLabel').textContent = `${pct < 10 ? pct.toFixed(1) : Math.round(pct)}%`;
+    $('btnFit').classList.toggle('on', !!this.view.fit);
+    $('btn100').classList.toggle('on', !this.view.fit && Math.abs(pct - 100) < 0.5);
     $('beforeBadge').hidden = !this.state.before;
     $('btnBefore').classList.toggle('on', this.state.before || this.state.compare !== 'off');
   },
@@ -703,12 +706,12 @@ const app = {
     if (app.state.tool === 'edit' && app.panel && !app.state.sliding) app.panel.refreshCurve?.();
   }), 90),
 
-  async renderSmallAsync(params, long) {
+  async renderSmallAsync(params, long, slot) {
     if (!this.img || !this.engine.L) return null;
     const { crop } = params.geometry;
     const ar = crop.w / crop.h;
     const w = Math.max(1, Math.round(ar >= 1 ? long : long * ar)), h = Math.max(1, Math.round(ar >= 1 ? long / ar : long));
-    const px = await this.engine.readPixelsAsync(params, w, h, { ...this.outputMats(params, w, h), scale: h / crop.h, cropTest: true });
+    const px = await this.engine.readPixelsAsync(params, w, h, { ...this.outputMats(params, w, h), scale: h / crop.h, cropTest: true }, slot);
     return px && new ImageData(new Uint8ClampedArray(px.buffer), w, h);
   },
 
@@ -785,8 +788,9 @@ const thumbURL = (e, blob) => {
 const saveThumb = debounce(tracked('thumbnail', async () => {
   const e = app.images[app.cur];
   if (!e || !app.img || app.preview || app.state.before) return;
-  const img = app.renderSmall(app.params, 480);
-  if (!img) return;
+  // Read back without making the CPU wait for the GPU (it used to stall for a moment after every edit).
+  const img = await app.renderSmallAsync(app.params, 480, 'thumb');
+  if (!img || app.images[app.cur] !== e) return;
   const c = el('canvas', { width: img.width, height: img.height });
   c.getContext('2d').putImageData(img, 0, 0);
   const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.86));
@@ -1582,12 +1586,18 @@ const statsCache = new WeakMap();
 function computeStats(sample) {
   const { w, h, data } = sample;
   if (statsCache.has(data)) return statsCache.get(data);
-  const n = w * h;
-  const rgb = new Float32Array(n * 3);
-  for (let i = 0; i < n; i++) {
-    rgb.set(displayToScene([SRGB_LIN[data[i * 4]], SRGB_LIN[data[i * 4 + 1]], SRGB_LIN[data[i * 4 + 2]]]), i * 3);
-  }
-  const stats = { airlight: estimateAirlight(rgb, w, h) };
+  // Worked out the first time dehaze asks for it: it costs a few hundred thousand pixels of colour
+  // maths, which every photo used to pay on opening whether or not it was ever dehazed.
+  let airlight = null;
+  const stats = { get airlight() {
+    if (airlight) return airlight;
+    const n = w * h;
+    const rgb = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      rgb.set(displayToScene([SRGB_LIN[data[i * 4]], SRGB_LIN[data[i * 4 + 1]], SRGB_LIN[data[i * 4 + 2]]]), i * 3);
+    }
+    return (airlight = estimateAirlight(rgb, w, h));
+  } };
   statsCache.set(data, stats);
   return stats;
 }
@@ -3489,6 +3499,14 @@ function watchDesktopSignIn() {
   window.addEventListener('focus', check);
 }
 
+function cantRun(err) {
+  console.error(err);
+  $('empty').hidden = false;
+  $('emptyTitle').textContent = 'Your browser can’t run the editor';
+  $('emptyText').textContent = err.message + ' Try a current version of Chrome, Edge, Firefox or Safari with hardware acceleration enabled.';
+  $('btnOpenEmpty').hidden = true;
+}
+
 function boot() {
   initTheme();
   watchDesktopSignIn();
@@ -3521,12 +3539,10 @@ function boot() {
     app.engine.sourcePasses = chainPasses(warpPass, retouchPasses);
     fillHooks.onReady = () => { if (app.engine.L) app.engine.L.baseKey = null; app.requestRender(); };
     ai.onChange(() => { if (app.state.tool === 'ai' || app.state.tool === 'masks') app.refreshPanel(); app.requestRender(); });
+    // The shaders compile once the window has painted, not before it.
+    setTimeout(() => app.engine.warm().catch((err) => { if (!app.img) cantRun(err); else console.error(err); }), 0);
   } catch (err) {
-    console.error(err);
-    $('empty').hidden = false;
-    $('emptyTitle').textContent = 'Your browser can’t run the editor';
-    $('emptyText').textContent = err.message + ' Try a current version of Chrome, Edge, Firefox or Safari with hardware acceleration enabled.';
-    $('btnOpenEmpty').hidden = true;
+    cantRun(err);
     return;
   }
   app.engine.previewLong = prefs.previewAuto !== false ? autoPreviewLong(app.engine) : prefs.previewLong;

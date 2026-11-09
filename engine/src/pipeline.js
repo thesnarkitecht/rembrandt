@@ -15,7 +15,7 @@ export const INPUT_UNIFORMS = { uInC: REF_CONTRAST, uInK: toneK(REF_CONTRAST) };
 
 export function preUniforms(p, stats) {
   const h = (p.haze || 0) / 100, s = (p.dehaze || 0) / 100;
-  const A = stats?.airlight || [1, 1, 1];
+  const A = ((h || s) && stats?.airlight) || [1, 1, 1];   // read only when dehaze is on (the host works it out lazily)
   return {
     uExposure: 2 ** (p.exposure || 0),
     uMap: h || s ? 1 : 0,   // both read one transmission map, estimated at full strength

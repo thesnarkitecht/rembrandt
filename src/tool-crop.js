@@ -19,6 +19,23 @@ export function measureTilt(app) {
   return img ? detectTilt(img) : null;
 }
 
+// The same measurement for the Crop panel's hint: asynchronous, and kept per photo until its
+// geometry or lens corrections change (tone and colour edits don't move the horizon).
+const tiltMemo = new WeakMap();
+async function suggestedTilt(app) {
+  const e = app.images?.[app.cur], G = app.params.geometry;
+  const key = JSON.stringify([G.rot90, G.flipH, G.flipV, app.params.optics, app.img.aspect]);
+  const hit = e && tiltMemo.get(e);
+  if (hit && hit.key === key) return hit.t;
+  const geo = { ...G, angle: 0, aspect: 'original', cropAuto: true };
+  geo.crop = maxCrop(app.img.aspect, geo, aspectRatioOf(geo, app.img.aspect), 0, 0);
+  const img = await app.renderSmallAsync({ ...app.params, geometry: geo }, 800, 'tilt');
+  if (!img) return null;
+  const t = detectTilt(img);
+  if (e) tiltMemo.set(e, { key, t });
+  return t;
+}
+
 // Auto Vertical (Transform): makes converging verticals parallel. Measured on the photo without any
 // Vertical correction; a line X half-heights from the centre leans by about X·k for keystone k, so
 // the lean's slope across the frame gives k, and k the slider value. Returns the value or null.
@@ -134,14 +151,17 @@ export function buildCropPanel(app) {
     app.toast(t ? (Math.abs(t.angle) < 0.05 ? 'Already level' : `Straightened by ${Math.abs(t.angle).toFixed(1)}°`) : 'No clear horizon or straight lines to level by');
     refresh();
   };
-  setTimeout(() => {
-    if (Math.abs(g().angle) > 1e-6 || !app.img) return;
-    const t = measureTilt(app);
-    if (!t || Math.abs(t.angle) < 0.3) return;
+  // The "looks tilted" hint is measured when the browser is idle, read back without stalling the
+  // GPU, and remembered per photo: it used to freeze the panel for a moment each time Crop opened.
+  const idle = window.requestIdleCallback ? (f) => requestIdleCallback(f, { timeout: 1200 }) : (f) => setTimeout(f, 250);
+  idle(async () => {
+    if (Math.abs(g().angle) > 1e-6 || !app.img || !tip.isConnected) return;
+    const t = await suggestedTilt(app);
+    if (!t || Math.abs(t.angle) < 0.3 || !tip.isConnected || Math.abs(g().angle) > 1e-6) return;
     tip.textContent = '';
     tip.append(icon('wand'), el('span', {}, `Looks tilted ${Math.abs(t.angle).toFixed(1)}°`), button('Straighten', auto, 'sm'));
     tip.hidden = false;
-  }, 60);
+  });
 
   const sec = section('Crop & Straighten', { id: 'crop', badge: { icon: 'crop', color: 'linear-gradient(135deg,#ffd166,#f59e0b)' } });
   sec.body.append(

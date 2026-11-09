@@ -249,5 +249,9 @@ export function buildEditPanel(app) {
   reg.push(snaps);
 
   const root = el('div', { class: 'panel-view' }, tools, profRow, light.el, color.el, look.el, fx.el, curve.el, mixer.el, grading.el, detail.el, optics.el, snaps.el);
-  return { el: root, refresh: () => reg.forEach((c) => c.refresh()) };
+  const panel = { el: root, refresh: () => reg.forEach((c) => c.refresh()) };
+  // A panel built again (coming back from another tool) starts in step with the photo: without this
+  // the Profile row showed, blank, on photos that aren't RAW.
+  panel.refresh();
+  return panel;
 }

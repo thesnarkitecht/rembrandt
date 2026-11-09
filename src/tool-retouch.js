@@ -428,7 +428,7 @@ export function buildRetouchPanel(app) {
   spots.body.append(
     el('p', { class: 'hint rt-intro' }, aiOn() ? 'Paint over anything to remove it. Generative fills it with what was most likely behind it; Heal and Clone copy from a matching part of the photo (drag the source circle to choose your own).' : 'Paint over anything to remove it. Heal and Clone copy from a matching part of the photo (drag the source circle to choose your own).'),
     el('div', { class: 'field' }, el('span', {}, 'Mode'), mode.el),
-    size.el, feather.el, opacity.el, hide.el, visualize.el, spotLevel.el, dust,
+    size.el, feather.el, opacity.el, hide.el, visualize.el, spotLevel.el, el('div', { class: 'row-btns' }, dust),
     el('div', { class: 'row-btns rt-actions' }, newSrc, del, clear),
     count);
   const peopleNote = el('div', { class: 'hint' });

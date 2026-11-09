@@ -43,6 +43,7 @@ function resizeTo(bitmap, w, h) {
   return c;
 }
 
+const SOURCES = { down: DOWN, gauss: GAUSS, box: BOX, resample: RESAMPLE, blit: BLIT, lens: LENS, gfStats: GF_STATS, gfCoef: GF_COEF, hazeDark: HAZE_DARK, hazeT: HAZE_T, pre: PRE, main: MAIN, final: FINAL };
 const UPLOAD_TEXELS = 4 << 20;   // per slice of a RAW upload (32 MB of half floats)
 
 export class Engine {
@@ -60,11 +61,19 @@ export class Engine {
     this.canvas = canvas;
     this.maxTex = Math.min(gl.getParameter(gl.MAX_TEXTURE_SIZE), gl.getParameter(gl.MAX_RENDERBUFFER_SIZE));
     this.vao = gl.createVertexArray();
-    this.P = {
-      down: this.program(DOWN), gauss: this.program(GAUSS), box: this.program(BOX), resample: this.program(RESAMPLE), blit: this.program(BLIT), lens: this.program(LENS),
-      gfStats: this.program(GF_STATS), gfCoef: this.program(GF_COEF), hazeDark: this.program(HAZE_DARK), hazeT: this.program(HAZE_T),
-      pre: this.program(PRE), main: this.program(MAIN), final: this.program(FINAL),
-    };
+    // The built-in programs compile in the background (warm), or the first time one is used: compiling
+    // all thirteen up front held the first paint back by the whole compile time.
+    this.P = {};
+    this.compiling = new Map();
+    this.parallel = gl.getExtension('KHR_parallel_shader_compile');
+    for (const [name, src] of Object.entries(SOURCES)) {
+      Object.defineProperty(this.P, name, { enumerable: true, configurable: true, get: () => {
+        const prog = this.finish(this.compiling.get(name) || this.begin(src));
+        this.compiling.delete(name);
+        Object.defineProperty(this.P, name, { value: prog, enumerable: true });
+        return prog;
+      } });
+    }
     // Guided-filter statistics need variance precision: 32-bit floats when the GPU can filter them.
     this.statFmt = this.fullFloat && gl.getExtension('OES_texture_float_linear') ? gl.RGBA32F : gl.RGBA16F;
     this.curve = this.texture(256, 1, gl.RGBA16F, false);
@@ -82,20 +91,25 @@ export class Engine {
 
   // ------------------------------------------------------------ GL plumbing
 
-  program(fs) {
+  // Starts a program compiling without waiting for it: drivers that can (Chrome, Edge) compile it on
+  // another thread until someone asks how it went.
+  begin(fs) {
     const gl = this.gl;
-    const sh = (type, src) => {
-      const s = gl.createShader(type);
-      gl.shaderSource(s, src);
-      gl.compileShader(s);
-      if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s) || 'shader error');
-      return s;
-    };
-    const p = gl.createProgram();
-    gl.attachShader(p, sh(gl.VERTEX_SHADER, VERT));
-    gl.attachShader(p, sh(gl.FRAGMENT_SHADER, fs));
+    const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); return s; };
+    this.vert ||= sh(gl.VERTEX_SHADER, VERT);
+    const f = sh(gl.FRAGMENT_SHADER, fs), p = gl.createProgram();
+    gl.attachShader(p, this.vert);
+    gl.attachShader(p, f);
     gl.linkProgram(p);
-    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p) || 'link error');
+    return { p, f };
+  }
+
+  // Waits for a started program and reads its uniforms.
+  finish({ p, f }) {
+    const gl = this.gl;
+    if (!gl.getProgramParameter(p, gl.LINK_STATUS)) {
+      throw new Error((!gl.getShaderParameter(f, gl.COMPILE_STATUS) && gl.getShaderInfoLog(f)) || (!gl.getShaderParameter(this.vert, gl.COMPILE_STATUS) && gl.getShaderInfoLog(this.vert)) || gl.getProgramInfoLog(p) || 'shader error');
+    }
     const u = {};
     const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
     for (let i = 0; i < n; i++) {
@@ -103,6 +117,21 @@ export class Engine {
       u[info.name.replace(/\[0\]$/, '')] = { loc: gl.getUniformLocation(p, info.name), type: info.type, size: info.size };
     }
     return { p, u };
+  }
+
+  program(fs) { return this.finish(this.begin(fs)); }
+
+  // Compiles every built-in program ahead of the first photo. Resolves when they are all ready, and
+  // rejects if one doesn't compile on this GPU. Where the driver compiles in parallel nothing here
+  // blocks; elsewhere it takes as long as compiling them always did, just not before the first paint.
+  async warm() {
+    const names = Object.keys(SOURCES).filter((n) => !Object.getOwnPropertyDescriptor(this.P, n).value);
+    for (const n of names) if (!this.compiling.has(n)) this.compiling.set(n, this.begin(SOURCES[n]));
+    if (this.parallel) {
+      const gl = this.gl, done = (n) => !this.compiling.has(n) || gl.getProgramParameter(this.compiling.get(n).p, this.parallel.COMPLETION_STATUS_KHR);
+      for (let i = 0; i < 400 && !names.every(done) && !gl.isContextLost(); i++) await new Promise((r) => setTimeout(r, 25));
+    }
+    for (const n of names) void this.P[n];
   }
 
   texture(w, h, fmt, mip) {
@@ -712,42 +741,44 @@ export class Engine {
   // readPixels (8-bit) without making the CPU wait for the GPU: the pixels come back through a pixel
   // buffer and a fence, polled once a frame, so slider frames keep flowing while the histogram updates.
   // One at a time; resolves null if another started meanwhile or the browser lacks fences.
-  readPixelsAsync(p, w, h, v) {
+  readPixelsAsync(p, w, h, v, slot = 'histo') {
     const gl = this.gl;
     if (!gl.fenceSync) return Promise.resolve(this.readPixels(p, w, h, v));
     const out = this.process(p, null);
     const lod = out.mip ? Math.max(0, Math.log2(this.L.h / v.scale)) : 0;
-    let t = this.smallAsync;
-    if (!t || t.w !== w || t.h !== h) {
-      if (t) this.free(t);
-      t = this.smallAsync = this.target(w, h, { fmt: gl.RGBA8 });
+    // Each slot (the histogram, the thumbnail) has its own target, pixel buffer and turn, so one
+    // kind of read never cancels another.
+    const S = ((this.readSlots ||= new Map()).get(slot)) || this.readSlots.set(slot, { t: null, pbo: null, size: 0, ticket: 0 }).get(slot);
+    if (!S.t || S.t.w !== w || S.t.h !== h) {
+      if (S.t) this.free(S.t);
+      S.t = this.target(w, h, { fmt: gl.RGBA8 });
     }
-    this.draw(this.P.final, this.finalUniforms(p, out, { ...v, lod, clip: false, overlayId: null }), t);
+    this.draw(this.P.final, this.finalUniforms(p, out, { ...v, lod, clip: false, overlayId: null }), S.t);
     const bytes = w * h * 4;
-    if (!this.pbo || this.pboSize < bytes) {
-      if (this.pbo) gl.deleteBuffer(this.pbo);
-      this.pbo = gl.createBuffer();
-      this.pboSize = bytes;
-      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.pbo);
+    if (!S.pbo || S.size < bytes) {
+      if (S.pbo) gl.deleteBuffer(S.pbo);
+      S.pbo = gl.createBuffer();
+      S.size = bytes;
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, S.pbo);
       gl.bufferData(gl.PIXEL_PACK_BUFFER, bytes, gl.STREAM_READ);
     }
-    gl.bindFramebuffer(gl.FRAMEBUFFER, t.fbo);
-    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.pbo);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, S.t.fbo);
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, S.pbo);
     gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, 0);
     gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
     gl.flush();
-    const ticket = (this.readTicket = (this.readTicket || 0) + 1);
+    const ticket = ++S.ticket, pbo = S.pbo;
     return new Promise((resolve) => {
       const poll = () => {
-        if (ticket !== this.readTicket) { gl.deleteSync(sync); resolve(null); return; }
+        if (ticket !== S.ticket || pbo !== S.pbo) { gl.deleteSync(sync); resolve(null); return; }
         const st = gl.clientWaitSync(sync, 0, 0);
         if (st === gl.TIMEOUT_EXPIRED) { setTimeout(poll, 4); return; }
         gl.deleteSync(sync);
         if (st === gl.WAIT_FAILED) { resolve(null); return; }
         const px = new Uint8Array(bytes);
-        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.pbo);
+        gl.bindBuffer(gl.PIXEL_PACK_BUFFER, pbo);
         gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, px);
         gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
         resolve(px);

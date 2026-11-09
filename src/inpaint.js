@@ -20,6 +20,8 @@ async function model() {
     const ort = await import('./vendor/ort/ort.wasm.min.mjs');
     ort.env.wasm.wasmPaths = new URL('./vendor/ort/', import.meta.url).href;
     ort.env.wasm.numThreads = globalThis.crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 1) : 1;
+    // In a worker: a fill takes a second or more, and on the page's own thread the whole app froze for it.
+    ort.env.wasm.proxy = true;
     const s = await ort.InferenceSession.create(new URL('../models/inpaint-migan.onnx', import.meta.url).href, { executionProviders: ['wasm'] });
     return { ort, s };
   })();

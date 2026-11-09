@@ -63,6 +63,7 @@ export function load(onProgress = () => {}) {
     const tick = (n) => { got += n; onProgress(Math.min(1, got / total)); };
     const ort = await import('../vendor/ort/ort.wasm.min.mjs');
     ort.env.wasm.wasmPaths = new URL('../vendor/ort/', import.meta.url).href;
+    ort.env.wasm.proxy = true;   // in a worker, so indexing and searching photos never freeze the app
     const [v, t, k] = [await file('vision', tick), await file('text', tick), await file('tok', tick)];
     onProgress(1);
     const vision = await ort.InferenceSession.create(new Uint8Array(v));
