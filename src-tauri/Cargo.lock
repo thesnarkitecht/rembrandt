@@ -591,9 +591,9 @@ dependencies = [
 
 [[package]]
 name = "c2pa"
-version = "0.91.6"
+version = "0.91.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f95896dabbc80df88a9cca3e967e95c78b3b0906e7e0bea1ea13b87bade7af88"
+checksum = "f8e2a752d002206ccd431a9fe22cdc1205023d316c118dd60c4bf568cd493dea"
 dependencies = [
  "asn1-rs",
  "async-generic",
@@ -681,9 +681,9 @@ dependencies = [
 
 [[package]]
 name = "c2pa_raw_crypto"
-version = "0.2.1"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38287179bf40cb58a3fafef09ee121b7221d560a76bb6b672742445a2c8db08d"
+checksum = "f7e31e5d6f61e52360fd157cecc52efb38098f32b668acb27231ffedac89434f"
 dependencies = [
  "const-hex",
  "ecdsa",
@@ -973,6 +973,15 @@ dependencies = [
  "getrandom 0.2.17",
  "once_cell",
  "tiny-keccak",
+]
+
+[[package]]
+name = "constant_time_eq"
+version = "0.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9eb6feb175df65d0a3ccd3e73484e940d0ac664e8034f0519fd49a93db3071d9"
+dependencies = [
+ "rustversion",
 ]
 
 [[package]]
@@ -7805,17 +7814,20 @@ dependencies = [
 
 [[package]]
 name = "zip"
-version = "9.1.3"
+version = "9.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1156b39d142a34b999c2310a50455e0cb3760bf7efad0122f796d813bee26ccb"
+checksum = "0700e6c427aff64acdbf02e85fbfd946c2ee12319d1af013092f3a2178914ff8"
 dependencies = [
+ "constant_time_eq",
  "crc32fast",
  "getrandom 0.4.3",
  "indexmap 2.14.2",
+ "libc",
  "memchr",
  "nix",
  "typed-path",
  "windows-sys 0.61.2",
+ "zeroize",
 ]
 
 [[package]]
