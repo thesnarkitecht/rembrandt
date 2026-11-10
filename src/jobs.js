@@ -123,6 +123,30 @@ export function addJob(spec) {
   pump();
   return job;
 }
+// A job the caller runs itself (it isn't queued here), listed and shown like any other:
+// `trackJob({ title, kind, photo })` → the job, with setProgress, finish() and fail(err).
+// With `expect` (ms) progress creeps on its own toward 90 % over about that long, for work that
+// can't report how far along it is.
+export function trackJob(spec) {
+  const job = { id: uid(), when: 'now', progress: 0, state: spec.queued ? 'queued' : 'running', added: Date.now(), external: true, ...spec };
+  job.setProgress = (f, note) => { job.progress = Math.max(job.progress, Math.min(1, f)); if (note !== undefined) job.note = note; emit(false); };
+  job.start = () => { if (job.state !== 'queued') return; job.state = 'running'; job.started = Date.now(); emit(); creep(); };
+  job.finish = () => { if (!live(job)) return; clearInterval(job.timer); job.state = 'done'; job.progress = 1; job.finished = Date.now(); emit(); };
+  job.fail = (err) => { if (!live(job)) return; clearInterval(job.timer); job.state = job.cancelled || err?.name === 'AbortError' ? 'cancelled' : 'failed'; job.error = err?.message || String(err); job.finished = Date.now(); emit(); };
+  const creep = () => {
+    if (!job.expect) return;
+    job.timer = setInterval(() => {
+      if (job.state !== 'running') { clearInterval(job.timer); return; }
+      job.setProgress(0.9 * (1 - Math.exp(-(Date.now() - job.started) / job.expect * 2.2)));
+    }, 120);
+  };
+  if (job.state === 'running') { job.started = Date.now(); creep(); }
+  jobs.push(job);
+  emit();
+  return job;
+}
+const live = (j) => j.state === 'running' || j.state === 'queued';
+
 // Runs every job allowed now, one at a time.
 let pumping = false;
 async function pump() {
@@ -130,7 +154,7 @@ async function pump() {
   pumping = true;
   try {
     for (;;) {
-      const j = jobs.find((x) => x.state === 'queued' && allowed(x));
+      const j = jobs.find((x) => x.state === 'queued' && !x.external && allowed(x));
       if (!j) break;
       current = j; j.state = 'running'; emit();
       const lock = j.when !== 'now' && prefs.keepAwake !== false ? await wakeLock() : null;
@@ -163,6 +187,7 @@ export function cancelJob(id) {
   if (!j) return;
   j.cancelled = true;
   if (j.state === 'queued') { j.state = 'cancelled'; emit(); }
+  else if (j.external && j.state === 'running') j.fail?.(Object.assign(new Error('Cancelled'), { name: 'AbortError' }));
 }
 export function pauseJob(id, paused) { const j = jobs.find((x) => x.id === id); if (j) { j.paused = paused; emit(); } }
 export function runNow(id) { const j = jobs.find((x) => x.id === id); if (j && j.state === 'queued') { j.when = 'now'; emit(); pump(); } }

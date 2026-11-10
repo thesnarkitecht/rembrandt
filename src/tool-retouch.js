@@ -5,6 +5,7 @@
 // source is chosen when the stroke ends. Drag a spot to move it, drag its source circle to choose
 // where it copies from. Delete removes the selected spot, / finds it a different source, H hides
 // the spots. (Interaction after RAWmakase's retouch tool, MIT; see NOTICE.md.)
+import { trackJob } from './jobs.js';
 import { el, svgEl } from './util.js';
 import { slider, segmented, button, toggle, section } from './ui.js';
 import { A } from './geometry.js';
@@ -189,19 +190,27 @@ export class RetouchOverlay {
 // Generative Remove: the painted area is filled by the inpainting network (a few seconds), then
 // becomes a normal spot. Fills are made one at a time, in the order painted.
 let fillQueue = Promise.resolve();
+let lastFill = 2500;   // ms the last fill took: how fast its card's progress moves
 export const fillState = { busy: 0, error: '' };
 export function addFill(app, op, { quiet = false } = {}) {
   fillState.busy++; fillState.error = ''; app.refreshPanel();
   const photo = app.images[app.cur];
+  // Listed in background work like any other job, with its own card (the photo colouring in). A fill
+  // can't say how far along it is, so its progress creeps toward the time a fill usually takes.
+  const shown = trackJob({ kind: 'fill', title: `Generative Remove · ${photo?.name || ''}`, photoId: photo?.id, queued: true, expect: lastFill });
   const job = fillQueue.then(async () => {
-    if (app.images[app.cur] !== photo) return null;   // moved on to another photo
+    if (app.images[app.cur] !== photo || shown.cancelled) return null;   // moved on to another photo
+    shown.start();
+    const t0 = performance.now();
     await makeFill(sourceImage(app), op);
-    if (app.images[app.cur] !== photo) return null;
+    lastFill = Math.max(300, Math.min(20000, performance.now() - t0));
+    if (app.images[app.cur] !== photo || shown.cancelled) return null;
     ops(app).push(op);
     retouchState.selected = ops(app).length - 1;
     app.requestRender(); app.commit();
     return op;
-  }).catch((err) => { console.error(err); fillState.error = `Couldn’t remove that: ${err.message}`; if (!quiet) app.toast(fillState.error); return null; })
+  }).then((r) => { if (r) shown.finish(); else shown.fail(Object.assign(new Error('Moved on to another photo'), { name: 'AbortError' })); return r; })
+    .catch((err) => { console.error(err); shown.fail(err); fillState.error = `Couldn’t remove that: ${err.message}`; if (!quiet) app.toast(fillState.error); return null; })
     .finally(() => { fillState.busy--; app.refreshPanel(); app.drawOverlay(); });
   fillQueue = job;
   return job;

@@ -4,6 +4,7 @@
 import { el } from './util.js';
 import { icon } from './icons.js';
 import { allJobs, onJobsChange, cancelJob, pauseJob, runNow, reschedule, clearFinished, nightLabel } from './jobs.js';
+import { showJob, jobPhoto } from './portrait-progress.js';
 
 const WHEN = { now: 'Now', away: 'When you’re away', tonight: () => `Tonight, ${nightLabel()}` };
 const whenText = (w) => (typeof WHEN[w] === 'function' ? WHEN[w]() : WHEN[w]);
@@ -22,23 +23,36 @@ export function mountJobs(anchor) {
     panel.style.top = `${r.bottom + 8}px`;
     panel.style.right = `${Math.max(8, innerWidth - r.right - 60)}px`;
   };
-  btn.addEventListener('click', (e) => { e.stopPropagation(); panel.hidden = !panel.hidden; if (!panel.hidden) { place(); paint(); } });
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    // One job: straight to its card. Several: the list, each row opening its own.
+    const live = allJobs().filter((j) => j.state === 'running' || j.state === 'queued');
+    if (live.length === 1 && panel.hidden) { showJob(live[0]); return; }
+    panel.hidden = !panel.hidden; if (!panel.hidden) { place(); paint(); }
+  });
   document.addEventListener('pointerdown', (e) => { if (!panel.hidden && !panel.contains(e.target) && e.target !== btn) panel.hidden = true; });
 
   function row(j) {
     const live = j.state === 'running' || j.state === 'queued';
     const status = j.state === 'running' ? (j.paused ? 'Paused' : j.note || `${Math.round(j.progress * 100)}%`)
-      : j.state === 'queued' ? whenText(j.when) : j.state === 'done' ? 'Done' : j.state === 'failed' ? j.error || 'Failed' : 'Cancelled';
+      : j.state === 'queued' ? (j.external ? 'Up next' : whenText(j.when)) : j.state === 'done' ? 'Done' : j.state === 'failed' ? j.error || 'Failed' : 'Cancelled';
     const act = (name, title, fn) => el('button', { class: 'icon-btn sm', type: 'button', title, 'aria-label': title, onclick: (e) => { e.stopPropagation(); fn(); } }, icon(name));
-    return el('div', { class: `job-row is-${j.state}` },
+    // The whole row opens the job's own card: its photo, colouring in as the work goes.
+    const src = jobPhoto(j);
+    const p = j.state === 'done' ? 100 : Math.round(j.progress * 100);
+    return el('div', { class: `job-row is-${j.state}`, role: 'button', tabindex: 0, title: 'Show progress',
+      onclick: () => { panel.hidden = true; showJob(j); }, onkeydown: (e) => { if (e.key === 'Enter') { panel.hidden = true; showJob(j); } } },
+      el('span', { class: 'job-thumb', style: `--p:${p}%` }, src ? el('img', { src, alt: '' }) : null),
       el('div', { class: 'job-main' },
-        el('div', { class: 'job-title' }, j.title),
+        el('div', { class: 'job-kind' }, j.title.split(' · ')[0]),
+        el('div', { class: 'job-title' }, j.title.split(' · ').slice(1).join(' · ') || j.title),
         el('div', { class: 'job-status' }, status),
         live ? el('div', { class: 'progress thin' }, el('span', { style: `width:${Math.round(j.progress * 100)}%` })) : null),
       el('div', { class: 'job-acts' },
-        j.state === 'running' ? act(j.paused ? 'redo' : 'minus', j.paused ? 'Resume' : 'Pause', () => pauseJob(j.id, !j.paused)) : null,
-        j.state === 'queued' && j.when !== 'now' ? act('redo', 'Run now', () => runNow(j.id)) : null,
-        j.state === 'queued' && j.when !== 'tonight' ? act('clock', `Tonight, ${nightLabel()}`, () => reschedule(j.id, 'tonight')) : null,
+        // Work run outside the queue (a Generative Remove fill) can only be cancelled.
+        j.state === 'running' && !j.external ? act(j.paused ? 'redo' : 'minus', j.paused ? 'Resume' : 'Pause', () => pauseJob(j.id, !j.paused)) : null,
+        j.state === 'queued' && !j.external && j.when !== 'now' ? act('redo', 'Run now', () => runNow(j.id)) : null,
+        j.state === 'queued' && !j.external && j.when !== 'tonight' ? act('clock', `Tonight, ${nightLabel()}`, () => reschedule(j.id, 'tonight')) : null,
         live ? act('x', 'Cancel', () => cancelJob(j.id)) : null,
         j.state === 'done' && j.open ? act('edit', 'Open', () => j.open()) : null));
   }
@@ -56,7 +70,7 @@ export function mountJobs(anchor) {
     btn.title = running ? `${running.title}: ${Math.round(running.progress * 100)}%` : live.length ? `${live.length} waiting · ${whenText(live[0].when)}` : 'Background work done';
     if (panel.hidden) return;
     panel.replaceChildren(
-      el('div', { class: 'jobs-head' }, el('b', {}, 'Background work'),
+      el('div', { class: 'jobs-head' }, el('b', {}, 'Background work'), el('span', { class: 'grow' }),
         list.some((j) => !['running', 'queued'].includes(j.state)) ? el('button', { class: 'linkish', type: 'button', onclick: () => clearFinished() }, 'Clear finished') : null),
       list.length ? el('div', { class: 'jobs-list' }, [...list].reverse().map(row)) : el('p', { class: 'hint' }, 'Nothing running.'),
       el('p', { class: 'hint jobs-foot' }, 'Heavy work pauses while you edit. Change when it runs in Settings › Performance.'));

@@ -1342,17 +1342,39 @@ body[data-mode="library"] .ask-btn, body[data-mode="account"] .ask-btn { display
 .jobs-btn.waiting .jobs-ring { background: var(--line, rgba(127,127,127,.35)); }
 .jobs-count { position: absolute; right: -2px; top: -2px; min-width: 14px; height: 14px; padding: 0 3px; border-radius: 7px; background: var(--accent); color: #fff; font-size: 9.5px; line-height: 14px; font-weight: 650; }
 .jobs-count:empty { display: none; }
-.jobs-panel { position: fixed; z-index: 60; width: min(360px, calc(100vw - 16px)); max-height: 60vh; overflow: auto; padding: 12px; border-radius: 10px; background: var(--panel, var(--bg)); border: 1px solid var(--line, rgba(127,127,127,.25)); box-shadow: 0 10px 34px rgba(0,0,0,.28); }
+/* Background work: the same ink card as the progress cards (dark in both themes, like the splash and the
+   studio), a double rule, an inverted mono tag for its title; each job as a mono kind over its photo's
+   name in the serif italic, with a bronze progress line. */
+.jobs-panel { position: fixed; z-index: 60; width: min(360px, calc(100vw - 16px)); max-height: 62vh; overflow: auto; padding: 0 12px 10px;
+  background: color-mix(in srgb, #0b0a09 94%, transparent); color: #eee8de; border: 1px solid rgba(238, 232, 222, 0.14); border-radius: 0;
+  box-shadow: 0 0 0 2px #0b0a09, 0 0 0 3px rgba(238, 232, 222, 0.16), 0 18px 40px rgba(0, 0, 0, 0.45); backdrop-filter: blur(10px);
+  scrollbar-width: thin; scrollbar-color: rgba(238, 232, 222, 0.2) transparent; animation: jobs-in 0.18s cubic-bezier(0.2, 0.8, 0.2, 1); }
+@keyframes jobs-in { from { opacity: 0; transform: translateY(-6px); } }
 .jobs-panel[hidden] { display: none; }
-.jobs-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-size: 13px; }
-.job-row { display: flex; gap: 8px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line, rgba(127,127,127,.18)); }
-.job-main { flex: 1; min-width: 0; }
-.job-title { font-size: 12.5px; font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.job-status { font-size: 11.5px; color: var(--muted); }
-.job-row.is-failed .job-status { color: #e5484d; }
-.job-acts { display: flex; gap: 2px; }
-.progress.thin { height: 3px; margin-top: 5px; }
-.jobs-foot { margin: 8px 0 0; font-size: 11.5px; }
+.jobs-head { position: sticky; top: 0; z-index: 1; display: flex; align-items: center; gap: 8px; margin: 0 -12px; padding: 10px 12px 8px; background: #0b0a09; }
+.jobs-head b { padding: 3px 7px; background: #eee8de; color: #0b0a09; font: 500 10px var(--mono); letter-spacing: 0.1em; text-transform: uppercase; }
+.jobs-head .grow { flex: 1; }
+.jobs-head .linkish { color: #a8a095; font: 500 10px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; text-decoration: none; }
+.jobs-head .linkish:hover { color: #e0b374; }
+.jobs-panel .job-row { display: flex; align-items: center; gap: 10px; padding: 9px 4px; margin: 0 -4px; border-top: 1px solid rgba(238, 232, 222, 0.09); transition: background-color 0.12s; }
+.jobs-panel .job-row:hover, .jobs-panel .job-row:focus-visible { background: rgba(238, 232, 222, 0.05); outline: none; }
+.jobs-panel .job-main { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.job-kind { font: 500 9.5px var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: #a8a095; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jobs-panel .job-title { font: italic 400 16px/1.15 'Instrument Serif', Georgia, serif; color: #f4ead8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jobs-panel .job-row:hover .job-title { color: #f4d292; }
+.jobs-panel .job-status { font: 500 9.5px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: #e0b374; }
+.jobs-panel .job-row.is-queued .job-status { color: #a8a095; }
+.jobs-panel .job-row.is-done .job-status { color: #f4d292; }
+.jobs-panel .job-row.is-failed .job-status, .jobs-panel .job-row.is-cancelled .job-status { color: #f08a7e; text-transform: none; letter-spacing: 0; font-family: inherit; font-size: 11.5px; }
+.jobs-panel .progress.thin { height: 2px; margin-top: 5px; border-radius: 0; background: rgba(238, 232, 222, 0.12); }
+.jobs-panel .progress.thin span { background: linear-gradient(90deg, #8a5829, #c98f4f, #f4d292); }
+.jobs-panel .job-acts { display: flex; gap: 0; }
+.jobs-panel .job-acts .icon-btn { color: #a8a095; background: transparent; border-radius: 0; }
+.jobs-panel .job-acts .icon-btn:hover { color: #eee8de; background: rgba(238, 232, 222, 0.08); }
+.jobs-panel .hint { color: #a8a095; }
+.jobs-panel .jobs-foot { margin: 8px 0 0; padding-top: 8px; border-top: 1px solid rgba(238, 232, 222, 0.09); font-size: 11px; line-height: 1.45; }
+.jobs-count { background: #c98f4f; color: #0b0a09; border-radius: 0; font-family: var(--mono); font-weight: 600; }
+.jobs-ring { background: conic-gradient(#c98f4f var(--p, 0%), var(--line, rgba(127,127,127,.25)) 0); }
 
 /* Compare (src/compare-view.js): 2–4 photos side by side, zoom and pan linked. */
 .cmpv { position: fixed; inset: 0; z-index: 60; display: flex; flex-direction: column; background: var(--bg); outline: none; animation: view-in 0.2s cubic-bezier(0.2, 0.7, 0.2, 1); }
@@ -1542,3 +1564,50 @@ body.tethering #empty { display: none; }
 .btn:active:not(:disabled), .chip:active, .icon-btn:active:not(:disabled), .rail-btn:active { transform: translateY(1px); }
 #panelBody .range:active::-webkit-slider-thumb { box-shadow: 0 0 0 1px var(--thumb-ring), 0 0 0 5px color-mix(in srgb, var(--accent) 22%, transparent); }
 #panelBody .range:active::-moz-range-thumb { box-shadow: 0 0 0 1px var(--thumb-ring), 0 0 0 5px color-mix(in srgb, var(--accent) 22%, transparent); }
+
+/* A background job's card (portrait-progress.js showJob): the job's own photo in dots, under the
+   background-work button, with its actions and the rest of the queue as thumbnails. */
+/* !important on left: the import card's editor placement (beside the navigator) mustn't stretch this one. */
+.pp-card.pp-job { left: auto !important; right: 16px; top: 58px; bottom: auto; align-items: flex-start; pointer-events: auto; transform: translateY(-10px) scale(0.98); transform-origin: top right; max-width: calc(100vw - 32px); }
+body[data-mode="edit"] .pp-card.pp-job { bottom: auto; }
+.pp-card.pp-job.on { transform: none; }
+:root[data-app="mobile"] .pp-card.pp-job { left: 50% !important; right: auto; top: calc(58px + env(safe-area-inset-top)); transform: translate(-50%, -10px); }
+:root[data-app="mobile"] .pp-card.pp-job.on { transform: translate(-50%, 0); }
+.pp-frame { position: relative; flex: none; padding: 0; border: 0; background: none; cursor: pointer; overflow: hidden; line-height: 0; }
+.pp-frame .pp-art { width: 128px; height: 158px; transition: width 0.5s cubic-bezier(0.2, 0.8, 0.2, 1), height 0.5s cubic-bezier(0.2, 0.8, 0.2, 1); }
+.pp-frame:hover .pp-art { filter: brightness(1.12); }
+.pp-frame:focus-visible { outline: 1px solid #e0b374; outline-offset: 3px; }
+.pp-glint { position: absolute; inset: 0; pointer-events: none; opacity: 0; background: linear-gradient(105deg, transparent 35%, rgba(255, 236, 200, 0.4) 50%, transparent 65%); transform: translateX(-120%); }
+.pp-job.done .pp-glint { animation: pp-sweep 1.4s 0.25s cubic-bezier(0.4, 0, 0.2, 1); }
+@keyframes pp-sweep { 0% { opacity: 1; transform: translateX(-120%); } 100% { opacity: 1; transform: translateX(120%); } }
+.pp-job .pp-text { align-self: stretch; display: flex; flex-direction: column; gap: 6px; min-width: 176px; max-width: 220px; padding: 2px 18px 0 0; }
+.pp-kind { font: 500 9.5px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: #a8a095; }
+.pp-job .pp-label { font-size: 17px; overflow-wrap: anywhere; }
+.pp-bar { height: 2px; background: rgba(238, 232, 222, 0.12); overflow: hidden; }
+.pp-bar > span { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #8a5829, #c98f4f, #f4d292); transition: width 0.4s ease-out; }
+.pp-job.waiting .pp-bar > span { width: 30% !important; animation: pp-wait 1.6s ease-in-out infinite; background: rgba(238, 232, 222, 0.35); }
+@keyframes pp-wait { 0% { transform: translateX(-100%); } 100% { transform: translateX(340%); } }
+.pp-job.failed .pp-count, .pp-error { color: #f08a7e; }
+.pp-error { margin: 0; font-size: 11.5px; line-height: 1.35; }
+.pp-acts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; padding-top: 4px; }
+.pp-acts .btn { height: 26px; color: #eee8de; border-color: rgba(238, 232, 222, 0.22); background: transparent; }
+.pp-acts .btn.primary { background: #c98f4f; border-color: #c98f4f; color: #0b0a09; }
+.pp-acts .btn:hover { border-color: rgba(238, 232, 222, 0.5); }
+.pp-close { position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; padding: 3px; border: 0; background: none; color: #a8a095; cursor: pointer; }
+.pp-close:hover { color: #eee8de; }
+.pp-close .i { width: 14px; height: 14px; }
+.pp-queue { display: flex; gap: 5px; padding-top: 8px; border-top: 1px solid rgba(238, 232, 222, 0.1); }
+.pp-queue[hidden] { display: none; }
+.pp-q { position: relative; width: 28px; height: 28px; padding: 0; border: 0; background: #1c1a17; cursor: pointer; overflow: hidden; }
+.pp-q img, .pp-q-ph { display: block; width: 100%; height: 100%; object-fit: cover; filter: grayscale(1) brightness(0.8); transition: filter 0.2s; }
+.pp-q::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: linear-gradient(90deg, #c98f4f var(--p, 0%), transparent 0); }
+.pp-q.is-done img, .pp-q:hover img { filter: none; }
+.pp-q.is-running img { filter: grayscale(0.4); }
+/* Rows in the background-work list: the job's photo, filled with colour as far as it has got. */
+.job-row { cursor: pointer; }
+.job-thumb { position: relative; flex: none; width: 38px; height: 38px; background: #1c1a17; overflow: hidden; box-shadow: 0 0 0 1px rgba(238, 232, 222, 0.12); }
+.job-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; filter: grayscale(1); }
+.job-row.is-done .job-thumb img { filter: none; }
+.job-row.is-running .job-thumb { background: linear-gradient(0deg, #c98f4f var(--p), #1c1a17 0); }
+.job-row.is-running .job-thumb img { opacity: 0.85; mix-blend-mode: luminosity; }
+@media (prefers-reduced-motion: reduce) { .pp-job .pp-glint, .pp-job.waiting .pp-bar > span { animation: none; } .pp-frame .pp-art { transition: none; } }

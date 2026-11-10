@@ -63,7 +63,7 @@ import { openExport, renderExport, renderPixels } from './export.js';
 import { upscale, maxScale } from './ai/upscale.js';
 import { buildNavSide } from './navside.js';
 import { createDevelopFX } from './develop-fx.js';
-import { begin as beginProgress } from './portrait-progress.js';
+import { begin as beginProgress, setJobPhotos } from './portrait-progress.js';
 import { createDirect } from './direct.js';
 import { createCommandBar } from './command.js';
 import { el, svgEl, clamp, clone, debounce, setPath, srgbToLinear, uid, warmDownloads, deepMerge } from './util.js';
@@ -339,7 +339,7 @@ const app = {
     if (scale > this.srMaxScale(image)) throw new Error('This photo is too large to enlarge that much on this device');
     const what = scale === 1 ? 'Restore' : `Super Resolution ${scale}×`;
     return addJob({
-      kind: 'superres', title: `${what} · ${cur.name}`, when,
+      kind: 'superres', title: `${what} · ${cur.name}`, when, photoId: cur.id,
       run: (job) => this._superResolution(cur, image, { scale, denoise, job, onProgress: (f) => job.setProgress(f) }),
     });
   },
@@ -352,7 +352,7 @@ const app = {
     const base = cur.name.replace(/\.[^.]+$/, '');
     const file = new File([blob], `${base}-${scale === 1 ? 'restored' : `${scale}x`}.jpg`, { type: 'image/jpeg', lastModified: Date.now() });
     const [made] = (await importItems([{ file }], { open: false })) || [];
-    if (job && made) job.open = () => openInEditor(made.id);
+    if (job && made) { job.open = () => openInEditor(made.id); job.resultId = made.id; }
     app.toast(`${scale === 1 ? 'Restored' : 'Enlarged'} copy of “${cur.name}” is ready`, made ? { action: { label: 'Open', onClick: () => openInEditor(made.id) } } : {});
     return { w: out.width, h: out.height };
   },
@@ -2525,7 +2525,7 @@ async function denoisePhoto(id, strength, job) {
   const [made] = (await importItems([{ file: out }], { open: false })) || [];
   // The open photo's edit may not be saved yet: it counts too.
   if (made && (e.edited || app.images[app.cur] === e)) touch(made, { params: clone(editOf(e)), edited: true, rating: e.rating, flag: e.flag });
-  if (made) { job.open = () => openInEditor(made.id); refreshThumbs([made]); }
+  if (made) { { job.open = () => openInEditor(made.id); job.resultId = made.id; } refreshThumbs([made]); }
   app.toast(`Denoised copy of “${e.name}” is ready`, made ? { action: { label: 'Open', onClick: () => openInEditor(made.id) } } : {});
   return { w: frame.w, h: frame.h };
 }
@@ -2595,7 +2595,7 @@ async function expandPhoto(id, kind, job) {
     p.warp = { ...p.warp, strokes: [], faces: null };
     p.optics = { ...p.optics, profile: false, manualDistortion: 0, vertical: 0, horizontal: 0 };
   } });
-  if (made) job.open = () => openInEditor(made.id);
+  if (made) { job.open = () => openInEditor(made.id); job.resultId = made.id; }
   app.toast(`Expanded copy of “${e.name}” is ready`, made ? { action: { label: 'Open', onClick: () => openInEditor(made.id) } } : {});
   return { w: r.w, h: r.h };
 }
@@ -2610,7 +2610,7 @@ async function hdrOnePhoto(id, strength, job) {
   // Same pixels and geometry as the original: the whole edit carries over. Opened shadows show their
   // noise, so colour noise reduction starts a little higher.
   const made = await importBeside(e, r, { model: 'HDR', suffix: 'HDR', adjust: (p) => { p.nr = { ...p.nr, chroma: Math.max(p.nr.chroma || 0, 25) }; } });
-  if (made) job.open = () => openInEditor(made.id);
+  if (made) { job.open = () => openInEditor(made.id); job.resultId = made.id; }
   app.toast(`HDR of “${e.name}” is ready`, made ? { action: { label: 'Open', onClick: () => openInEditor(made.id) } } : {});
   return { w: r.w, h: r.h };
 }
@@ -2695,7 +2695,7 @@ async function runMerge(ids, kind, job) {
     const base = list[0].name.replace(/\.[^.]+$/, '');
     const file = new File([r.dng], `${base}-${M.suffix}.dng`, { type: 'image/x-adobe-dng', lastModified: takenAt(list[0]) || Date.now() });
     const [made] = (await importItems([{ file }], { open: false })) || [];
-    if (made) job.open = () => openInEditor(made.id);
+    if (made) { job.open = () => openInEditor(made.id); job.resultId = made.id; }
     app.toast(`${M.name} made from ${plural(list.length)} · ${r.w} × ${r.h}`, made ? { action: { label: 'Open', onClick: () => openInEditor(made.id) } } : {});
     return { w: r.w, h: r.h };
   } catch (err) {
@@ -3572,6 +3572,13 @@ function boot() {
   });
   $('library').replaceWith(library.el);
   trackActivity();
+  // Each background job's card shows its photo (the result's, once there is one); clicking the photo
+  // while it works opens the original.
+  setJobPhotos((j) => {
+    const thumb = (id) => id && app.images.find((x) => x.id === id)?.thumbUrl;
+    j.photoId ||= j.desc?.id || j.desc?.heroId || j.desc?.ids?.[0];
+    return (j.state === 'done' && thumb(j.resultId)) || thumb(j.photoId) || null;
+  }, (id) => openInEditor(id));
   mountJobs($('btnAccount'));
   accountPage = buildAccountPage(app, accountHooks);
   $('accountPage').replaceWith(accountPage.el);
