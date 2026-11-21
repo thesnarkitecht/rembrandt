@@ -63,7 +63,7 @@ unsafe impl Send for Gp {}
 unsafe impl Sync for Gp {}
 
 fn load() -> Result<Gp, String> {
-    let open = |names: &[&str]| names.iter().find_map(|n| unsafe { Library::new(n) }.ok());
+    let open = |names: &[&str]| names.iter().find_map(|n| unsafe { Library::new(*n) }.ok());
     let missing = || "Tethered shooting on Linux needs libgphoto2: install the libgphoto2-6 package (libgphoto2 on Arch and Fedora), then open this again.".to_string();
     let lib = open(&["libgphoto2.so.6", "libgphoto2.so"]).ok_or_else(missing)?;
     let port = open(&["libgphoto2_port.so.12", "libgphoto2_port.so"]).ok_or_else(missing)?;
