@@ -20,8 +20,12 @@ async function load() {
 }
 
 // Names as comparable tokens: "FE 24-70mm F2.8 GM II" → ["fe", "24", "70", "f2.8", "gm", "ii"].
+// Cameras often glue the mount to the focal length (Canon writes "EF-S55-250mm" and "RF-S18-45mm",
+// Sony "E18-135mm"): a single letter right before a focal length is split off too. Not before other
+// numbers, so lens codes like Tamron's "B061" stay whole, and never the f of an aperture.
 function tokens(s) {
   return String(s || '').toLowerCase()
+    .replace(/\b([a-eg-z])(\d+(?:\.\d+)?)(?=\s*(?:mm\b|[-–]\s*\d))/g, '$1 $2')
     .replace(/f\s*\/\s*/g, 'f').replace(/\b(f\d+(?:\.\d+)?)\s+([a-z])\b/g, '$1$2').replace(/(\d)\s*mm\b/g, '$1').replace(/[-–/]/g, ' ')
     .replace(/\b([a-eg-z][a-z]+)(\d)/g, '$1 $2').replace(/(\d)([a-z]{2,})\b/g, '$1 $2')
     .split(/[^a-z0-9.+]+/).filter(Boolean).map((t) => t.replace(/\.0$/, ''));
