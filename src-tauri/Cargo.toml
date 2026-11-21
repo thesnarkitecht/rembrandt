@@ -42,7 +42,7 @@ pollster = "1.0"
 # libloading: libgphoto2 for tethering, opened when tethering starts (src/tether/gphoto.rs).
 [target.'cfg(target_os = "linux")'.dependencies]
 webkit2gtk = "2.0"
-libloading = "0.8"
+libloading = "0.9"
 
 # Generative Remove natively (src/inpaint.rs): ONNX Runtime with Core ML, prebuilt for Apple silicon.
 # Elsewhere the web app's WebAssembly version (the prebuilt Linux library needs glibc 2.38 and a newer
