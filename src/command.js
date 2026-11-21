@@ -341,7 +341,7 @@ export function createCommandBar(app, mount = null) {
     ? el('div', { class: 'cmd-box' }, el('div', { class: 'cmd-field' }, input, mic, send), reading, list)
     : el('div', { class: 'cmd-box' }, el('div', { class: 'cmd-field' }, icon('sparkle'), input, el('kbd', {}, 'esc')), list);
   // In the left panel: the studio (studio.js), a small Rembrandt that does the edits, and the box.
-  const studio = mount ? createStudio(app) : null;
+  const studio = mount ? createStudio(app, { onTry: (t) => { input.value = t; input.focus(); input.dispatchEvent(new Event('input')); } }) : null;
   const root = mount ? el('div', { class: 'cmd inline' }, studio.el, box) : el('div', { class: 'cmd', hidden: true }, box);
   (mount || document.body).append(root);
   let active = false;
@@ -373,8 +373,12 @@ export function createCommandBar(app, mount = null) {
     setInterval(() => { if (!active && !input.value) input.placeholder = EX[(ex = (ex + 1) % EX.length)]; }, 3200);
   }
 
-  // Words in the studio: Rembrandt thinks, then makes each change on the photo in turn.
+  // Words in the studio, sent with Enter.
   async function ask(q) {
+    // What the photo was already showing as you typed (the rules read it): Enter keeps exactly that,
+    // at once, as ⌘K does. Only words the rules can't read wait for the language model.
+    const seen = understand(app, q, app.params, null);
+    if (seen && !seen.error) { track('feature', 'words-rules'); return keep(q, seen); }
     let smart = null;
     // Needle reads each clause the rules can't take exactly (see ai/needle.js); while it is still
     // loading, the first request waits for it a little.
@@ -391,12 +395,18 @@ export function createCommandBar(app, mount = null) {
     const it = understand(app, q, app.params, smart);
     track('feature', smart?.size ? 'words-model' : 'words-rules');
     if (!it || it.error) { studio.record(q, it?.error || 'I don’t know that one yet. Try “exposure +0.3”, “warmer” or “paste the edits from the previous photo”.', app.params, app.params); return; }
-    studio.perform(q, it.next, () => {
-      app.preview = null;
-      app.commit();
-      app.rebuildPanel();
-      app.aiEnsure();
-    });
+    keep(q, it);
+  }
+  // Made at once (you've been watching it on the photo while typing); the studio lists what moved,
+  // with Undo.
+  function keep(q, it) {
+    const was = app.params;
+    app.params = it.next;
+    app.preview = null;
+    app.commit();
+    app.rebuildPanel();
+    app.aiEnsure();
+    studio.record(q, it.labels?.length ? it.labels.join(' · ') : 'Done', was, app.params);
   }
 
   // Called after each edit settles: a new photo, a new greeting.

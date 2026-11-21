@@ -1,16 +1,11 @@
-// The studio: Edit with words, without the chat. A small Rembrandt, in dots, thinks over what you
-// asked (the dots ripple), then makes the edits one at a time while you watch: each slider moves on
-// the photo and in the panel, its row counts to the new value, and the portrait fills with colour as
-// the work goes on. Then it settles back to grey, with Undo. Everything here runs on this device.
+// The studio: Edit with words in the left panel, without the chat. As you type, the edit shows on
+// the photo live (command.js); Enter makes it, and the studio lists what moved (each slider's row,
+// where it was and where it went) with Undo. Everything here runs on this device.
 // Copyright © 2026 the Rembrandt contributors. Licensed under the GNU GPL v3 or later (see LICENSE).
-import { el, clamp, clone, getPath, setPath } from './util.js';
+import { el, clamp } from './util.js';
 import { HSL_NAMES } from './params.js';
-import { loadArt } from './portrait-progress.js';
 
-const COLS = 44, ROWS = 55;
 const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
-const sleep = (ms) => new Promise((r) => setTimeout(r, reduced() ? 0 : ms));
-const ease = (t) => (t < 0.5 ? 4 * t * t * t : 1 - (-2 * t + 2) ** 3 / 2);
 
 // Rows the studio knows how to show: path → [label, lo, hi, decimals].
 const KNOWN = {
@@ -43,67 +38,25 @@ function diff(a, b, path = '', out = { steps: [], rest: [] }) {
 }
 const fmt = (v, dp) => `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(dp)}`;
 
-export function createStudio(app) {
-  const art = el('canvas', { class: 'studio-art', 'aria-hidden': 'true' });
+// Things to try, shown while the box is empty: clicking one types it in (and the photo previews it).
+const TRY = ['warmer', 'shadows +25', 'golden hour', 'more contrast', 'black and white', 'straighten', 'paste from the last photo', 'blur the background'];
+
+export function createStudio(app, { onTry } = {}) {
   const say = el('p', { class: 'studio-say' });
   const state = el('span', { class: 'studio-state' });
   const work = el('div', { class: 'studio-work' });
-  // The portrait fills the free space like a small painting; it gives way as edit rows appear.
   const root = el('div', { class: 'studio' },
-    el('div', { class: 'studio-frame' }, art),
-    el('div', { class: 'studio-name' }, el('span', {}, 'Rembrandt'), state),
+    el('div', { class: 'studio-name' }, el('span', {}, 'Edit with words'), state),
     say, work);
 
-  // ---- The portrait. mode: idle | think | paint | done; `p` is how far the painting has got.
-  const P = { cells: null, mode: 'idle', p: 0, colour: 0, t0: 0, raf: 0 };
-  loadArt(COLS, ROWS, 1.7).then((cells) => { P.cells = cells; draw(); });
-  function draw() {
-    P.raf = 0;
-    if (!P.cells || !art.isConnected) return;
-    const d = Math.min(2, devicePixelRatio || 1), W = art.clientWidth, H = art.clientHeight;
-    if (!W) return;
-    if (art.width !== Math.round(W * d)) { art.width = Math.round(W * d); art.height = Math.round(H * d); }
-    const x = art.getContext('2d');
-    x.setTransform(d, 0, 0, d, 0, 0);
-    x.clearRect(0, 0, W, H);
-    // The portrait's grid covers the frame, centred (sides crop in a tall frame).
-    const cell = Math.max(W / COLS, H / ROWS), cw = cell, ch = cell;
-    const ox = (W - cell * COLS) / 2, oy = (H - cell * ROWS) / 2;
-    const t = (performance.now() - P.t0) / 1000;
-    // Colour: follows the painting while it runs, holds when done, then drains back to grey.
-    const target = P.mode === 'paint' ? P.p : P.mode === 'done' ? 1 : 0;
-    P.colour += (target - P.colour) * (P.mode === 'idle' ? 0.05 : 0.18);
-    let busy = P.mode !== 'idle' || P.colour > 0.01;
-    for (const s of P.cells) {
-      const k = clamp((P.colour * 1.25 - s.at) / 0.25, 0, 1);
-      // Bright paint, big dots; the dark ground almost disappears (the frame is dark in both themes).
-      const v = s.L * s.L;
-      let r = 0.08 + v * 0.98;
-      if (P.mode === 'think') {
-        // Ripples out from the face, like a thought going round.
-        const dist = Math.hypot(s.i - COLS * 0.5, (s.j - ROWS * 0.36) * 1.1);
-        r *= 1 + 0.32 * Math.max(0, Math.sin(t * 7 - dist * 0.75));
-      }
-      if (k > 0 && k < 1) r += Math.sin(k * Math.PI) * 0.35;
-      r = Math.min(cw, ch) * 0.5 * Math.min(1.15, r);
-      if (r < 0.3) continue;
-      const g = Math.round(110 + s.L * 145);
-      const c = (ch2) => Math.round(g + (Math.min(255, ch2 * 1.35) - g) * k);
-      x.fillStyle = `rgb(${c(s.r)},${c(s.g)},${c(s.b)})`;
-      x.beginPath();
-      x.arc(ox + (s.i + 0.5 + (s.j & 1 ? 0.25 : -0.25)) * cw, oy + (s.j + 0.5) * ch, r, 0, Math.PI * 2);
-      x.fill();
-    }
-    if (busy && !reduced()) P.raf = requestAnimationFrame(draw);
-  }
+  // What it's doing, as a word beside the name ("Reading", "Done"). No portrait any more: typing
+  // already shows the edit on the photo, live, so the box only reports and offers Undo.
+  let current = 'idle';
   const mode = (m, label) => {
-    P.mode = m;
-    if (m === 'think') P.t0 = performance.now();
+    current = m;
     root.dataset.mode = m;
     state.textContent = label || '';
-    if (!P.raf) P.raf = requestAnimationFrame(draw);
   };
-  new ResizeObserver(() => { if (!P.raf) P.raf = requestAnimationFrame(draw); }).observe(art);
 
   // The line next to the portrait writes itself out.
   let sayJob = 0;
@@ -138,68 +91,11 @@ export function createStudio(app) {
   function thinking(q) {
     finishing?.();
     work.replaceChildren();
-    mode('think', 'Thinking');
+    mode('think', 'Reading');
     speak(`“${q}”`, 'quote');
   }
 
-  // Runs one request: think, then make each change in turn, then settle. `commit` stores it.
   let job = 0, finishing = null;
-  async function perform(q, next, commit) {
-    finishing?.();                       // a new request finishes the one still painting
-    const id = ++job;
-    const was = app.params;
-    const { steps, rest } = diff(was, next);
-    let done = false;
-    const finish = () => {
-      if (done) return;
-      done = true; finishing = null;
-      app.params = next;
-      commit();
-    };
-    finishing = finish;
-    work.replaceChildren();
-    mode('think', 'Thinking');
-    speak(`“${q}”`, 'quote');
-    await sleep(520);
-    if (id !== job) return;
-    mode('paint', 'Painting');
-    const rows = steps.map((st, i) => { const r = row(st); if (i < 8) work.append(r.el); return r; });
-    if (steps.length > 8) work.append(el('div', { class: 'sw-more' }, `and ${steps.length - 8} more`));
-    // What has no row (black & white, curves, grading) goes first, at once.
-    let cur = clone(was);
-    for (const r of rest) setPath(cur, r.path, clone(r.to));
-    app.params = cur; app.requestRender(); app.refreshPanel();
-    // A few changes go one at a time; many (a pasted edit) move together.
-    const groups = steps.length > 5 ? [steps.map((_, i) => i)] : steps.map((_, i) => [i]);
-    for (let g = 0; g < groups.length; g++) {
-      const idx = groups[g];
-      for (const i of idx) rows[i].el.classList.add('on');
-      const span = Math.max(...idx.map((i) => Math.abs(steps[i].to - steps[i].from) / (steps[i].d[2] - steps[i].d[1])));
-      const dur = reduced() ? 0 : idx.length > 1 ? 900 : clamp(260 + span * 900, 280, 620);
-      const t0 = performance.now();
-      await new Promise((res) => {
-        const f = (now) => {
-          if (id !== job || done) return res();
-          const k = dur ? ease(clamp((now - t0) / dur, 0, 1)) : 1;
-          cur = clone(cur);
-          for (const i of idx) {
-            const st = steps[i], v = +(st.from + (st.to - st.from) * k).toFixed(st.d[3]);
-            setPath(cur, st.path, v);
-            rows[i].set(v);
-          }
-          app.params = cur; app.requestRender(); app.refreshPanel();
-          P.p = (g + k) / groups.length;
-          if (k < 1) requestAnimationFrame(f); else res();
-        };
-        requestAnimationFrame(f);
-      });
-      if (id !== job || done) return;
-      for (const i of idx) { rows[i].el.classList.remove('on'); rows[i].el.classList.add('set'); }
-    }
-    if (id !== job) return;
-    finish();
-    settle(q, steps.length || rest.length);
-  }
 
   // Shows a change that was already made (a Look, Auto): rows at their new values, then settle.
   function record(q, said, was, now) {
@@ -209,7 +105,6 @@ export function createStudio(app) {
     work.replaceChildren(...steps.slice(0, 8).map((st) => { const r = row(st); r.set(st.to); r.el.classList.add('set'); return r.el; }));
     if (steps.length > 8) work.append(el('div', { class: 'sw-more' }, `and ${steps.length - 8} more`));
     speak(said);
-    mode('paint', 'Painting'); P.p = steps.length ? 1 : 0;
     settle(q, steps.length);
   }
 
@@ -224,17 +119,18 @@ export function createStudio(app) {
     });
     if (n) work.append(undo);
     work.classList.remove('undone');
-    setTimeout(() => { if (P.mode === 'done') mode('idle', state.textContent); }, 2200);
+    setTimeout(() => { if (current === 'done') mode('idle', state.textContent); }, 2200);
   }
 
   // A new photo: a fresh greeting.
   function hello() {
     finishing?.();
     ++job;
-    work.replaceChildren();
     mode('idle', '');
     speak('What should this photo feel like?', 'ask');
+    work.replaceChildren(el('div', { class: 'studio-try' }, el('span', { class: 'studio-try-head' }, 'Try'),
+      ...TRY.map((t) => el('button', { class: 'studio-ex', type: 'button', onpointerdown: (e) => e.preventDefault(), onclick: () => onTry?.(t) }, t))));
   }
 
-  return { el: root, perform, record, hello, thinking };
+  return { el: root, record, hello, thinking };
 }

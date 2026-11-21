@@ -1675,3 +1675,54 @@ body[data-mode="edit"] .pp-card.pp-job { bottom: auto; }
 .pv-n { font: 500 11px var(--mono); color: var(--accent); }
 .pv-why { grid-column: 1 / -1; font-size: 11.5px; color: var(--muted); }
 .pv-none { margin: 0; padding: 12px 0; font: italic 400 18px/1.2 var(--serif, 'Instrument Serif', Georgia, serif); color: var(--text); }
+
+/* ---- typesafe.ai framing, everywhere something floats. Each window gets a title bar: an inverted
+   strip with a mono label (the window's name where it has one), square corners and a double rule; the
+   row you're on is inverted the way typesafe's own menus are; values and keys are mono. */
+/* Menus */
+.menu { background: var(--surface); backdrop-filter: none; -webkit-backdrop-filter: none; }
+.menu-item:hover, .menu-item:focus-visible { background: var(--text); color: var(--bg); outline: none; }
+.menu-item:hover .i, .menu-item:focus-visible .i { color: var(--bg); }
+.menu-item:hover .menu-check, .menu-item:focus-visible .menu-check { color: var(--mark-1, #f4d292); }
+.menu-item[aria-checked="true"] { color: var(--text); }
+.menu-sep { height: 0; border-top: 1px dotted var(--line-strong); background: none; }
+.menu::before { content: "Menu"; display: block; margin: -3px -3px 3px; padding: 3px 8px; background: var(--text); color: var(--bg);
+  font: 500 9px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; }
+.menu:has(> .menu-head:first-child)::before { display: none; }
+/* ⌘K: a window titled "Edit with words", the field big, the rows square with mono kinds. */
+.cmd-box { border-radius: 0; background: var(--surface); backdrop-filter: none; -webkit-backdrop-filter: none; border: 1px solid var(--line-strong);
+  box-shadow: 0 0 0 3px var(--surface), 0 0 0 4px var(--line-strong), 0 30px 80px rgba(0, 0, 0, 0.45); }
+.cmd:not(.inline) .cmd-box::before { content: "Edit with words  ▪  type, watch it change, Enter to keep"; display: block; padding: 5px 12px; background: var(--text); color: var(--bg);
+  font: 500 9.5px var(--mono); letter-spacing: 0.1em; text-transform: uppercase; white-space: pre; overflow: hidden; text-overflow: ellipsis; }
+.cmd:not(.inline) .cmd-field { height: 58px; }
+.cmd:not(.inline) .cmd-input { font: italic 400 24px/1.1 var(--serif, 'Instrument Serif', Georgia, serif); letter-spacing: 0; }
+.cmd:not(.inline) .cmd-input::placeholder { font-size: 20px; }
+.cmd-field kbd { border-radius: 0; font-family: var(--mono); }
+.cmd-row { border-radius: 0; }
+.cmd-row.on { background: var(--text); color: var(--bg); }
+.cmd-row.on .i, .cmd-row.on .cmd-hint, .cmd-row.is-do.on .cmd-title, .cmd-row.is-do.on .cmd-hint { color: var(--bg); }
+.cmd-row.is-do.on .i { color: var(--mark-1, #f4d292); }
+.cmd-hint { padding: 1px 5px; border: 1px solid currentColor; }
+/* The left panel's box: no portrait above it now, a mono name and its state, square. */
+.studio { justify-content: flex-end; gap: 6px; padding: 8px 2px 0; }
+.studio-frame { display: none; }
+.studio-name { padding: 0; }
+.studio-name span:first-child { padding: 2px 6px; background: var(--text); color: var(--bg); font: 500 9.5px var(--mono); letter-spacing: 0.1em; }
+.studio-say.ask { font-size: 21px; }
+.cmd.inline .cmd-box { border-radius: 0; }
+.cmd.inline.active .cmd-box { animation: none; background: var(--field); border-color: var(--text-2); box-shadow: 0 0 0 2px var(--panel, var(--bg)), 0 0 0 3px var(--line-strong); }
+.chat-send, .chat-mic { border-radius: 0; }
+/* Dialogs: the same title bar, a mono "Rembrandt" with the version; titles stay in the display face. */
+.dlg { box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--line-strong), var(--shadow-pop); }
+.dlg::before { content: "Rembrandt"; position: sticky; top: 0; z-index: 2; display: block; padding: 4px 12px; background: var(--text); color: var(--bg);
+  font: 500 9.5px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; }
+.dlg .kicker { background: none; color: var(--muted); padding: 0; border-bottom: 1px dotted var(--line-strong); }
+.dlg .input, .dlg .select, .dlg select, .dlg input[type="text"], .dlg input[type="number"], .dlg input[type="email"], .dlg textarea { border-radius: 0; }
+.dlg .seg, .dlg .segmented { border-radius: 0; }
+.dlg-foot .btn, .dlg .row-btns .btn { border-radius: 0; }
+/* Section dots and switches pick up the same square, inverted language. */
+.switch-ui, .switch-ui::after { border-radius: 0 !important; }
+.studio-try { display: flex; flex-wrap: wrap; gap: 4px; padding-top: 2px; }
+.studio-try-head { width: 100%; font: 500 9px var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); padding-bottom: 2px; border-bottom: 1px dotted var(--line-strong); margin-bottom: 2px; }
+.studio-ex { padding: 3px 7px; border: 1px solid var(--line-strong); background: transparent; color: var(--text-2); font: 500 10.5px var(--mono); cursor: pointer; text-align: left; }
+.studio-ex:hover, .studio-ex:focus-visible { background: var(--text); color: var(--bg); border-color: var(--text); outline: none; }
