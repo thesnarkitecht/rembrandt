@@ -35,7 +35,7 @@ c2pa = { version = "=0.91.11", default-features = false, features = ["rust_nativ
 rcgen = { version = "0.14", default-features = false, features = ["ring", "pem", "crypto"] }
 # GPU benchmark (src/gpubench.rs): the editor's main colour stage on the native GPU API, to compare
 # with the web view's WebGL before building a native renderer.
-wgpu = "=30.0.1"
+wgpu = "=30.0.2"
 pollster = "1.0"
 
 # The system web view on Linux: its graphics acceleration is set explicitly (see lib.rs).
