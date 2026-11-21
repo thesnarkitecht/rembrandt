@@ -1611,3 +1611,67 @@ body[data-mode="edit"] .pp-card.pp-job { bottom: auto; }
 .job-row.is-running .job-thumb { background: linear-gradient(0deg, #c98f4f var(--p), #1c1a17 0); }
 .job-row.is-running .job-thumb img { opacity: 0.85; mix-blend-mode: luminosity; }
 @media (prefers-reduced-motion: reduce) { .pp-job .pp-glint, .pp-job.waiting .pp-bar > span { animation: none; } .pp-frame .pp-art { transition: none; } }
+
+/* ---- Welcome (welcome.js): three ways in as small windows, typesafe.ai-style: an inverted mono tag
+   with a number, a serif title, the whole card a button that lifts and reveals its arrow. Under them a
+   dotted leader to what has left this computer, and a mono footer with the version. */
+.empty-card { max-width: 760px; }
+.empty .empty-card > p { margin-bottom: 26px; }
+.wl-paths { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; text-align: left; }
+.wl-card { position: relative; display: grid; grid-template-rows: auto auto auto 1fr; gap: 6px; min-height: 168px; padding: 0 14px 14px; border: 1px solid var(--line-strong);
+  background: var(--surface, var(--bg)); color: var(--text); cursor: pointer; text-align: left; font: inherit;
+  box-shadow: 0 0 0 3px var(--canvas), 0 0 0 4px var(--line); transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.18s, border-color 0.18s; }
+.wl-card:hover, .wl-card:focus-visible { transform: translateY(-3px); border-color: var(--text-2); outline: none;
+  box-shadow: 0 0 0 3px var(--canvas), 0 0 0 4px var(--text-2), 0 14px 30px rgba(0, 0, 0, 0.16); }
+.wl-card:active { transform: translateY(-1px); }
+.wl-tag { display: flex; align-items: center; gap: 8px; margin: 0 -14px 8px; padding: 4px 8px; background: var(--text); color: var(--bg); font: 500 10px var(--mono); letter-spacing: 0.1em; text-transform: uppercase; }
+.wl-n { opacity: 0.6; }
+.wl-icon { color: var(--accent); }
+.wl-icon .i { width: 20px; height: 20px; }
+.wl-title { font: italic 400 23px/1.05 var(--serif, 'Instrument Serif', Georgia, serif); }
+.wl-text { font-size: 12px; line-height: 1.45; color: var(--muted); }
+.wl-go { position: absolute; right: 12px; bottom: 12px; color: var(--accent); opacity: 0; transform: translateX(-4px) rotate(-90deg); transition: opacity 0.18s, transform 0.18s; }
+.wl-go .i { width: 16px; height: 16px; }
+.wl-card:hover .wl-go, .wl-card:focus-visible .wl-go { opacity: 1; transform: rotate(-90deg); }
+.wl-card:first-child { border-color: var(--accent); }
+.wl-card:first-child .wl-tag { background: var(--accent-bg); color: var(--on-accent); }
+.wl-proof { display: flex; align-items: baseline; gap: 8px; width: 100%; margin-top: 26px; padding: 6px 2px; border: 0; background: none; color: var(--muted); cursor: pointer;
+  font: 500 10.5px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; text-align: left; }
+.wl-leader { flex: 1; min-width: 20px; border-bottom: 1px dotted var(--line-strong); transform: translateY(-3px); }
+.wl-sent { color: var(--text); font-weight: 500; }
+.wl-verify { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.wl-proof:hover .wl-verify { color: var(--text); }
+.wl-foot { display: flex; justify-content: center; flex-wrap: wrap; gap: 6px 18px; margin-top: 18px; font: 500 9.5px var(--mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); opacity: 0.75; }
+.wl-foot span + span::before { content: "▪"; margin-right: 18px; opacity: 0.6; }
+/* A fine dotted ground behind the welcome, like a screen tone. */
+.empty::after { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: -1;
+  background-image: radial-gradient(color-mix(in srgb, var(--text) 9%, transparent) 0.8px, transparent 1px); background-size: 7px 7px;
+  -webkit-mask: radial-gradient(ellipse at 50% 55%, #000 10%, transparent 70%); mask: radial-gradient(ellipse at 50% 55%, #000 10%, transparent 70%); }
+@media (max-width: 860px) {
+  .wl-paths { grid-template-columns: 1fr; gap: 12px; }
+  .wl-card { min-height: 0; grid-template-columns: auto 1fr; grid-template-rows: auto auto auto; column-gap: 12px; }
+  .wl-tag { grid-column: 1 / -1; }
+  .wl-icon { grid-row: 2 / 4; align-self: center; }
+  .wl-title { font-size: 21px; }
+  .wl-go { opacity: 1; transform: rotate(-90deg); }
+  /* Taller than a phone screen: it scrolls, from the top. */
+  .empty { overflow-y: auto; place-items: start center; padding: 20px 16px calc(24px + env(safe-area-inset-bottom)); }
+  img.empty-mark { width: 44px; height: 44px; margin-bottom: 14px; }
+  .wl-card { padding-bottom: 12px; }
+  .wl-title { font-size: 20px; }
+  .wl-proof { flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) { .wl-card, .wl-go { transition: none; } .wl-card:hover { transform: none; } }
+
+/* Dialog titles get the same kind of kicker: a small mono label over the display title. */
+.kicker { display: inline-block; margin-bottom: 6px; padding: 2px 6px; background: var(--text); color: var(--bg); font: 500 9.5px var(--mono); letter-spacing: 0.1em; text-transform: uppercase; }
+.privacy-dlg { width: min(520px, calc(100vw - 32px)); }
+.privacy-dlg .dlg-body { padding: 4px 20px 8px; font-size: 12.5px; line-height: 1.5; color: var(--text-2); }
+.privacy-dlg .dlg-foot { display: flex; justify-content: flex-end; padding: 8px 20px 18px; }
+.pv-list { margin: 12px 0; border-top: 1px solid var(--line); }
+.pv-row { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 8px; align-items: baseline; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.pv-host { font: 500 11.5px var(--mono); color: var(--text); }
+.pv-dots { border-bottom: 1px dotted var(--line-strong); transform: translateY(-3px); }
+.pv-n { font: 500 11px var(--mono); color: var(--accent); }
+.pv-why { grid-column: 1 / -1; font-size: 11.5px; color: var(--muted); }
+.pv-none { margin: 0; padding: 12px 0; font: italic 400 18px/1.2 var(--serif, 'Instrument Serif', Georgia, serif); color: var(--text); }

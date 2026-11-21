@@ -76,6 +76,7 @@ import { expandFrame, EXPANDS } from './expand.js';
 import { readExif } from './exif.js';
 import { addJob, breathe, whenQuiet, registerKind, restoreJobs, trackActivity } from './jobs.js';
 import { mountJobs } from './jobs-ui.js';
+import { mountWelcome, openPrivacyCheck } from './welcome.js';
 import { denoiseStrength } from './ai/panel-sr.js';
 import { signature, similarity, THRESHOLD as SIMILAR_THRESHOLD, MAX_RESULTS as SIMILAR_MAX } from './similar.js';
 import { estimateAirlight } from '../engine/src/pipeline.js';
@@ -3158,7 +3159,22 @@ async function downloadLightroom(cat, photos) {
   progress(`Imported ${photos.length - failed} photo${photos.length - failed === 1 ? '' : 's'} from Lightroom${failed ? ` (${failed} couldn’t be downloaded)` : ''}`, true);
 }
 const openImporter = (page) => openImport(app, importApi, page);
-$('btnOpenEmpty').addEventListener('click', () => openImporter());
+mountWelcome(document.querySelector('.empty-card'), {
+  open: () => openImporter(),
+  lightroom: () => openImporter('lightroom'),
+  sample: (file) => openFiles([file], { editor: true }),
+  // Typed into the studio's own box a letter at a time, then sent, so the edit happens in front of you.
+  ask: async (text) => {
+    const input = document.querySelector('.navside .cmd-input') || document.querySelector('.cmd-input');
+    for (let i = 0; i < 80 && !app.img; i++) await new Promise((r) => setTimeout(r, 100));
+    if (!input || !app.img) return;
+    input.focus();
+    input.value = '';
+    for (const ch of text) { input.value += ch; input.dispatchEvent(new Event('input')); await new Promise((r) => setTimeout(r, 28 + Math.random() * 40)); }
+    await new Promise((r) => setTimeout(r, 350));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+  },
+});
 $('btnAdd').addEventListener('click', () => openImporter());
 $('folderInput').addEventListener('change', (e) => { openFiles(e.target.files); e.target.value = ''; });
 $('fileInput').accept = ACCEPT;
@@ -3286,6 +3302,7 @@ $('btnAccount').addEventListener('click', (e) => popMenu(e.currentTarget, [
   { label: updateState().available ? 'Update Rembrandt…' : 'Check for updates…', icon: 'sync', onClick: () => setMode('account', 'prefs') },
   { sep: true },
   { label: 'Import photos…', icon: 'open', onClick: () => openImporter() },
+  { label: 'What has left this computer?', icon: 'shield', onClick: () => openPrivacyCheck() },
   isTouch ? null : { label: 'Keyboard shortcuts', icon: 'keyboard', onClick: () => $('helpDialog').showModal() },
   { label: apiAvailable() ? 'Send feedback…' : 'Open an issue on GitHub', icon: 'send', onClick: () => openFeedback(app) },
 ]));
@@ -3549,7 +3566,7 @@ function boot() {
   paintAvatar($('avatar'));
   if (isTouch) {
     $('emptyTitle').innerHTML = 'Open photos to start <em>editing</em>';
-    $('emptyText').textContent = 'Pick photos from your library. Everything happens on this device, and nothing is uploaded.';
+    $('emptyText').textContent = 'Free, private and on this device. Say what you want, or use the sliders.';
   }
   canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); app.toast('Graphics context lost — reload the page to continue'); });
   warmDownloads();

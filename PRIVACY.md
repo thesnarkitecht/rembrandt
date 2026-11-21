@@ -6,6 +6,12 @@ web editor you run yourself. There is no Rembrandt Cloud or sync service; nothin
 **Rembrandt doesn't collect any data about you.** There's no account, no analytics, no advertising
 and no tracking.
 
+**You can check this yourself.** The welcome screen, and "What has left this computer?" in the
+account menu, list every connection the editor window has made to another computer since it opened,
+taken from the browser's own record rather than from Rembrandt. On a fresh start that list is empty;
+the update check (a version number from GitHub) and any AI model you download appear there when
+they happen.
+
 - **Your photos stay on your device.** Rembrandt opens, edits and saves them on the device. They
   aren't uploaded anywhere unless you share or export them yourself.
 - **AI features run on your device.** Subject selection, depth, Lens Blur and Refocus run locally.
